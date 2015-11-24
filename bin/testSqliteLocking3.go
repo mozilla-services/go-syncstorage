@@ -6,6 +6,13 @@ package main
 
  There should be no errors with the multiple readers/writers modifying the database
  as only a single reader or writer can be operating on it a time.
+
+ results:
+
+  - ran 200 concurrent tests (diff sqlite db files),
+     - each with 10 readers/writers
+	 - 2000 readers and 2000 writers in total
+  - no errors
 */
 
 import (
@@ -138,7 +145,7 @@ func main() {
 		testWG.Add(1)
 		go func(t int) {
 			defer testWG.Done()
-			file := fmt.Sprintf("./db_work/testSqliteLocking3-%03d", t)
+			file := fmt.Sprintf("./db_work/testSqliteLocking3-%03d.db", t)
 			RunTest(file, "abcdefghij", "0123456789", 100)
 		}(t)
 	}
