@@ -29,6 +29,27 @@ const OUTPUT_ON = true
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+type Counter struct {
+	sync.Mutex
+	writes, reads uint
+}
+
+func (c *Counter) WriteInc() {
+	c.Lock()
+	defer c.Unlock()
+	c.writes += 1
+}
+
+func (c *Counter) ReadInc() {
+	c.Lock()
+	defer c.Unlock()
+	c.reads += 1
+}
+
+func (c *Counter) Results() (uint, uint) {
+	return c.reads, c.writes
+}
+
 func RandStringBytesRmndr(n int) string {
 	b := make([]byte, n)
 	for i := range b {
@@ -54,7 +75,7 @@ func ReaderPrint(s string) {
 
 }
 
-func RunTest(dbFile, readers, writers string, numPutsPerWriter int) {
+func RunTest(counter *Counter, dbFile, readers, writers string, numPutsPerWriter int) {
 
 	var writerWG sync.WaitGroup
 	done := make(chan bool)
@@ -86,6 +107,7 @@ func RunTest(dbFile, readers, writers string, numPutsPerWriter int) {
 						return
 					} else {
 						ReaderPrint(id)
+						counter.ReadInc()
 					}
 
 				case <-done:
@@ -115,6 +137,7 @@ func RunTest(dbFile, readers, writers string, numPutsPerWriter int) {
 				}
 
 				WriterPrint(workerId)
+				counter.WriteInc()
 				time.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond)
 			}
 
@@ -132,29 +155,31 @@ func RunTest(dbFile, readers, writers string, numPutsPerWriter int) {
 // test multiple writers / readers
 func main() {
 
-	WriterPrint("DB Writers are RED\n")
-	ReaderPrint("DB Readers are YELLOW\n")
-
 	var testWG sync.WaitGroup
 
-	concurrent := 200
+	concurrent := 500
 
-	fmt.Printf("Running %d concurrent tests\n\n", concurrent)
+	// keeps track of how many reads/writes were done
+	counter := &Counter{}
 
+	start := time.Now()
 	for t := 0; t < concurrent; t++ {
 		testWG.Add(1)
 		go func(t int) {
 			defer testWG.Done()
 			file := fmt.Sprintf("./db_work/testSqliteLocking3-%03d.db", t)
-			RunTest(file, "abcdefghij", "0123456789", 100)
+			RunTest(counter, file, "abcdefghij", "0123456789", 10)
 		}(t)
 	}
-
 	testWG.Wait()
+	took := time.Now().Sub(start)
 
-	fmt.Println()
+	reads, writes := counter.Results()
 
-	//count, storage, _ := db.StorageUsed()
-	//fmt.Printf("\n\nDone. %d BSOs using %d bytes\n", count, storage)
+	fmt.Println("\n")
+	WriterPrint("DB Writers were RED\n")
+	ReaderPrint("DB Readers were YELLOW\n")
 
+	fmt.Printf("Ran %d concurrent tests in %f seconds. \nCompleted %d writes (%f/sec), %d reads (%f/sec)\n\n",
+		concurrent, took.Seconds(), writes, float64(writes)/took.Seconds(), reads, float64(reads)/took.Seconds())
 }
