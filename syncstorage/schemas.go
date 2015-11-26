@@ -4,12 +4,16 @@ const SCHEMA_0 = `
 	CREATE TABLE BSO (
 	  CollectionId	 INTEGER NOT NULL,
 	  Id             VARCHAR(64) NOT NULL,
+
 	  SortIndex      INTEGER DEFAULT 0,
 
 	  Payload        TEXT NOT NULL DEFAULT '',
 	  PayloadSize    INTEGER NOT NULL DEFAULT 0,
 
-	  Modified       bigint NOT NULL,
+	  -- milliseconds since unix epoch. Sync 1.5 spec says it shoud
+	  -- be a float of seconds since epoch accurate to two decimal places
+	  -- convert it in the API response, but work with it as an int
+	  Modified       INTEGER NOT NULL,
 
 	  -- default TTL of 2100000000 is in the current setup, keeping
 	  -- the same incase of introducing bugs

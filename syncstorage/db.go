@@ -22,7 +22,7 @@ var (
 	ErrBSOIdInvalid   = errors.New("syncstorage: BSO ID invalid")
 )
 
-type SortType uint
+type SortType int
 
 const (
 	SORT_NONE SortType = iota
@@ -36,9 +36,9 @@ const (
 
 type CollectionInfo struct {
 	Name     string
-	BSOCount uint
-	Storage  uint
-	Modified float64
+	BSOCount int
+	Storage  int
+	Modified int
 }
 
 type DB struct {
@@ -125,11 +125,11 @@ func (d *DB) CollectionInfo() (map[string]*CollectionInfo, error) {
 
 func (d *DB) GetBSOs(cId int,
 	ids []string,
-	newer float64,
+	newer int,
 	fullBSO bool,
 	sort SortType,
-	limit uint,
-	offset uint) ([]*BSO, error) {
+	limit int,
+	offset int) ([]*BSO, error) {
 
 	d.Lock()
 	defer d.Unlock()
@@ -147,7 +147,7 @@ func (d *DB) GetBSO(cId int, bId string) (*BSO, error) {
 // PostBSOs takes a set of BSO and performs an Insert or Update on
 // each of them.
 type PostResults struct {
-	Modified float64
+	Modified int
 	Success  []string
 	failed   map[string][]string
 }
@@ -160,7 +160,7 @@ func (d *DB) PostBSOs(cId int, bsos []*BSO) (*PostResults, error) {
 }
 
 // PutBSO creates or updates a BSO
-func (d *DB) PutBSO(cId int, bso *BSO) (float64, error) {
+func (d *DB) PutBSO(cId int, bso *BSO) (int, error) {
 	d.Lock()
 	defer d.Unlock()
 
@@ -176,7 +176,7 @@ func (d *DB) DeleteCollection(name string) error {
 
 // DeleteBSOs deletes multiple BSO. It returns the modified
 // timestamp for the collection on success
-func (d *DB) DeleteBSOs(cId int, bIds []string) (float64, error) {
+func (d *DB) DeleteBSOs(cId int, bIds []string) (int, error) {
 	d.Lock()
 	defer d.Unlock()
 
@@ -185,7 +185,7 @@ func (d *DB) DeleteBSOs(cId int, bIds []string) (float64, error) {
 
 // DeleteBSO deletes a single BSO and returns the
 // modified timestamp for the collection
-func DeleteBSO(cId int, bId string) (float64, error) {
+func DeleteBSO(cId int, bId string) (int, error) {
 	return 0, ErrNotImplemented
 }
 
@@ -193,10 +193,10 @@ func DeleteBSO(cId int, bId string) (float64, error) {
 func (d *DB) putBSO(tx *sql.Tx,
 	cId int,
 	bId string,
-	modified float64,
+	modified int,
 	payload *string,
-	sortIndex *uint,
-	ttl *uint,
+	sortIndex *int,
+	ttl *int,
 ) error {
 
 	if payload == nil && sortIndex == nil && ttl == nil {
@@ -213,7 +213,7 @@ func (d *DB) putBSO(tx *sql.Tx,
 		return d.updateBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
 	} else {
 		var p string
-		var s, t uint
+		var s, t int
 
 		if payload == nil {
 			p = ""
@@ -257,10 +257,10 @@ func (d *DB) bsoExists(tx *sql.Tx, cId int, bId string) (bool, error) {
 // getBSOs
 func (d *DB) getBSOs(tx *sql.Tx, cId int,
 	ids []string,
-	newer float64,
+	newer int,
 	sort SortType,
-	limit uint,
-	offset uint) ([]*BSO, error) {
+	limit int,
+	offset int) ([]*BSO, error) {
 
 	query := `SELECT Id, SortIndex, Payload, Modified
 			  FROM BSO
@@ -292,10 +292,10 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 		limit = LIMIT_MAX
 	}
 
-	query += " LIMIT " + strconv.FormatUint(uint64(limit), 10)
+	query += " LIMIT " + strconv.Itoa(limit)
 
 	if offset != 0 {
-		query += " OFFSET " + strconv.FormatUint(uint64(offset), 10)
+		query += " OFFSET " + strconv.Itoa(offset)
 	}
 
 	rows, err := tx.Query(query, values...)
@@ -346,10 +346,10 @@ func (d *DB) insertBSO(
 	tx *sql.Tx,
 	cId int,
 	bId string,
-	modified float64,
+	modified int,
 	payload string,
-	sortIndex uint,
-	ttl uint,
+	sortIndex int,
+	ttl int,
 ) (err error) {
 	_, err = tx.Exec(`INSERT INTO BSO (
 			CollectionId, Id, SortIndex,
@@ -373,10 +373,10 @@ func (d *DB) updateBSO(
 	tx *sql.Tx,
 	cId int,
 	bId string,
-	modified float64,
+	modified int,
 	payload *string,
-	sortIndex *uint,
-	ttl *uint,
+	sortIndex *int,
+	ttl *int,
 ) (err error) {
 
 	if payload == nil && sortIndex == nil && ttl == nil {

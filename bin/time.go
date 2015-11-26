@@ -6,5 +6,6 @@ import (
 )
 
 func main() {
-	fmt.Printf("%f", float64(time.Now().UnixNano())/1000000)
+	nano := time.Now().UnixNano()
+	fmt.Printf("%v | %v\n", nano/1000, int(nano/1000))
 }

@@ -68,10 +68,10 @@ func TestBsoExists(t *testing.T) {
 
 	cId := 1
 	bId := "testBSO"
-	modified := 1.0
+	modified := Now()
 	payload := "payload"
-	sortIndex := uint(1)
-	ttl := uint(1000)
+	sortIndex := 1
+	ttl := 1000
 
 	err = db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
 	if err != nil {
@@ -115,8 +115,8 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 	bId := "testBSO"
 	modified := Now()
 	payload := "initial value"
-	sortIndex := uint(1)
-	ttl := uint(1)
+	sortIndex := 1
+	ttl := 1
 
 	var err error
 
@@ -185,11 +185,11 @@ func TestPrivatePutBSOInsertsWithMissingValues(t *testing.T) {
 		t.Error(err)
 	}
 
-	if err := db.putBSO(tx, cId, "obj-3", Now(), nil, Uint(1), nil); err != nil {
+	if err := db.putBSO(tx, cId, "obj-3", Now(), nil, Int(1), nil); err != nil {
 		t.Error(err)
 	}
 
-	if err := db.putBSO(tx, cId, "obj-4", Now(), nil, nil, Uint(1)); err != nil {
+	if err := db.putBSO(tx, cId, "obj-4", Now(), nil, nil, Int(1)); err != nil {
 		t.Error(err)
 	}
 
@@ -212,7 +212,7 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 
 	modified := Now()
 	payload := String("Updated")
-	sortIndex := Uint(100)
+	sortIndex := Int(100)
 	if err := db.putBSO(tx, 1, "1", modified, payload, sortIndex, nil); err != nil {
 		t.Error(err)
 	}
@@ -243,13 +243,13 @@ func TestPrivateGetBSOs(t *testing.T) {
 
 	cId := 1
 	bIds := []string{"a", "b", "c", "d"}
-	newer := 0.0
+	newer := 0
 	sort := SORT_NEWEST
-	limit := uint(2000)
-	offset := uint(0)
+	limit := 2000
+	offset := 0
 
 	// put a record in
-	err := db.insertBSO(tx, cId, "a", Now(), "payload", uint(10), uint(1000))
+	err := db.insertBSO(tx, cId, "a", Now(), "payload", 10, 1000)
 
 	bsos, err := db.getBSOs(tx, cId, bIds, newer, sort, limit, offset)
 	fmt.Println(bsos, err)

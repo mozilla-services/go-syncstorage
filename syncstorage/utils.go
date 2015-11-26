@@ -13,8 +13,8 @@ func init() {
 	bsoIdCheck = regexp.MustCompile("^[A-Za-z0-9_-]{1,64}$")
 }
 
-func Now() float64 {
-	return float64(time.Now().UnixNano()) / 1000 / 1000
+func Now() int {
+	return int(time.Now().UnixNano() / 1000)
 }
 
 // ValidateBSOIds checks if all provided Is are 12 characters long
@@ -30,4 +30,4 @@ func ValidateBSOId(ids ...string) bool {
 }
 
 func String(s string) *string { return &s }
-func Uint(u uint) *uint       { return &u }
+func Int(u int) *int          { return &u }
