@@ -1,6 +1,7 @@
 package syncstorage
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -231,4 +232,25 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 			t.Errorf("Expected %f got %f", modified, bso.Modified)
 		}
 	}
+}
+
+func TestPrivateGetBSOs(t *testing.T) {
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	tx, _ := db.db.Begin()
+	defer tx.Rollback()
+
+	cId := 1
+	bIds := []string{"a", "b", "c", "d"}
+	newer := 0.0
+	sort := SORT_NEWEST
+	limit := uint(2000)
+	offset := uint(0)
+
+	// put a record in
+	err := db.insertBSO(tx, cId, "a", Now(), "payload", uint(10), uint(1000))
+
+	bsos, err := db.getBSOs(tx, cId, bIds, newer, sort, limit, offset)
+	fmt.Println(bsos, err)
 }

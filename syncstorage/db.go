@@ -3,7 +3,6 @@ package syncstorage
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +29,9 @@ const (
 	SORT_NEWEST
 	SORT_OLDEST
 	SORT_INDEX
+
+	// absolute maximum records getBSOs can return
+	LIMIT_MAX = 1000
 )
 
 type CollectionInfo struct {
@@ -256,14 +258,13 @@ func (d *DB) bsoExists(tx *sql.Tx, cId int, bId string) (bool, error) {
 func (d *DB) getBSOs(tx *sql.Tx, cId int,
 	ids []string,
 	newer float64,
-	fullBSO bool,
 	sort SortType,
 	limit uint,
 	offset uint) ([]*BSO, error) {
 
 	query := `SELECT Id, SortIndex, Payload, Modified
 			  FROM BSO
-			  WHERE CollectionId=? AND TTL >= ? `
+			  WHERE CollectionId=? AND TTL>=? `
 
 	values := []interface{}{cId, Now()}
 
@@ -273,8 +274,10 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 			ids = ids[0:100]
 		}
 
-		query += " AND Id IN (?," + strings.Repeat(",?", len(ids)-1) + ") "
-		values = append(values, ids)
+		query += " AND Id IN (?" + strings.Repeat(",?", len(ids)-1) + ") "
+		for _, id := range ids {
+			values = append(values, id)
+		}
 	}
 
 	if sort == SORT_INDEX {
@@ -285,8 +288,8 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 		query += " ORDER BY Modified ASC "
 	}
 
-	if limit == 0 || limit > 1000 {
-		limit = 1000
+	if limit == 0 || limit > LIMIT_MAX {
+		limit = LIMIT_MAX
 	}
 
 	query += " LIMIT " + strconv.FormatUint(uint64(limit), 10)
@@ -295,9 +298,25 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 		query += " OFFSET " + strconv.FormatUint(uint64(offset), 10)
 	}
 
-	fmt.Println(query, values)
+	rows, err := tx.Query(query, values...)
 
-	return nil, ErrNotImplemented
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	bsos := make([]*BSO, 0)
+	for rows.Next() {
+		b := &BSO{}
+		if err := rows.Scan(&b.Id, &b.SortIndex, &b.Payload, &b.Modified); err != nil {
+			return nil, err
+		} else {
+			bsos = append(bsos, b)
+		}
+	}
+
+	return bsos, nil
 
 }
 

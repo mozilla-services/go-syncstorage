@@ -6,5 +6,5 @@ type BSO struct {
 	Modified  float64 `json:"modified"`
 	Payload   string  `json:"payload"`
 	SortIndex uint    `json:"sortindex"`
-	TTL       uint    `json:"ttl"`
+	TTL       uint    `json:",omitempty"`
 }
