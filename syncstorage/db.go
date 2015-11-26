@@ -132,7 +132,7 @@ func (d *DB) GetBSOs(cId int,
 	return nil, ErrNotImplemented
 }
 
-func (d *DB) GetBSO(cId int, bsoId string) (*BSO, error) {
+func (d *DB) GetBSO(cId int, bId string) (*BSO, error) {
 	d.Lock()
 	defer d.Unlock()
 
@@ -171,7 +171,7 @@ func (d *DB) DeleteCollection(name string) error {
 
 // DeleteBSOs deletes multiple BSO. It returns the modified
 // timestamp for the collection on success
-func (d *DB) DeleteBSOs(cId int, bsoIds []string) (float64, error) {
+func (d *DB) DeleteBSOs(cId int, bIds []string) (float64, error) {
 	d.Lock()
 	defer d.Unlock()
 
@@ -180,28 +180,63 @@ func (d *DB) DeleteBSOs(cId int, bsoIds []string) (float64, error) {
 
 // DeleteBSO deletes a single BSO and returns the
 // modified timestamp for the collection
-func DeleteBSO(cId int, bsoId string) (float64, error) {
+func DeleteBSO(cId int, bId string) (float64, error) {
 	return 0, ErrNotImplemented
 }
 
 // pubBSO will INSERT or UPDATE a BSO
 func (d *DB) putBSO(tx *sql.Tx,
 	cId int,
-	bsoId string,
+	bId string,
 	modified float64,
 	payload *string,
 	sortIndex *uint,
 	ttl *uint,
 ) error {
 
-	return ErrNotImplemented
+	if payload == nil && sortIndex == nil && ttl == nil {
+		return ErrNothingToDo
+	}
+
+	exists, err := d.bsoExists(tx, cId, bId)
+	if err != nil {
+		return err
+	}
+
+	// do an update
+	if exists == true {
+		return d.updateBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
+	} else {
+		var p string
+		var s, t uint
+
+		if payload == nil {
+			p = ""
+		} else {
+			p = *payload
+		}
+
+		if sortIndex == nil {
+			s = 0
+		} else {
+			s = *sortIndex
+		}
+
+		if ttl == nil {
+			t = 0
+		} else {
+			t = *ttl
+		}
+
+		return d.insertBSO(tx, cId, bId, modified, p, s, t)
+	}
 }
 
 // bsoExists checks if a BSO is in the database
-func (d *DB) bsoExists(cId int, bsoId string) (bool, error) {
+func (d *DB) bsoExists(tx *sql.Tx, cId int, bId string) (bool, error) {
 	var found int
 	query := "SELECT 1 FROM BSO WHERE CollectionId=? AND Id=?"
-	err := d.db.QueryRow(query, cId, bsoId).Scan(&found)
+	err := tx.QueryRow(query, cId, bId).Scan(&found)
 
 	if err == sql.ErrNoRows {
 		return false, nil
@@ -214,11 +249,11 @@ func (d *DB) bsoExists(cId int, bsoId string) (bool, error) {
 	return true, nil
 }
 
-func (d *DB) getBSO(cId int, bId string) (*BSO, error) {
+func (d *DB) getBSO(tx *sql.Tx, cId int, bId string) (*BSO, error) {
 
 	bso := &BSO{Id: bId}
 	query := "SELECT Modified, SortIndex, Payload, TTL FROM BSO WHERE CollectionId=? AND Id=?"
-	err := d.db.QueryRow(query, cId, bId).Scan(
+	err := tx.QueryRow(query, cId, bId).Scan(
 		&bso.Modified,
 		&bso.SortIndex,
 		&bso.Payload,

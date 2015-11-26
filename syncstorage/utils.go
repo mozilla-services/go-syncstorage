@@ -28,3 +28,6 @@ func ValidateBSOId(ids ...string) bool {
 
 	return true
 }
+
+func String(s string) *string { return &s }
+func Uint(u uint) *uint       { return &u }

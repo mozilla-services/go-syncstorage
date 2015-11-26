@@ -49,7 +49,9 @@ func TestBsoExists(t *testing.T) {
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 
-	found, err := db.bsoExists(1, "nope")
+	tx, _ := db.db.Begin()
+	found, err := db.bsoExists(tx, 1, "nope")
+	tx.Rollback()
 
 	if err != nil {
 		t.Error(err)
@@ -61,11 +63,7 @@ func TestBsoExists(t *testing.T) {
 
 	// insert a new BSO and test if a
 	// true result comes back
-	tx, err := db.db.Begin()
-
-	if err != nil {
-		t.Error(err)
-	}
+	tx, _ = db.db.Begin()
 
 	cId := 1
 	bId := "testBSO"
@@ -77,12 +75,9 @@ func TestBsoExists(t *testing.T) {
 	err = db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
 	if err != nil {
 		t.Fatal(err)
-		tx.Rollback()
-	} else {
-		tx.Commit()
 	}
 
-	found, err = db.bsoExists(cId, bId)
+	found, err = db.bsoExists(tx, cId, bId)
 
 	if err != nil {
 		t.Error(err)
@@ -128,22 +123,17 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	if err != nil {
 		t.Fatal(err)
-	} else {
-		tx.Commit()
 	}
 
-	tx, _ = db.db.Begin()
 	modified = Now()
 	payload = "Updated payload"
 	err = db.updateBSO(tx, cId, bId, modified, &payload, nil, nil)
 
 	if err != nil {
 		t.Fatal(err)
-	} else {
-		tx.Commit()
 	}
 
-	bso, _ := db.getBSO(cId, bId)
+	bso, _ := db.getBSO(tx, cId, bId)
 
 	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != ttl {
 		t.Fatal("bso was not updated correctly")
@@ -151,15 +141,12 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	modified = Now()
 	sortIndex = 2
-	tx, _ = db.db.Begin()
 	err = db.updateBSO(tx, cId, bId, modified, nil, &sortIndex, nil)
 	if err != nil {
 		t.Fatal(err)
-	} else {
-		tx.Commit()
 	}
 
-	bso, _ = db.getBSO(cId, bId)
+	bso, _ = db.getBSO(tx, cId, bId)
 
 	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != ttl {
 		t.Fatal("bso was not updated correctly")
@@ -167,17 +154,81 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	modified = Now()
 	ttl = 2
-	tx, _ = db.db.Begin()
 	err = db.updateBSO(tx, cId, bId, modified, nil, nil, &ttl)
 	if err != nil {
 		t.Fatal(err)
-	} else {
-		tx.Commit()
 	}
 
-	bso, _ = db.getBSO(cId, bId)
+	bso, _ = db.getBSO(tx, cId, bId)
 
 	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != ttl {
 		t.Fatal("bso was not updated correctly")
+	}
+}
+
+func TestPrivatePutBSOInsertsWithMissingValues(t *testing.T) {
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	tx, _ := db.db.Begin()
+	defer tx.Rollback()
+
+	cId := 1
+
+	// make sure no data doesn't actually make a row
+	if err := db.putBSO(tx, cId, "obj-1", Now(), nil, nil, nil); err != ErrNothingToDo {
+		t.Error("Unexpected error", err)
+	}
+
+	if err := db.putBSO(tx, cId, "obj-2", Now(), String("1"), nil, nil); err != nil {
+		t.Error(err)
+	}
+
+	if err := db.putBSO(tx, cId, "obj-3", Now(), nil, Uint(1), nil); err != nil {
+		t.Error(err)
+	}
+
+	if err := db.putBSO(tx, cId, "obj-4", Now(), nil, nil, Uint(1)); err != nil {
+		t.Error(err)
+	}
+
+	var numRows int
+	if err := tx.QueryRow("SELECT count(1) FROM BSO").Scan(&numRows); err != nil || numRows != 3 {
+		t.Errorf("Got err %v, expected 4 rows but got %d", err, numRows)
+	}
+}
+
+func TestPrivatePutBSOUpdates(t *testing.T) {
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	tx, _ := db.db.Begin()
+	defer tx.Rollback()
+
+	if err := db.putBSO(tx, 1, "1", Now(), String("initial"), nil, nil); err != nil {
+		t.Error(err)
+	}
+
+	modified := Now()
+	payload := String("Updated")
+	sortIndex := Uint(100)
+	if err := db.putBSO(tx, 1, "1", modified, payload, sortIndex, nil); err != nil {
+		t.Error(err)
+	}
+
+	if bso, err := db.getBSO(tx, 1, "1"); err != nil {
+		t.Error(err)
+	} else {
+		if bso.Payload != *payload {
+			t.Errorf("Expected %s got %s", *payload, bso.Payload)
+		}
+
+		if bso.SortIndex != *sortIndex {
+			t.Errorf("Expected %d got %d", *sortIndex, bso.SortIndex)
+		}
+
+		if bso.Modified != modified {
+			t.Errorf("Expected %f got %f", modified, bso.Modified)
+		}
 	}
 }
