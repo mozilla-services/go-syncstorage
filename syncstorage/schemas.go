@@ -15,9 +15,7 @@ const SCHEMA_0 = `
 	  -- convert it in the API response, but work with it as an int
 	  Modified       INTEGER NOT NULL,
 
-	  -- default TTL of 2100000000 is in the current setup, keeping
-	  -- the same incase of introducing bugs
-	  TTL            INTEGER NOT NULL DEFAULT 2100000000,
+	  TTL            INTEGER NOT NULL,
 
 	  PRIMARY KEY (CollectionId, Id)
 	);

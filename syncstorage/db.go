@@ -32,6 +32,9 @@ const (
 
 	// absolute maximum records getBSOs can return
 	LIMIT_MAX = 1000
+
+	// keep BSO for 1 year
+	DEFAULT_BSO_TTL = 365 * 24 * 60 * 60 * 1000
 )
 
 type CollectionInfo struct {
@@ -228,7 +231,7 @@ func (d *DB) putBSO(tx *sql.Tx,
 		}
 
 		if ttl == nil {
-			t = 0
+			t = DEFAULT_BSO_TTL
 		} else {
 			t = *ttl
 		}
@@ -262,7 +265,7 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 	limit int,
 	offset int) ([]*BSO, error) {
 
-	query := `SELECT Id, SortIndex, Payload, Modified
+	query := `SELECT Id, SortIndex, Payload, Modified, TTL
 			  FROM BSO
 			  WHERE CollectionId=? AND TTL>=? `
 
@@ -309,7 +312,7 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 	bsos := make([]*BSO, 0)
 	for rows.Next() {
 		b := &BSO{}
-		if err := rows.Scan(&b.Id, &b.SortIndex, &b.Payload, &b.Modified); err != nil {
+		if err := rows.Scan(&b.Id, &b.SortIndex, &b.Payload, &b.Modified, &b.TTL); err != nil {
 			return nil, err
 		} else {
 			bsos = append(bsos, b)
@@ -320,26 +323,19 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 
 }
 
+// getBSO is a simpler interface to getBSOs that returns a single BSO
 func (d *DB) getBSO(tx *sql.Tx, cId int, bId string) (*BSO, error) {
-
-	bso := &BSO{Id: bId}
-	query := "SELECT Modified, SortIndex, Payload, TTL FROM BSO WHERE CollectionId=? AND Id=?"
-	err := tx.QueryRow(query, cId, bId).Scan(
-		&bso.Modified,
-		&bso.SortIndex,
-		&bso.Payload,
-		&bso.TTL,
-	)
+	bsos, err := d.getBSOs(tx, cId, []string{bId}, 0, SORT_NONE, 1, 0)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrNotFound
-		}
 		return nil, err
 	}
 
-	return bso, nil
+	if len(bsos) == 0 {
+		return nil, ErrNotFound
+	}
 
+	return bsos[0], nil
 }
 
 func (d *DB) insertBSO(
