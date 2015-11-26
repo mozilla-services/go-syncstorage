@@ -297,7 +297,7 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 
 	fmt.Println(query, values)
 
-	return ErrNotImplemented
+	return nil, ErrNotImplemented
 
 }
 
