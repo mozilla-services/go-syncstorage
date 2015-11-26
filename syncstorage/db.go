@@ -3,6 +3,7 @@ package syncstorage
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -257,18 +258,24 @@ func (d *DB) bsoExists(tx *sql.Tx, cId int, bId string) (bool, error) {
 	return true, nil
 }
 
-// getBSOs
+type GetResults struct {
+	BSOs   []*BSO
+	Total  int
+	More   bool
+	Offset int
+}
+
+// getBSOs searches for bsos based on the api 1.5 criteria
 func (d *DB) getBSOs(tx *sql.Tx, cId int,
 	ids []string,
 	newer int,
 	sort SortType,
 	limit int,
-	offset int) ([]*BSO, error) {
+	offset int) (*GetResults, error) {
 
-	query := `SELECT Id, SortIndex, Payload, Modified, TTL
-			  FROM BSO
-			  WHERE CollectionId=? AND TTL>=? `
+	query := "SELECT Id, SortIndex, Payload, Modified, TTL FROM BSO "
 
+	where := "WHERE CollectionId=? AND TTL>=?"
 	values := []interface{}{cId, Now()}
 
 	if len(ids) > 0 {
@@ -277,31 +284,41 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 			ids = ids[0:100]
 		}
 
-		query += " AND Id IN (?" + strings.Repeat(",?", len(ids)-1) + ") "
+		where += " AND Id IN (?" + strings.Repeat(",?", len(ids)-1) + ")"
 		for _, id := range ids {
 			values = append(values, id)
 		}
 	}
 
+	orderBy := ""
 	if sort == SORT_INDEX {
-		query += " ORDER BY SortIndex ASC "
+		orderBy = "ORDER BY SortIndex ASC "
 	} else if sort == SORT_NEWEST {
-		query += " ORDER BY Modified DESC "
+		orderBy = "ORDER BY Modified DESC "
 	} else if sort == SORT_OLDEST {
-		query += " ORDER BY Modified ASC "
+		orderBy = "ORDER BY Modified ASC "
 	}
 
 	if limit == 0 || limit > LIMIT_MAX {
 		limit = LIMIT_MAX
 	}
 
-	query += " LIMIT " + strconv.Itoa(limit)
+	limitStmt := "LIMIT " + strconv.Itoa(limit)
 
 	if offset != 0 {
-		query += " OFFSET " + strconv.Itoa(offset)
+		limitStmt += " OFFSET " + strconv.Itoa(offset)
 	}
 
-	rows, err := tx.Query(query, values...)
+	countQuery := fmt.Sprintf("SELECT COUNT(1) NumRows FROM BSO %s %s", where, orderBy)
+	var totalRows int
+
+	if err := tx.QueryRow(countQuery, values...).Scan(&totalRows); err != nil {
+		return nil, err
+	}
+
+	resultQuery := fmt.Sprintf("%s %s %s %s", query, where, orderBy, limitStmt)
+
+	rows, err := tx.Query(resultQuery, values...)
 
 	if err != nil {
 		return nil, err
@@ -319,23 +336,36 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 		}
 	}
 
-	return bsos, nil
+	nextOffset := 0
+	more := (totalRows > limit)
+	if more {
+		nextOffset = limit + 1
+	}
+
+	results := &GetResults{
+		BSOs:   bsos,
+		Total:  totalRows,
+		More:   (totalRows > limit),
+		Offset: nextOffset,
+	}
+
+	return results, nil
 
 }
 
 // getBSO is a simpler interface to getBSOs that returns a single BSO
 func (d *DB) getBSO(tx *sql.Tx, cId int, bId string) (*BSO, error) {
-	bsos, err := d.getBSOs(tx, cId, []string{bId}, 0, SORT_NONE, 1, 0)
+	results, err := d.getBSOs(tx, cId, []string{bId}, 0, SORT_NONE, 1, 0)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if len(bsos) == 0 {
+	if len(results.BSOs) == 0 {
 		return nil, ErrNotFound
 	}
 
-	return bsos[0], nil
+	return results.BSOs[0], nil
 }
 
 func (d *DB) insertBSO(

@@ -1,9 +1,9 @@
 package syncstorage
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"testing"
 )
 
@@ -236,7 +236,7 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 	}
 }
 
-func TestPrivateGetBSOs(t *testing.T) {
+func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 
@@ -244,15 +244,24 @@ func TestPrivateGetBSOs(t *testing.T) {
 	defer tx.Rollback()
 
 	cId := 1
-	bIds := []string{"a", "b", "c", "d"}
-	newer := 0
-	sort := SORT_NEWEST
-	limit := 2000
-	offset := 0
 
-	// put a record in
-	err := db.insertBSO(tx, cId, "a", Now(), "payload", 10, 1000)
+	// put in 50 records
+	modified := Now()
+	for i := 0; i < 50; i++ {
+		id := strconv.Itoa(i)
+		payload := "payload-" + id
+		sortIndex := i
+		if err := db.insertBSO(tx, cId, id, modified, payload, sortIndex, DEFAULT_BSO_TTL); err != nil {
+			t.Fatal("Error inserting BSO #", i, ":", err)
+		}
+	}
 
-	bsos, err := db.getBSOs(tx, cId, bIds, newer, sort, limit, offset)
-	fmt.Println(bsos, err)
+	/*
+		bIds := []string{"a", "b", "c", "d"}
+		newer := 0
+		sort := SORT_NEWEST
+		limit := 2000
+		offset := 0
+		//bsos, err := db.getBSOs(tx, cId, bIds, newer, sort, limit, offset)
+	*/
 }
