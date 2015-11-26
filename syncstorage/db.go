@@ -3,6 +3,9 @@ package syncstorage
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -247,6 +250,55 @@ func (d *DB) bsoExists(tx *sql.Tx, cId int, bId string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// getBSOs
+func (d *DB) getBSOs(tx *sql.Tx, cId int,
+	ids []string,
+	newer float64,
+	fullBSO bool,
+	sort SortType,
+	limit uint,
+	offset uint) ([]*BSO, error) {
+
+	query := `SELECT Id, SortIndex, Payload, Modified
+			  FROM BSO
+			  WHERE CollectionId=? AND TTL >= ? `
+
+	values := []interface{}{cId, Now()}
+
+	if len(ids) > 0 {
+		// spec says only 100 ids at a time
+		if len(ids) > 100 {
+			ids = ids[0:100]
+		}
+
+		query += " AND Id IN (?," + strings.Repeat(",?", len(ids)-1) + ") "
+		values = append(values, ids)
+	}
+
+	if sort == SORT_INDEX {
+		query += " ORDER BY SortIndex ASC "
+	} else if sort == SORT_NEWEST {
+		query += " ORDER BY Modified DESC "
+	} else if sort == SORT_OLDEST {
+		query += " ORDER BY Modified ASC "
+	}
+
+	if limit == 0 || limit > 1000 {
+		limit = 1000
+	}
+
+	query += " LIMIT " + strconv.FormatUint(uint64(limit), 10)
+
+	if offset != 0 {
+		query += " OFFSET " + strconv.FormatUint(uint64(offset), 10)
+	}
+
+	fmt.Println(query, values)
+
+	return ErrNotImplemented
+
 }
 
 func (d *DB) getBSO(tx *sql.Tx, cId int, bId string) (*BSO, error) {
