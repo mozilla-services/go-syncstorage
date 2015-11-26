@@ -116,7 +116,7 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 	modified := Now()
 	payload := "initial value"
 	sortIndex := 1
-	ttl := 1
+	ttl := 3600 * 1000
 
 	var err error
 
@@ -125,6 +125,9 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// remember this for later tests
+	expectedTTL := modified + ttl
 
 	modified = Now()
 	payload = "Updated payload"
@@ -136,8 +139,8 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	bso, _ := db.getBSO(tx, cId, bId)
 
-	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != ttl {
-		t.Fatal("bso was not updated correctly")
+	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != expectedTTL {
+		t.Fatal("bso was not updated correctly", bso.TTL, ttl+modified)
 	}
 
 	modified = Now()
@@ -149,12 +152,11 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	bso, _ = db.getBSO(tx, cId, bId)
 
-	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != ttl {
+	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != expectedTTL {
 		t.Fatal("bso was not updated correctly")
 	}
 
 	modified = Now()
-	ttl = 2
 	err = db.updateBSO(tx, cId, bId, modified, nil, nil, &ttl)
 	if err != nil {
 		t.Fatal(err)
@@ -162,7 +164,7 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	bso, _ = db.getBSO(tx, cId, bId)
 
-	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != ttl {
+	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != ttl+modified {
 		t.Fatal("bso was not updated correctly")
 	}
 }

@@ -362,7 +362,7 @@ func (d *DB) insertBSO(
 			)`,
 		cId, bId, sortIndex,
 		payload, len(payload),
-		modified, ttl)
+		modified, modified+ttl)
 
 	return
 }
@@ -406,7 +406,7 @@ func (d *DB) updateBSO(
 
 	if ttl != nil {
 		set = set + ", TTL=?"
-		values[i] = *ttl
+		values[i] = *ttl + modified
 		i += 1
 	}
 
