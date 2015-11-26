@@ -2,8 +2,8 @@ package syncstorage
 
 const SCHEMA_0 = `
 	CREATE TABLE BSO (
-	  Id             VARCHAR(64) NOT NULL,
 	  CollectionId	 INTEGER NOT NULL,
+	  Id             VARCHAR(64) NOT NULL,
 	  SortIndex      INTEGER DEFAULT 0,
 
 	  Payload        TEXT NOT NULL DEFAULT '',
@@ -19,8 +19,12 @@ const SCHEMA_0 = `
 	);
 
 	CREATE TABLE Collections (
-	  Id		INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-	  Name      VARCHAR(32) NOT NULL UNIQUE,
+	  -- storage an integer to save some space
+	  Id		INTEGER PRIMARY KEY ASC,
+	  Name      VARCHAR(32) UNIQUE,
+
+	  -- Size is a cached value of sum(BSO.PayloadSize)
+	  Size		INTEGER NOT NULL DEFAULT 0,
 	  Modified  INTEGER NOT NULL DEFAULT 0
 	);
 
