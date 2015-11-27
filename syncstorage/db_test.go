@@ -250,8 +250,9 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 
 	cId := 1
 
-	// put in enough records to test offset
 	modified := Now()
+
+	// put in enough records to test offset
 	totalRecords := 12
 	for i := 0; i < totalRecords; i++ {
 		id := strconv.Itoa(i)
@@ -266,6 +267,12 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 	sort := SORT_INDEX
 	limit := 5
 	offset := 0
+
+	// make sure invalid values don't work for limit and offset
+	_, err := db.getBSOs(tx, cId, nil, newer, sort, -1, offset)
+	assert.Equal(ErrInvalidLimit, err)
+	_, err = db.getBSOs(tx, cId, nil, newer, sort, limit, -1)
+	assert.Equal(ErrInvalidOffset, err)
 
 	results, err := db.getBSOs(tx, cId, nil, newer, sort, limit, offset)
 	assert.Nil(err)

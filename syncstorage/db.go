@@ -20,6 +20,8 @@ var (
 
 	ErrBSOIdsRequired = errors.New("syncstorage: BSO IDs required")
 	ErrBSOIdInvalid   = errors.New("syncstorage: BSO ID invalid")
+	ErrInvalidLimit   = errors.New("syncstorage: Invalid LIMIT value")
+	ErrInvalidOffset  = errors.New("syncstorage: Invalid OFFSET value")
 )
 
 type SortType int
@@ -272,6 +274,14 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 	sort SortType,
 	limit int,
 	offset int) (*GetResults, error) {
+
+	if offset < 0 {
+		return nil, ErrInvalidOffset
+	}
+
+	if limit < 0 {
+		return nil, ErrInvalidLimit
+	}
 
 	query := "SELECT Id, SortIndex, Payload, Modified, TTL FROM BSO "
 
