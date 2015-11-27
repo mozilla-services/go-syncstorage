@@ -355,17 +355,21 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 
 // getBSO is a simpler interface to getBSOs that returns a single BSO
 func (d *DB) getBSO(tx *sql.Tx, cId int, bId string) (*BSO, error) {
-	results, err := d.getBSOs(tx, cId, []string{bId}, 0, SORT_NONE, 1, 0)
+
+	b := &BSO{Id: bId}
+
+	query := "SELECT SortIndex, Payload, Modified, TTL FROM BSO WHERE CollectionId=? and Id=?"
+	err := tx.QueryRow(query, cId, bId).Scan(&b.SortIndex, &b.Payload, &b.Modified, &b.TTL)
 
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+
 		return nil, err
 	}
 
-	if len(results.BSOs) == 0 {
-		return nil, ErrNotFound
-	}
-
-	return results.BSOs[0], nil
+	return b, nil
 }
 
 func (d *DB) insertBSO(
