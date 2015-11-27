@@ -31,9 +31,7 @@ func removeTestDB(d *DB) error {
 
 func TestNewDB(t *testing.T) {
 	db, err := getTestDB()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 	defer removeTestDB(db)
 }
 
@@ -42,31 +40,27 @@ func TestCollectionId(t *testing.T) {
 	defer removeTestDB(db)
 
 	_, err := db.GetCollectionId("bookmarks")
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 }
 
 func TestBsoExists(t *testing.T) {
 
+	assert := assert.New(t)
+
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 
-	tx, _ := db.db.Begin()
+	tx, err := db.db.Begin()
+	assert.NoError(err)
 	found, err := db.bsoExists(tx, 1, "nope")
-	tx.Rollback()
-
-	if err != nil {
-		t.Error(err)
-	}
-
-	if found != false {
-		t.Error("found expected to be false")
-	}
+	assert.False(found)
+	assert.NoError(err)
+	assert.NoError(tx.Rollback())
 
 	// insert a new BSO and test if a
 	// true result comes back
-	tx, _ = db.db.Begin()
+	tx, err = db.db.Begin()
+	assert.NoError(err)
 
 	cId := 1
 	bId := "testBSO"
@@ -75,20 +69,11 @@ func TestBsoExists(t *testing.T) {
 	sortIndex := 1
 	ttl := 1000
 
-	err = db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl))
 
 	found, err = db.bsoExists(tx, cId, bId)
-
-	if err != nil {
-		t.Error(err)
-	}
-
-	if found != true {
-		t.Error("found expected to be true")
-	}
+	assert.NoError(err)
+	assert.True(found)
 }
 
 func TestUpdateBSOReturnsExpectedError(t *testing.T) {
@@ -102,12 +87,13 @@ func TestUpdateBSOReturnsExpectedError(t *testing.T) {
 	bId := "testBSO"
 	modified := Now()
 
-	if err := db.updateBSO(tx, cId, bId, modified, nil, nil, nil); err != ErrNothingToDo {
-		t.Fatal("Got unexpected error", err)
-	}
+	err := db.updateBSO(tx, cId, bId, modified, nil, nil, nil)
+	assert.Equal(t, ErrNothingToDo, err)
 }
 
 func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
+
+	assert := assert.New(t)
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 
@@ -122,56 +108,41 @@ func TestUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	var err error
 
-	err = db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl))
 
 	// remember this for later tests
 	expectedTTL := modified + ttl
 
 	modified = Now()
 	payload = "Updated payload"
-	err = db.updateBSO(tx, cId, bId, modified, &payload, nil, nil)
+	assert.NoError(db.updateBSO(tx, cId, bId, modified, &payload, nil, nil))
+	bso, err := db.getBSO(tx, cId, bId)
+	assert.NoError(err)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	bso, _ := db.getBSO(tx, cId, bId)
-
-	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != expectedTTL {
-		t.Fatal("bso was not updated correctly", bso.TTL, ttl+modified)
-	}
+	assert.True((bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == expectedTTL))
 
 	modified = Now()
 	sortIndex = 2
-	err = db.updateBSO(tx, cId, bId, modified, nil, &sortIndex, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(db.updateBSO(tx, cId, bId, modified, nil, &sortIndex, nil))
 
-	bso, _ = db.getBSO(tx, cId, bId)
+	bso, err = db.getBSO(tx, cId, bId)
+	assert.NoError(err)
+	assert.NotNil(bso)
 
-	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != expectedTTL {
-		t.Fatal("bso was not updated correctly")
-	}
+	assert.True(bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == expectedTTL)
 
 	modified = Now()
-	err = db.updateBSO(tx, cId, bId, modified, nil, nil, &ttl)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(db.updateBSO(tx, cId, bId, modified, nil, nil, &ttl))
+	bso, err = db.getBSO(tx, cId, bId)
+	assert.NoError(err)
+	assert.NotNil(bso)
 
-	bso, _ = db.getBSO(tx, cId, bId)
-
-	if bso.Modified != modified || bso.Payload != payload || bso.SortIndex != sortIndex || bso.TTL != ttl+modified {
-		t.Fatal("bso was not updated correctly")
-	}
+	assert.True(bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == ttl+modified)
 }
 
 func TestPrivatePutBSOInsertsWithMissingValues(t *testing.T) {
+	assert := assert.New(t)
+
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 
@@ -181,29 +152,23 @@ func TestPrivatePutBSOInsertsWithMissingValues(t *testing.T) {
 	cId := 1
 
 	// make sure no data doesn't actually make a row
-	if err := db.putBSO(tx, cId, "obj-1", Now(), nil, nil, nil); err != ErrNothingToDo {
-		t.Error("Unexpected error", err)
-	}
+	err := db.putBSO(tx, cId, "obj-1", Now(), nil, nil, nil)
+	assert.Equal(ErrNothingToDo, err, "Unspected error: %s", err)
 
-	if err := db.putBSO(tx, cId, "obj-2", Now(), String("1"), nil, nil); err != nil {
-		t.Error(err)
-	}
-
-	if err := db.putBSO(tx, cId, "obj-3", Now(), nil, Int(1), nil); err != nil {
-		t.Error(err)
-	}
-
-	if err := db.putBSO(tx, cId, "obj-4", Now(), nil, nil, Int(1)); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(db.putBSO(tx, cId, "obj-2", Now(), String("1"), nil, nil))
+	assert.NoError(db.putBSO(tx, cId, "obj-3", Now(), nil, Int(1), nil))
+	assert.NoError(db.putBSO(tx, cId, "obj-4", Now(), nil, nil, Int(1)))
 
 	var numRows int
-	if err := tx.QueryRow("SELECT count(1) FROM BSO").Scan(&numRows); err != nil || numRows != 3 {
-		t.Errorf("Got err %v, expected 4 rows but got %d", err, numRows)
+	err = tx.QueryRow("SELECT count(1) FROM BSO").Scan(&numRows)
+	if assert.NoError(err) {
+		assert.Equal(3, numRows)
 	}
 }
 
 func TestPrivatePutBSOUpdates(t *testing.T) {
+	assert := assert.New(t)
+
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 
@@ -217,25 +182,15 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 	modified := Now()
 	payload := String("Updated")
 	sortIndex := Int(100)
-	if err := db.putBSO(tx, 1, "1", modified, payload, sortIndex, nil); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(db.putBSO(tx, 1, "1", modified, payload, sortIndex, nil))
+	bso, err := db.getBSO(tx, 1, "1")
 
-	if bso, err := db.getBSO(tx, 1, "1"); err != nil {
-		t.Error(err)
-	} else {
-		if bso.Payload != *payload {
-			t.Errorf("Expected %s got %s", *payload, bso.Payload)
-		}
+	assert.NoError(err)
+	assert.NotNil(bso)
 
-		if bso.SortIndex != *sortIndex {
-			t.Errorf("Expected %d got %d", *sortIndex, bso.SortIndex)
-		}
-
-		if bso.Modified != modified {
-			t.Errorf("Expected %f got %f", modified, bso.Modified)
-		}
-	}
+	assert.Equal(*payload, bso.Payload)
+	assert.Equal(*sortIndex, bso.SortIndex)
+	assert.Equal(modified, bso.Modified)
 }
 
 func TestPrivateGetBSOsLimitOffset(t *testing.T) {
