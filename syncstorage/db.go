@@ -20,8 +20,10 @@ var (
 
 	ErrBSOIdsRequired = errors.New("syncstorage: BSO IDs required")
 	ErrBSOIdInvalid   = errors.New("syncstorage: BSO ID invalid")
-	ErrInvalidLimit   = errors.New("syncstorage: Invalid LIMIT value")
-	ErrInvalidOffset  = errors.New("syncstorage: Invalid OFFSET value")
+
+	ErrInvalidLimit  = errors.New("syncstorage: Invalid LIMIT value")
+	ErrInvalidOffset = errors.New("syncstorage: Invalid OFFSET value")
+	ErrInvalidNewer  = errors.New("syncstorage: Invalid NEWER than value")
 )
 
 type SortType int
@@ -60,6 +62,19 @@ type GetResults struct {
 	Total  int
 	More   bool
 	Offset int
+}
+
+func (g *GetResults) String() string {
+	s := fmt.Sprintf("Total: %d, More: %v, Offset: %d\nBSOs:\n",
+		g.Total, g.More, g.Offset)
+
+	for _, b := range g.BSOs {
+		s += fmt.Sprintf("  Id:%s, Modified:%d, SortIndex:%d, TTL:%d, %s\n",
+			b.Id, b.Modified, b.SortIndex, b.TTL, b.Payload)
+	}
+
+	return s
+
 }
 
 type DB struct {
@@ -283,10 +298,14 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 		return nil, ErrInvalidLimit
 	}
 
+	if newer < 0 {
+		return nil, ErrInvalidNewer
+	}
+
 	query := "SELECT Id, SortIndex, Payload, Modified, TTL FROM BSO "
 
-	where := "WHERE CollectionId=? AND TTL>=?"
-	values := []interface{}{cId, Now()}
+	where := "WHERE CollectionId=? AND Modified > ? AND TTL>=?"
+	values := []interface{}{cId, newer, Now()}
 
 	if len(ids) > 0 {
 		// spec says only 100 ids at a time
