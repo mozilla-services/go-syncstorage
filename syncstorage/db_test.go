@@ -341,6 +341,7 @@ func TestPrivateGetBSOsNewer(t *testing.T) {
 	assert.Nil(err)
 	if assert.NotNil(results) {
 		assert.Equal(3, results.Total)
+		assert.Equal(3, len(results.BSOs))
 		assert.Equal("b0", results.BSOs[0].Id)
 		assert.Equal("b1", results.BSOs[1].Id)
 		assert.Equal("b2", results.BSOs[2].Id)
@@ -367,4 +368,54 @@ func TestPrivateGetBSOsNewer(t *testing.T) {
 		assert.Equal(0, results.Total)
 	}
 
+}
+
+func TestPrivateGetBSOsSort(t *testing.T) {
+
+	assert := assert.New(t)
+
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	tx, _ := db.db.Begin()
+	defer tx.Rollback()
+
+	// put in enough records to test Newer
+	cId := 1
+
+	modified := Now()
+
+	_, err := db.getBSOs(tx, cId, nil, -1, SORT_NONE, 10, 0)
+	assert.Equal(ErrInvalidNewer, err)
+
+	assert.Nil(db.insertBSO(tx, cId, "b2", modified-2, "a", 2, DEFAULT_BSO_TTL))
+	assert.Nil(db.insertBSO(tx, cId, "b1", modified-1, "a", 0, DEFAULT_BSO_TTL))
+	assert.Nil(db.insertBSO(tx, cId, "b0", modified, "a", 1, DEFAULT_BSO_TTL))
+
+	results, err := db.getBSOs(tx, cId, nil, 0, SORT_NEWEST, 10, 0)
+	assert.Nil(err)
+	if assert.NotNil(results) {
+		assert.Equal(3, len(results.BSOs))
+		assert.Equal("b0", results.BSOs[0].Id)
+		assert.Equal("b1", results.BSOs[1].Id)
+		assert.Equal("b2", results.BSOs[2].Id)
+	}
+
+	results, err = db.getBSOs(tx, cId, nil, 0, SORT_OLDEST, 10, 0)
+	assert.Nil(err)
+	if assert.NotNil(results) {
+		assert.Equal(3, len(results.BSOs))
+		assert.Equal("b2", results.BSOs[0].Id)
+		assert.Equal("b1", results.BSOs[1].Id)
+		assert.Equal("b0", results.BSOs[2].Id)
+	}
+
+	results, err = db.getBSOs(tx, cId, nil, 0, SORT_INDEX, 10, 0)
+	assert.Nil(err)
+	if assert.NotNil(results) {
+		assert.Equal(3, len(results.BSOs))
+		assert.Equal("b1", results.BSOs[0].Id)
+		assert.Equal("b0", results.BSOs[1].Id)
+		assert.Equal("b2", results.BSOs[2].Id)
+	}
 }
