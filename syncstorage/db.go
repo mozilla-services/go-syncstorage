@@ -159,25 +159,52 @@ func (d *DB) CollectionInfo() (map[string]*CollectionInfo, error) {
 	return nil, ErrNotImplemented
 }
 
-func (d *DB) GetBSOs(cId int,
+func (d *DB) GetBSOs(
+	cId int,
 	ids []string,
 	newer int,
-	fullBSO bool,
 	sort SortType,
 	limit int,
-	offset int) ([]*BSO, error) {
+	offset int) (r *GetResults, err error) {
 
 	d.Lock()
 	defer d.Unlock()
 
-	return nil, ErrNotImplemented
+	t, err := d.db.Begin()
+	if err != nil {
+		return
+	}
+
+	r, err = d.getBSOs(t, cId, ids, newer, sort, limit, offset)
+
+	if err != nil {
+		t.Rollback()
+		return
+	}
+
+	t.Commit()
+	return
+
 }
 
-func (d *DB) GetBSO(cId int, bId string) (*BSO, error) {
+func (d *DB) GetBSO(cId int, bId string) (b *BSO, err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	return nil, ErrNotImplemented
+	t, err := d.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
+	b, err = d.getBSO(t, cId, bId)
+
+	if err != nil {
+		t.Rollback()
+		return
+	}
+
+	t.Commit()
+	return
 }
 
 func (d *DB) PostBSOs(cId int, bsos []*BSO) (*PostResults, error) {
@@ -283,7 +310,9 @@ func (d *DB) bsoExists(tx *sql.Tx, cId int, bId string) (bool, error) {
 }
 
 // getBSOs searches for bsos based on the api 1.5 criteria
-func (d *DB) getBSOs(tx *sql.Tx, cId int,
+func (d *DB) getBSOs(
+	tx *sql.Tx,
+	cId int,
 	ids []string,
 	newer int,
 	sort SortType,

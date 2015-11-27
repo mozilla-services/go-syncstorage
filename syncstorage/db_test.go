@@ -275,7 +275,7 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 	assert.Equal(ErrInvalidOffset, err)
 
 	results, err := db.getBSOs(tx, cId, nil, newer, sort, limit, offset)
-	assert.Nil(err)
+	assert.NoError(err)
 
 	if assert.NotNil(results) {
 		assert.Equal(5, len(results.BSOs), "Expected 5 results")
@@ -289,7 +289,7 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 	}
 
 	results2, err := db.getBSOs(tx, cId, nil, newer, sort, limit, results.Offset)
-	assert.Nil(err)
+	assert.NoError(err)
 	if assert.NotNil(results2) {
 		assert.Equal(5, len(results2.BSOs), "Expected 5 results")
 		assert.Equal(totalRecords, results.Total, "Expected %d bsos to be found", totalRecords)
@@ -302,7 +302,7 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 	}
 
 	results3, err := db.getBSOs(tx, cId, nil, newer, sort, limit, results2.Offset)
-	assert.Nil(err)
+	assert.NoError(err)
 	if assert.NotNil(results3) {
 		assert.Equal(2, len(results3.BSOs), "Expected 2 results")
 		assert.Equal(totalRecords, results.Total, "Expected %d bsos to be found", totalRecords)
@@ -338,7 +338,7 @@ func TestPrivateGetBSOsNewer(t *testing.T) {
 	assert.Nil(db.insertBSO(tx, cId, "b0", modified, "a", 1, DEFAULT_BSO_TTL))
 
 	results, err := db.getBSOs(tx, cId, nil, modified-3, SORT_NEWEST, 10, 0)
-	assert.Nil(err)
+	assert.NoError(err)
 	if assert.NotNil(results) {
 		assert.Equal(3, results.Total)
 		assert.Equal(3, len(results.BSOs))
@@ -348,7 +348,7 @@ func TestPrivateGetBSOsNewer(t *testing.T) {
 	}
 
 	results, err = db.getBSOs(tx, cId, nil, modified-2, SORT_NEWEST, 10, 0)
-	assert.Nil(err)
+	assert.NoError(err)
 	if assert.NotNil(results) {
 		assert.Equal(2, results.Total)
 		assert.Equal("b0", results.BSOs[0].Id)
@@ -356,14 +356,14 @@ func TestPrivateGetBSOsNewer(t *testing.T) {
 	}
 
 	results, err = db.getBSOs(tx, cId, nil, modified-1, SORT_NEWEST, 10, 0)
-	assert.Nil(err)
+	assert.NoError(err)
 	if assert.NotNil(results) {
 		assert.Equal(1, results.Total)
 		assert.Equal("b0", results.BSOs[0].Id)
 	}
 
 	results, err = db.getBSOs(tx, cId, nil, modified, SORT_NEWEST, 10, 0)
-	assert.Nil(err)
+	assert.NoError(err)
 	if assert.NotNil(results) {
 		assert.Equal(0, results.Total)
 	}
@@ -393,7 +393,7 @@ func TestPrivateGetBSOsSort(t *testing.T) {
 	assert.Nil(db.insertBSO(tx, cId, "b0", modified, "a", 1, DEFAULT_BSO_TTL))
 
 	results, err := db.getBSOs(tx, cId, nil, 0, SORT_NEWEST, 10, 0)
-	assert.Nil(err)
+	assert.NoError(err)
 	if assert.NotNil(results) {
 		assert.Equal(3, len(results.BSOs))
 		assert.Equal("b0", results.BSOs[0].Id)
@@ -402,7 +402,7 @@ func TestPrivateGetBSOsSort(t *testing.T) {
 	}
 
 	results, err = db.getBSOs(tx, cId, nil, 0, SORT_OLDEST, 10, 0)
-	assert.Nil(err)
+	assert.NoError(err)
 	if assert.NotNil(results) {
 		assert.Equal(3, len(results.BSOs))
 		assert.Equal("b2", results.BSOs[0].Id)
@@ -411,11 +411,81 @@ func TestPrivateGetBSOsSort(t *testing.T) {
 	}
 
 	results, err = db.getBSOs(tx, cId, nil, 0, SORT_INDEX, 10, 0)
-	assert.Nil(err)
+	assert.NoError(err)
 	if assert.NotNil(results) {
 		assert.Equal(3, len(results.BSOs))
 		assert.Equal("b1", results.BSOs[0].Id)
 		assert.Equal("b0", results.BSOs[1].Id)
 		assert.Equal("b2", results.BSOs[2].Id)
+	}
+}
+
+func TestPublicGetBSO(t *testing.T) {
+
+	assert := assert.New(t)
+
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	cId := 1
+	bId := "b0"
+	payload := "a"
+
+	tx, err := db.db.Begin()
+	assert.NoError(err)
+	assert.Nil(db.insertBSO(tx, cId, bId, Now(), payload, 0, DEFAULT_BSO_TTL))
+	assert.Nil(tx.Commit())
+
+	// Make sure it returns the right BSO
+	bso, err := db.GetBSO(cId, "b0")
+	assert.NoError(err)
+	if assert.NotNil(bso) {
+		assert.Equal(bId, bso.Id)
+		assert.Equal(payload, bso.Payload)
+	}
+
+	bso, err = db.GetBSO(cId, "nope")
+	assert.NoError(err)
+	assert.Nil(bso)
+}
+
+// TestPublicGetBSO asserts the interface to the private getBSOs is correct
+func TestPublicGetBSOs(t *testing.T) {
+
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	cId := 1
+
+	tx, err := db.db.Begin()
+	assert.NoError(err)
+
+	modified := Now()
+	assert.Nil(db.insertBSO(tx, cId, "b0", modified-10, "0", 4, DEFAULT_BSO_TTL))
+	assert.Nil(db.insertBSO(tx, cId, "b1", modified-20, "1", 2, DEFAULT_BSO_TTL))
+	assert.Nil(db.insertBSO(tx, cId, "b2", modified-30, "2", 3, DEFAULT_BSO_TTL))
+	assert.Nil(db.insertBSO(tx, cId, "b3", modified-40, "3", 5, DEFAULT_BSO_TTL))
+	assert.Nil(db.insertBSO(tx, cId, "b4", modified-50, "4", 1, DEFAULT_BSO_TTL))
+	assert.NoError(tx.Commit())
+
+	results, err := db.GetBSOs(cId, []string{"b0", "b2", "b4"}, 0, SORT_NEWEST, 10, 0)
+	assert.NoError(err)
+	if assert.NotNil(results) {
+		assert.Equal(3, results.Total)
+		assert.Equal("b0", results.BSOs[0].Id)
+		assert.Equal("b2", results.BSOs[1].Id)
+		assert.Equal("b4", results.BSOs[2].Id)
+	}
+
+	results, err = db.GetBSOs(cId, nil, 0, SORT_INDEX, 2, 0)
+	assert.NoError(err)
+	if assert.NotNil(results) {
+		assert.Equal(5, results.Total)
+		assert.Equal(2, len(results.BSOs))
+		assert.Equal(2, results.Offset)
+		assert.True(results.More)
+		assert.Equal("b4", results.BSOs[0].Id)
+		assert.Equal("b1", results.BSOs[1].Id)
 	}
 }
