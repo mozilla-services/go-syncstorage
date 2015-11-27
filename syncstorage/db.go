@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -43,6 +42,22 @@ type CollectionInfo struct {
 	BSOCount int
 	Storage  int
 	Modified int
+}
+
+// PostBSOs takes a set of BSO and performs an Insert or Update on
+// each of them.
+type PostResults struct {
+	Modified int
+	Success  []string
+	failed   map[string][]string
+}
+
+// GetResults holds search results for BSOs, this is what getBSOs() returns
+type GetResults struct {
+	BSOs   []*BSO
+	Total  int
+	More   bool
+	Offset int
 }
 
 type DB struct {
@@ -148,14 +163,6 @@ func (d *DB) GetBSO(cId int, bId string) (*BSO, error) {
 	return nil, ErrNotImplemented
 }
 
-// PostBSOs takes a set of BSO and performs an Insert or Update on
-// each of them.
-type PostResults struct {
-	Modified int
-	Success  []string
-	failed   map[string][]string
-}
-
 func (d *DB) PostBSOs(cId int, bsos []*BSO) (*PostResults, error) {
 	d.Lock()
 	defer d.Unlock()
@@ -258,13 +265,6 @@ func (d *DB) bsoExists(tx *sql.Tx, cId int, bId string) (bool, error) {
 	return true, nil
 }
 
-type GetResults struct {
-	BSOs   []*BSO
-	Total  int
-	More   bool
-	Offset int
-}
-
 // getBSOs searches for bsos based on the api 1.5 criteria
 func (d *DB) getBSOs(tx *sql.Tx, cId int,
 	ids []string,
@@ -303,13 +303,15 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 		limit = LIMIT_MAX
 	}
 
-	limitStmt := "LIMIT " + strconv.Itoa(limit)
+	limitStmt := "LIMIT ?"
+	values = append(values, limit)
 
 	if offset != 0 {
-		limitStmt += " OFFSET " + strconv.Itoa(offset)
+		limitStmt += " OFFSET ?"
+		values = append(values, offset)
 	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(1) NumRows FROM BSO %s %s", where, orderBy)
+	countQuery := "SELECT COUNT(1) NumRows FROM BSO " + where + " " + orderBy
 	var totalRows int
 
 	if err := tx.QueryRow(countQuery, values...).Scan(&totalRows); err != nil {
@@ -317,7 +319,6 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 	}
 
 	resultQuery := fmt.Sprintf("%s %s %s %s", query, where, orderBy, limitStmt)
-
 	rows, err := tx.Query(resultQuery, values...)
 
 	if err != nil {
@@ -337,15 +338,15 @@ func (d *DB) getBSOs(tx *sql.Tx, cId int,
 	}
 
 	nextOffset := 0
-	more := (totalRows > limit)
+	more := (totalRows > limit+offset)
 	if more {
-		nextOffset = limit + 1
+		nextOffset = offset + limit
 	}
 
 	results := &GetResults{
 		BSOs:   bsos,
 		Total:  totalRows,
-		More:   (totalRows > limit),
+		More:   more,
 		Offset: nextOffset,
 	}
 

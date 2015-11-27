@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func getTestDB() (*DB, error) {
@@ -237,6 +239,9 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 }
 
 func TestPrivateGetBSOsLimitOffset(t *testing.T) {
+
+	assert := assert.New(t)
+
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 
@@ -245,9 +250,10 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 
 	cId := 1
 
-	// put in 50 records
+	// put in enough records to test offset
 	modified := Now()
-	for i := 0; i < 50; i++ {
+	totalRecords := 12
+	for i := 0; i < totalRecords; i++ {
 		id := strconv.Itoa(i)
 		payload := "payload-" + id
 		sortIndex := i
@@ -256,12 +262,48 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 		}
 	}
 
-	/*
-		bIds := []string{"a", "b", "c", "d"}
-		newer := 0
-		sort := SORT_NEWEST
-		limit := 2000
-		offset := 0
-		//bsos, err := db.getBSOs(tx, cId, bIds, newer, sort, limit, offset)
-	*/
+	newer := 0
+	sort := SORT_INDEX
+	limit := 5
+	offset := 0
+
+	results, err := db.getBSOs(tx, cId, nil, newer, sort, limit, offset)
+	assert.Nil(err)
+
+	if assert.NotNil(results) {
+		assert.Equal(5, len(results.BSOs), "Expected 5 results")
+		assert.Equal(totalRecords, results.Total, "Expected %d bsos to be found", totalRecords)
+		assert.True(results.More)
+		assert.Equal(5, results.Offset, "Expected next offset to be 5")
+
+		// make sure we get the right BSOs
+		assert.Equal("0", results.BSOs[0].Id, "Expected BSO w/ Id = 0")
+		assert.Equal("4", results.BSOs[4].Id, "Expected BSO w/ Id = 4")
+	}
+
+	results2, err := db.getBSOs(tx, cId, nil, newer, sort, limit, results.Offset)
+	assert.Nil(err)
+	if assert.NotNil(results2) {
+		assert.Equal(5, len(results2.BSOs), "Expected 5 results")
+		assert.Equal(totalRecords, results.Total, "Expected %d bsos to be found", totalRecords)
+		assert.True(results2.More)
+		assert.Equal(10, results2.Offset, "Expected next offset to be 10")
+
+		// make sure we get the right BSOs
+		assert.Equal("5", results2.BSOs[0].Id, "Expected BSO w/ Id = 5")
+		assert.Equal("9", results2.BSOs[4].Id, "Expected BSO w/ Id = 9")
+	}
+
+	results3, err := db.getBSOs(tx, cId, nil, newer, sort, limit, results2.Offset)
+	assert.Nil(err)
+	if assert.NotNil(results3) {
+		assert.Equal(2, len(results3.BSOs), "Expected 2 results")
+		assert.Equal(totalRecords, results.Total, "Expected %d bsos to be found", totalRecords)
+		assert.False(results3.More)
+
+		// make sure we get the right BSOs
+		assert.Equal("10", results3.BSOs[0].Id, "Expected BSO w/ Id = 10")
+		assert.Equal("11", results3.BSOs[1].Id, "Expected BSO w/ Id = 11")
+	}
+
 }
