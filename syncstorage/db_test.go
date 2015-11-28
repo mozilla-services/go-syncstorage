@@ -208,6 +208,10 @@ func TestPublicPutBSO(t *testing.T) {
 	assert.NoError(err)
 	assert.NotZero(modified)
 
+	cModified, err := db.GetCollectionModified(cId)
+	assert.NoError(err)
+	assert.Equal(modified, cModified)
+
 	bso, err := db.GetBSO(cId, bId)
 	assert.NoError(err)
 	assert.NotNil(bso)
@@ -219,6 +223,10 @@ func TestPublicPutBSO(t *testing.T) {
 	assert.NoError(err)
 	assert.NotZero(modified2)
 	assert.NotEqual(modified2, modified)
+
+	cModified, err = db.GetCollectionModified(cId)
+	assert.NoError(err)
+	assert.Equal(modified2, cModified)
 
 	bso2, err := db.GetBSO(cId, bId)
 	assert.NoError(err)

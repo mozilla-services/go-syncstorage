@@ -25,8 +25,6 @@ const SCHEMA_0 = `
 	  Id		INTEGER PRIMARY KEY ASC,
 	  Name      VARCHAR(32) UNIQUE,
 
-	  -- Size is a cached value of sum(BSO.PayloadSize)
-	  Size		INTEGER NOT NULL DEFAULT 0,
 	  Modified  INTEGER NOT NULL DEFAULT 0
 	);
 

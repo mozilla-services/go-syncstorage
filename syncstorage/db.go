@@ -153,6 +153,13 @@ func (d *DB) GetCollectionId(name string) (id int, err error) {
 	return
 }
 
+func (d *DB) GetCollectionModified(cId int) (modified int, err error) {
+	d.Lock()
+	defer d.Unlock()
+	err = d.db.QueryRow("SELECT modified FROM Collections where Id=?", cId).Scan(&modified)
+	return
+}
+
 func (d *DB) CollectionInfo() (map[string]*CollectionInfo, error) {
 	d.Lock()
 	defer d.Unlock()
@@ -229,10 +236,17 @@ func (d *DB) PutBSO(cId int, bId string, payload *string, sortIndex *int, ttl *i
 
 	if err != nil {
 		tx.Rollback()
-	} else {
-		tx.Commit()
+		return
 	}
 
+	// update the collection
+	err = d.touchCollection(tx, cId, modified)
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
+	tx.Commit()
 	return
 }
 
@@ -256,6 +270,11 @@ func (d *DB) DeleteBSOs(cId int, bIds []string) (int, error) {
 // modified timestamp for the collection
 func DeleteBSO(cId int, bId string) (int, error) {
 	return 0, ErrNotImplemented
+}
+
+func (d *DB) touchCollection(tx *sql.Tx, cId, modified int) (err error) {
+	_, err = tx.Exec(`UPDATE Collections SET modified=? WHERE Id=?`, modified, cId)
+	return
 }
 
 // putBSO will INSERT or UPDATE a BSO
