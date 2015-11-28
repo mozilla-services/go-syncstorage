@@ -29,5 +29,30 @@ func ValidateBSOId(ids ...string) bool {
 	return true
 }
 
+func BSOIdOk(bId string) bool {
+	return bsoIdCheck.MatchString(bId)
+}
+
+// SortIndexOK validates a sortIndex int
+func SortIndexOk(sortIndex int) bool {
+	return (sortIndex > 0 && sortIndex < 1000000000)
+}
+
+func TTLOk(ttl int) bool {
+	return (ttl > 0)
+}
+
+func LimitOk(limit int) bool {
+	return (limit > 0)
+}
+
+func OffsetOk(offset int) bool {
+	return (offset >= 0)
+}
+
+func NewerOk(newer int) bool {
+	return (newer >= 0)
+}
+
 func String(s string) *string { return &s }
 func Int(u int) *int          { return &u }

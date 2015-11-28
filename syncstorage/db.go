@@ -18,12 +18,15 @@ var (
 	ErrNotImplemented = errors.New("syncstorage: Not Implemented")
 	ErrNothingToDo    = errors.New("syncstorage: Nothing to do")
 
-	ErrBSOIdsRequired = errors.New("syncstorage: BSO IDs required")
-	ErrBSOIdInvalid   = errors.New("syncstorage: BSO ID invalid")
+	ErrInvalidBSOId        = errors.New("syncstorage: Invalid BSO Id")
+	ErrInvalidCollectionId = errors.New("syncstorage: Invalid Collection Id")
+	ErrInvalidPayload      = errors.New("syncstorage: Invalid Payload")
+	ErrInvalidSortIndex    = errors.New("syncstorage: Invalid Sort Index")
+	ErrInvalidTTL          = errors.New("syncstorage: Invalid TTL")
 
-	ErrInvalidLimit  = errors.New("syncstorage: Invalid LIMIT value")
-	ErrInvalidOffset = errors.New("syncstorage: Invalid OFFSET value")
-	ErrInvalidNewer  = errors.New("syncstorage: Invalid NEWER than value")
+	ErrInvalidLimit  = errors.New("syncstorage: Invalid LIMIT")
+	ErrInvalidOffset = errors.New("syncstorage: Invalid OFFSET")
+	ErrInvalidNewer  = errors.New("syncstorage: Invalid NEWER than")
 )
 
 type SortType int
@@ -286,9 +289,19 @@ func (d *DB) putBSO(tx *sql.Tx,
 	sortIndex *int,
 	ttl *int,
 ) error {
-
 	if payload == nil && sortIndex == nil && ttl == nil {
 		return ErrNothingToDo
+	}
+
+	if !BSOIdOk(bId) {
+		return ErrInvalidBSOId
+	}
+	if sortIndex != nil && !SortIndexOk(*sortIndex) {
+		return ErrInvalidSortIndex
+	}
+
+	if ttl != nil && !TTLOk(*ttl) {
+		return ErrInvalidTTL
 	}
 
 	exists, err := d.bsoExists(tx, cId, bId)
@@ -352,15 +365,15 @@ func (d *DB) getBSOs(
 	limit int,
 	offset int) (*GetResults, error) {
 
-	if offset < 0 {
+	if !OffsetOk(offset) {
 		return nil, ErrInvalidOffset
 	}
 
-	if limit < 0 {
+	if !LimitOk(limit) {
 		return nil, ErrInvalidLimit
 	}
 
-	if newer < 0 {
+	if !NewerOk(newer) {
 		return nil, ErrInvalidNewer
 	}
 
