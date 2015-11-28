@@ -215,11 +215,25 @@ func (d *DB) PostBSOs(cId int, bsos []*BSO) (*PostResults, error) {
 }
 
 // PutBSO creates or updates a BSO
-func (d *DB) PutBSO(cId int, bso *BSO) (int, error) {
+func (d *DB) PutBSO(cId int, bId string, payload *string, sortIndex *int, ttl *int) (modified int, err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	return 0, ErrNotImplemented
+	tx, err := d.db.Begin()
+	if err != nil {
+		return
+	}
+
+	modified = Now()
+	err = d.putBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
+
+	if err != nil {
+		tx.Rollback()
+	} else {
+		tx.Commit()
+	}
+
+	return
 }
 
 func (d *DB) DeleteCollection(name string) error {
@@ -244,7 +258,7 @@ func DeleteBSO(cId int, bId string) (int, error) {
 	return 0, ErrNotImplemented
 }
 
-// pubBSO will INSERT or UPDATE a BSO
+// putBSO will INSERT or UPDATE a BSO
 func (d *DB) putBSO(tx *sql.Tx,
 	cId int,
 	bId string,

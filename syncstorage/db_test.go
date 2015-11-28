@@ -193,6 +193,40 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 	assert.Equal(modified, bso.Modified)
 }
 
+func TestPublicPutBSO(t *testing.T) {
+
+	assert := assert.New(t)
+
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	cId := 1
+	bId := "b0"
+
+	// test an INSERT
+	modified, err := db.PutBSO(cId, bId, String("foo"), Int(1), Int(DEFAULT_BSO_TTL))
+	assert.NoError(err)
+	assert.NotZero(modified)
+
+	bso, err := db.GetBSO(cId, bId)
+	assert.NoError(err)
+	assert.NotNil(bso)
+	assert.Equal("foo", bso.Payload)
+	assert.Equal(1, bso.SortIndex)
+
+	// test the UPDATE
+	modified2, err := db.PutBSO(cId, bId, String("bar"), Int(2), Int(DEFAULT_BSO_TTL))
+	assert.NoError(err)
+	assert.NotZero(modified2)
+	assert.NotEqual(modified2, modified)
+
+	bso2, err := db.GetBSO(cId, bId)
+	assert.NoError(err)
+	assert.NotNil(bso2)
+	assert.Equal("bar", bso2.Payload)
+	assert.Equal(2, bso2.SortIndex)
+}
+
 func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 
 	assert := assert.New(t)
