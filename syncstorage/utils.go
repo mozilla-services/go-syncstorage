@@ -35,7 +35,7 @@ func BSOIdOk(bId string) bool {
 
 // SortIndexOK validates a sortIndex int
 func SortIndexOk(sortIndex int) bool {
-	return (sortIndex > 0 && sortIndex < 1000000000)
+	return (sortIndex >= 0 && sortIndex < 1000000000)
 }
 
 func TTLOk(ttl int) bool {

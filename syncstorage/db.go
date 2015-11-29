@@ -188,6 +188,7 @@ func (d *DB) InfoCollections() (map[string]int, error) {
 
 	defer rows.Close()
 	results := make(map[string]int)
+
 	for rows.Next() {
 		var name string
 		var modified int
@@ -195,6 +196,38 @@ func (d *DB) InfoCollections() (map[string]int, error) {
 			return nil, err
 		}
 		results[name] = modified
+	}
+
+	return results, nil
+}
+
+func (d *DB) InfoQuota() (used, quota int, err error) {
+	return 0, 0, ErrNotImplemented
+}
+
+func (d *DB) InfoCollectionUsage() (map[string]int, error) {
+	d.Lock()
+	defer d.Unlock()
+
+	query := `SELECT c.Name,sum(b.PayloadSize) used
+			  FROM BSO b, Collections C
+			  WHERE b.CollectionId=c.Id GROUP BY b.CollectionId`
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+	results := make(map[string]int)
+	for rows.Next() {
+		var name string
+		var used int
+
+		if err := rows.Scan(&name, &used); err != nil {
+			return nil, err
+		}
+		results[name] = used
 	}
 
 	return results, nil

@@ -1,9 +1,26 @@
 package syncstorage
 
 import (
+	"math/rand"
 	"strings"
 	"testing"
+	"time"
 )
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+// randData produce as random string of url safe base64 characters
+func randData(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
+	}
+	return string(b)
+}
 
 func TestValidateBSOIds(t *testing.T) {
 

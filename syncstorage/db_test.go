@@ -2,6 +2,7 @@ package syncstorage
 
 import (
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"strconv"
 	"testing"
@@ -70,6 +71,52 @@ func TestInfoCollections(t *testing.T) {
 
 	assert.Contains(keys, "bookmarks")
 	assert.Equal(modified, results["bookmarks"])
+}
+
+func TestInfoCollectionUsage(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	// put in 100 records into bookmarks, history and prefs collections
+	expected := make(map[string]int)
+	for _, name := range []string{"bookmarks", "history", "prefs"} {
+		cId, err := db.GetCollectionId(name)
+
+		if assert.NoError(err) {
+			for i := 0; i < 100; i++ {
+				numRandBytes := 50 + rand.Intn(100)
+				payload := String(randData(numRandBytes))
+				_, err := db.PutBSO(cId, "b"+strconv.Itoa(i), payload, nil, nil)
+
+				if !assert.NoError(err) {
+					t.Fatal()
+				}
+
+				// keep a count of amount of random data we created per collection
+				expected[name] += numRandBytes
+			}
+		}
+	}
+
+	results, err := db.InfoCollectionUsage()
+	assert.NoError(err)
+	if assert.NotNil(results) {
+		keys := make([]string, len(results))
+		i := 0
+		for k := range results {
+			keys[i] = k
+			i++
+		}
+
+		assert.Contains(keys, "bookmarks")
+		assert.Contains(keys, "history")
+		assert.Contains(keys, "prefs")
+
+		assert.Equal(results["bookmarks"], expected["bookmarks"])
+		assert.Equal(results["history"], expected["history"])
+		assert.Equal(results["prefs"], expected["prefs"])
+	}
 }
 
 func TestBsoExists(t *testing.T) {
