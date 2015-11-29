@@ -46,7 +46,7 @@ const (
 
 type CollectionInfo struct {
 	Name     string
-	BSOCount int
+	BSOs     int
 	Storage  int
 	Modified int
 }
@@ -176,10 +176,28 @@ func (d *DB) GetCollectionModified(cId int) (modified int, err error) {
 	return
 }
 
-func (d *DB) CollectionInfo() (map[string]*CollectionInfo, error) {
+// InfoCollections create a map of collection names to last modified times
+func (d *DB) InfoCollections() (map[string]int, error) {
 	d.Lock()
 	defer d.Unlock()
-	return nil, ErrNotImplemented
+
+	rows, err := d.db.Query("SELECT Name,Modified FROM Collections ORDER BY Id")
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+	results := make(map[string]int)
+	for rows.Next() {
+		var name string
+		var modified int
+		if err := rows.Scan(&name, &modified); err != nil {
+			return nil, err
+		}
+		results[name] = modified
+	}
+
+	return results, nil
 }
 
 func (d *DB) GetBSOs(

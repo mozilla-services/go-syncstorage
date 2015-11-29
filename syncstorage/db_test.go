@@ -43,6 +43,35 @@ func TestCollectionId(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestInfoCollections(t *testing.T) {
+
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	id, err := db.GetCollectionId("bookmarks")
+	assert.NoError(err)
+
+	tx, err := db.db.Begin()
+	assert.NoError(err)
+	modified := Now()
+	assert.NoError(db.touchCollection(tx, id, modified))
+	assert.NoError(tx.Commit())
+
+	results, err := db.InfoCollections()
+	assert.NoError(err)
+
+	keys := make([]string, len(results))
+	i := 0
+	for k := range results {
+		keys[i] = k
+		i++
+	}
+
+	assert.Contains(keys, "bookmarks")
+	assert.Equal(modified, results["bookmarks"])
+}
+
 func TestBsoExists(t *testing.T) {
 
 	assert := assert.New(t)
