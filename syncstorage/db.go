@@ -233,6 +233,34 @@ func (d *DB) InfoCollectionUsage() (map[string]int, error) {
 	return results, nil
 }
 
+func (d *DB) InfoCollectionCounts() (map[string]int, error) {
+	d.Lock()
+	defer d.Unlock()
+
+	query := `SELECT c.Name, count(b.Id) count
+			  FROM BSO b, Collections C
+			  WHERE b.CollectionId=c.Id GROUP BY b.CollectionId`
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+	results := make(map[string]int)
+	for rows.Next() {
+		var name string
+		var count int
+
+		if err := rows.Scan(&name, &count); err != nil {
+			return nil, err
+		}
+		results[name] = count
+	}
+
+	return results, nil
+}
+
 func (d *DB) GetBSOs(
 	cId int,
 	ids []string,

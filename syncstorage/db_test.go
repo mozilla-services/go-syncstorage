@@ -119,6 +119,48 @@ func TestInfoCollectionUsage(t *testing.T) {
 	}
 }
 
+func TestInfoCollectionCounts(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	// put in random num of records into bookmarks, history and prefs collections
+	expected := make(map[string]int)
+	for _, name := range []string{"bookmarks", "history", "prefs"} {
+		cId, err := db.GetCollectionId(name)
+
+		if assert.NoError(err) {
+			numRecords := 5 + rand.Intn(99)
+			expected[name] = numRecords
+			for i := 0; i < numRecords; i++ {
+				_, err := db.PutBSO(cId, "b"+strconv.Itoa(i), String("x"), nil, nil)
+				if !assert.NoError(err) {
+					t.Fatal()
+				}
+			}
+		}
+	}
+
+	results, err := db.InfoCollectionCounts()
+	assert.NoError(err)
+	if assert.NotNil(results) {
+		keys := make([]string, len(results))
+		i := 0
+		for k := range results {
+			keys[i] = k
+			i++
+		}
+
+		assert.Contains(keys, "bookmarks")
+		assert.Contains(keys, "history")
+		assert.Contains(keys, "prefs")
+
+		assert.Equal(results["bookmarks"], expected["bookmarks"])
+		assert.Equal(results["history"], expected["history"])
+		assert.Equal(results["prefs"], expected["prefs"])
+	}
+}
+
 func TestBsoExists(t *testing.T) {
 
 	assert := assert.New(t)
