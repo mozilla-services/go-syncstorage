@@ -14,19 +14,19 @@ import (
 var dbDebug = Debug("syncstorage:db")
 
 var (
-	ErrNotFound       = errors.New("syncstorage: Not Found")
-	ErrNotImplemented = errors.New("syncstorage: Not Implemented")
-	ErrNothingToDo    = errors.New("syncstorage: Nothing to do")
+	ErrNotFound       = errors.New("Not Found")
+	ErrNotImplemented = errors.New("Not Implemented")
+	ErrNothingToDo    = errors.New("Nothing to do")
 
-	ErrInvalidBSOId        = errors.New("syncstorage: Invalid BSO Id")
-	ErrInvalidCollectionId = errors.New("syncstorage: Invalid Collection Id")
-	ErrInvalidPayload      = errors.New("syncstorage: Invalid Payload")
-	ErrInvalidSortIndex    = errors.New("syncstorage: Invalid Sort Index")
-	ErrInvalidTTL          = errors.New("syncstorage: Invalid TTL")
+	ErrInvalidBSOId        = errors.New("Invalid BSO Id")
+	ErrInvalidCollectionId = errors.New("Invalid Collection Id")
+	ErrInvalidPayload      = errors.New("Invalid Payload")
+	ErrInvalidSortIndex    = errors.New("Invalid Sort Index")
+	ErrInvalidTTL          = errors.New("Invalid TTL")
 
-	ErrInvalidLimit  = errors.New("syncstorage: Invalid LIMIT")
-	ErrInvalidOffset = errors.New("syncstorage: Invalid OFFSET")
-	ErrInvalidNewer  = errors.New("syncstorage: Invalid NEWER than")
+	ErrInvalidLimit  = errors.New("Invalid LIMIT")
+	ErrInvalidOffset = errors.New("Invalid OFFSET")
+	ErrInvalidNewer  = errors.New("Invalid NEWER than")
 )
 
 type SortType int
@@ -56,7 +56,21 @@ type CollectionInfo struct {
 type PostResults struct {
 	Modified int
 	Success  []string
-	failed   map[string][]string
+	Failed   map[string][]string
+}
+
+func NewPostResults(modified int) *PostResults {
+	return &PostResults{
+		Modified: modified,
+		Success:  make([]string, 0),
+		Failed:   make(map[string][]string),
+	}
+}
+func (p *PostResults) AddSuccess(bId ...string) {
+	p.Success = append(p.Success, bId...)
+}
+func (p *PostResults) AddFailure(bId string, reasons ...string) {
+	p.Failed[bId] = reasons
 }
 
 // GetResults holds search results for BSOs, this is what getBSOs() returns
@@ -77,7 +91,6 @@ func (g *GetResults) String() string {
 	}
 
 	return s
-
 }
 
 type DB struct {
@@ -217,11 +230,52 @@ func (d *DB) GetBSO(cId int, bId string) (b *BSO, err error) {
 	return
 }
 
-func (d *DB) PostBSOs(cId int, bsos []*BSO) (*PostResults, error) {
+type PostBSOInput map[string]*PutBSOInput
+type PutBSOInput struct {
+	TTL, SortIndex *int
+	Payload        *string
+}
+
+func NewPutBSOInput(payload *string, sortIndex, ttl *int) *PutBSOInput {
+	if ttl == nil {
+		t := DEFAULT_BSO_TTL
+		ttl = &t
+	}
+	return &PutBSOInput{TTL: ttl, SortIndex: sortIndex, Payload: payload}
+}
+
+func (d *DB) PostBSOs(cId int, input PostBSOInput) (*PostResults, error) {
 	d.Lock()
 	defer d.Unlock()
 
-	return nil, ErrNotImplemented
+	tx, err := d.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
+	modified := Now()
+	results := NewPostResults(modified)
+
+	for bId, data := range input {
+		err = d.putBSO(tx, cId, bId, modified, data.Payload, data.SortIndex, data.TTL)
+		if err != nil {
+			results.AddFailure(bId, err.Error())
+			continue
+		} else {
+			results.AddSuccess(bId)
+		}
+	}
+
+	// update the collection
+	err = d.touchCollection(tx, cId, modified)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	tx.Commit()
+
+	return results, nil
 }
 
 // PutBSO creates or updates a BSO

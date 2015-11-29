@@ -235,6 +235,67 @@ func TestPublicPutBSO(t *testing.T) {
 	assert.Equal(2, bso2.SortIndex)
 }
 
+func TestPublicPostBSOs(t *testing.T) {
+	assert := assert.New(t)
+
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	cId := 1
+
+	create := PostBSOInput{
+		"b0": NewPutBSOInput(String("payload 0"), Int(10), nil),
+		"b1": NewPutBSOInput(String("payload 1"), Int(-1), nil),
+		"b2": NewPutBSOInput(String("payload 2"), Int(100), nil),
+	}
+
+	results, err := db.PostBSOs(cId, create)
+	assert.NoError(err)
+
+	// test successes and failures are what we expect
+	assert.NotNil(results)
+	assert.Contains(results.Success, "b0")
+	assert.Contains(results.Success, "b2")
+	assert.NotContains(results.Success, "b1")
+	assert.NotNil(results.Failed["b1"])
+	assert.Len(results.Failed["b1"], 1)
+
+	// make sure modified timestamps are correct
+	cModified, err := db.GetCollectionModified(cId)
+	assert.NoError(err)
+	assert.Equal(results.Modified, cModified)
+
+	updates := PostBSOInput{
+		"b0": NewPutBSOInput(String("updated 0"), Int(11), Int(100000)),
+		"b2": NewPutBSOInput(String("updated 2"), Int(22), Int(10000)),
+	}
+
+	results2, err := db.PostBSOs(cId, updates)
+	assert.NoError(err)
+	assert.NotNil(results2)
+	assert.Len(results2.Success, 2)
+	assert.Len(results2.Failed, 0)
+
+	assert.Contains(results.Success, "b0")
+	assert.Contains(results.Success, "b2")
+
+	bso0, err := db.GetBSO(cId, "b0")
+	assert.NoError(err)
+	assert.NotNil(bso0)
+	assert.Equal(11, bso0.SortIndex)
+	assert.Equal("updated 0", bso0.Payload)
+
+	bso2, err := db.GetBSO(cId, "b2")
+	assert.NoError(err)
+	assert.NotNil(bso2)
+	assert.Equal(22, bso2.SortIndex)
+	assert.Equal("updated 2", bso2.Payload)
+
+	cModified, err = db.GetCollectionModified(cId)
+	assert.NoError(err)
+	assert.Equal(results2.Modified, cModified)
+}
+
 func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 
 	assert := assert.New(t)
