@@ -144,7 +144,7 @@ func (d *DB) Close() {
 	}
 }
 
-func NewDB(path string) (*DB, error) {
+func New(path string) (*DB, error) {
 	/* TODO: I'd be good to do some input validation */
 
 	d := &DB{Path: path}
