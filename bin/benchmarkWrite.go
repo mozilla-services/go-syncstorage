@@ -37,7 +37,7 @@ func FillUserDBPut(path string, numBSOs, bsoSize int) error {
 	return nil
 }
 
-func FillUserDBPost(path string, numBSOs, bsoSize int) error {
+func FillUserDBPost(path string, postSize, numBSOs, bsoSize int) error {
 	db, err := syncstorage.New(path)
 	if err != nil {
 		return err
@@ -60,11 +60,13 @@ func FillUserDBPost(path string, numBSOs, bsoSize int) error {
 		bId := "b" + strconv.Itoa(i)
 		create[bId] = syncstorage.NewPutBSOInput(payload, sortIndex, TTL)
 
-		if (i % 100) == 0 {
+		if (i % postSize) == 0 {
 			_, err := db.PostBSOs(cId, create)
 			if err != nil {
 				return fmt.Errorf("Err on POST BSO #%d", i)
 			}
+
+			create = syncstorage.PostBSOInput{}
 		}
 	}
 
@@ -80,40 +82,37 @@ func FillUserDBPost(path string, numBSOs, bsoSize int) error {
 
 // RecordStatistics writes run stats into a sqlite3 table so we can
 // do some data analysis over it
-func RecordStatistic(method string, users, concurrency, bsos, size, failed int, took time.Duration) error {
+func RecordStatistic(statsfile, method string, users, concurrency, bsos, size, failed int, took time.Duration, postRecords int) error {
 
-	db, err := sql.Open("sqlite3", "./benchmarkWrite_stats.db")
+	db, err := sql.Open("sqlite3", statsfile)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	var name string
-	q := "SELECT name from sqlite_master WHERE type='table' AND name='stats'"
-	if err := db.QueryRow(q).Scan(&name); err == sql.ErrNoRows {
-		create := `CREATE TABLE stats (
-			time DATETIME,
-			method STRING,
-			users NUMBER,
-			concurrency NUMBER,
-			bsos NUMBER,
-			size NUMBER,
-			failures NUMBER,
-			took NUMBER
-		)`
+	create := `CREATE TABLE IF NOT EXISTS stats (
+		time DATETIME,
+		method STRING,
+		users NUMBER,
+		concurrency NUMBER,
+		bsos NUMBER,
+		size NUMBER,
+		failures NUMBER,
+		took NUMBER,
+		postRecords NUMBER
+	)`
 
-		if _, err := db.Exec(create); err != nil {
-			return fmt.Errorf("stats create err: %s", err.Error())
-		}
+	if _, err := db.Exec(create); err != nil {
+		return fmt.Errorf("stats create err: %s", err.Error())
 	}
 
-	dml := `INSERT INTO stats (time, method, users, concurrency, bsos, size, failures, took)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	dml := `INSERT INTO stats (time, method, users, concurrency, bsos, size, failures, took, postRecords)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// in milliseconds
 	tookMS := took.Nanoseconds() / 1000 / 1000
 
-	if _, err := db.Exec(dml, time.Now(), method, users, concurrency, bsos, size, failed, tookMS); err != nil {
+	if _, err := db.Exec(dml, time.Now(), method, users, concurrency, bsos, size, failed, tookMS, postRecords); err != nil {
 		return fmt.Errorf("stats insert err: %s", err.Error())
 	}
 
@@ -136,6 +135,12 @@ func main() {
 			Value: "/tmp",
 			Usage: "Where to put temp sqlite files",
 		},
+		cli.StringFlag{
+			Name:  "statsfile, t",
+			Value: "./writestats.db",
+			Usage: "sqlite3 database to write stats to",
+		},
+
 		cli.StringFlag{
 			Name:  "method, m",
 			Value: "PUT",
@@ -161,17 +166,24 @@ func main() {
 			Value: 1,
 			Usage: "Number of users to create in parallel",
 		},
+		cli.IntFlag{
+			Name:  "postsize, p",
+			Value: 100,
+			Usage: "Number of records per POST (when method==POST)",
+		},
 	}
 
 	app.Action = func(c *cli.Context) {
-
-		fmt.Println("Note: Stats are written to benchmarkWrite_stats.db in the current directory. Use the sqlite3 cli to inspect the stats table inside.")
 
 		workDir := c.String("workdir")
 		numUsers := c.Int("users")
 		numBSOs := c.Int("bsos")
 		bsoSize := c.Int("size")
+		postSize := c.Int("postsize")
 		concurrency := c.Int("concurrency")
+		statsFile := c.String("statsfile")
+
+		fmt.Printf("Note: Stats are written to %s in the current directory. Use the sqlite3 cli to inspect the stats table inside.\n", statsFile)
 
 		var method string
 		if c.String("method") == "POST" {
@@ -228,7 +240,7 @@ func main() {
 						err = FillUserDBPut(dbFile, numBSOs, bsoSize)
 					} else {
 						fmt.Printf("worker #%d = POST => %s\n", workerId, dbFile)
-						err = FillUserDBPost(dbFile, numBSOs, bsoSize)
+						err = FillUserDBPost(dbFile, postSize, numBSOs, bsoSize)
 					}
 
 					if err != nil {
@@ -245,7 +257,7 @@ func main() {
 
 		took := time.Now().Sub(start)
 
-		err := RecordStatistic(method, numUsers, concurrency, numBSOs, bsoSize, errCount, took)
+		err := RecordStatistic(statsFile, method, numUsers, concurrency, numBSOs, bsoSize, errCount, took, postSize)
 		if err != nil {
 			fmt.Println("Record stats error: ", err)
 		}
