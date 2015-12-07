@@ -29,6 +29,13 @@ var (
 	ErrInvalidNewer  = errors.New("Invalid NEWER than")
 )
 
+// dbTx allows passing of sql.DB or sql.Tx
+type dbTx interface {
+	Exec(string, ...interface{}) (sql.Result, error)
+	Query(string, ...interface{}) (*sql.Rows, error)
+	QueryRow(string, ...interface{}) *sql.Row
+}
+
 type SortType int
 
 const (
@@ -408,13 +415,13 @@ func DeleteBSO(cId int, bId string) (int, error) {
 	return 0, ErrNotImplemented
 }
 
-func (d *DB) touchCollection(tx *sql.Tx, cId, modified int) (err error) {
+func (d *DB) touchCollection(tx dbTx, cId, modified int) (err error) {
 	_, err = tx.Exec(`UPDATE Collections SET modified=? WHERE Id=?`, modified, cId)
 	return
 }
 
 // putBSO will INSERT or UPDATE a BSO
-func (d *DB) putBSO(tx *sql.Tx,
+func (d *DB) putBSO(tx dbTx,
 	cId int,
 	bId string,
 	modified int,
@@ -472,7 +479,7 @@ func (d *DB) putBSO(tx *sql.Tx,
 }
 
 // bsoExists checks if a BSO is in the database
-func (d *DB) bsoExists(tx *sql.Tx, cId int, bId string) (bool, error) {
+func (d *DB) bsoExists(tx dbTx, cId int, bId string) (bool, error) {
 	var found int
 	query := "SELECT 1 FROM BSO WHERE CollectionId=? AND Id=?"
 	err := tx.QueryRow(query, cId, bId).Scan(&found)
@@ -490,7 +497,7 @@ func (d *DB) bsoExists(tx *sql.Tx, cId int, bId string) (bool, error) {
 
 // getBSOs searches for bsos based on the api 1.5 criteria
 func (d *DB) getBSOs(
-	tx *sql.Tx,
+	tx dbTx,
 	cId int,
 	ids []string,
 	newer int,
@@ -592,7 +599,7 @@ func (d *DB) getBSOs(
 }
 
 // getBSO is a simpler interface to getBSOs that returns a single BSO
-func (d *DB) getBSO(tx *sql.Tx, cId int, bId string) (*BSO, error) {
+func (d *DB) getBSO(tx dbTx, cId int, bId string) (*BSO, error) {
 
 	b := &BSO{Id: bId}
 
@@ -611,7 +618,7 @@ func (d *DB) getBSO(tx *sql.Tx, cId int, bId string) (*BSO, error) {
 }
 
 func (d *DB) insertBSO(
-	tx *sql.Tx,
+	tx dbTx,
 	cId int,
 	bId string,
 	modified int,
@@ -638,7 +645,7 @@ func (d *DB) insertBSO(
 // updateBSO updates a BSO. Values that are not provided (pointers)
 // are not updated in the SQL statement
 func (d *DB) updateBSO(
-	tx *sql.Tx,
+	tx dbTx,
 	cId int,
 	bId string,
 	modified int,
