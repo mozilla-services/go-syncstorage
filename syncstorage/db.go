@@ -279,40 +279,17 @@ func (d *DB) GetBSOs(
 	d.Lock()
 	defer d.Unlock()
 
-	t, err := d.db.Begin()
-	if err != nil {
-		return
-	}
+	r, err = d.getBSOs(d.db, cId, ids, newer, sort, limit, offset)
 
-	r, err = d.getBSOs(t, cId, ids, newer, sort, limit, offset)
-
-	if err != nil {
-		t.Rollback()
-		return
-	}
-
-	t.Commit()
 	return
-
 }
 
 func (d *DB) GetBSO(cId int, bId string) (b *BSO, err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	t, err := d.db.Begin()
-	if err != nil {
-		return nil, err
-	}
+	b, err = d.getBSO(d.db, cId, bId)
 
-	b, err = d.getBSO(t, cId, bId)
-
-	if err != nil {
-		t.Rollback()
-		return
-	}
-
-	t.Commit()
 	return
 }
 
