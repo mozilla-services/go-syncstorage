@@ -173,7 +173,13 @@ func (d *DB) GetCollectionId(name string) (id int, err error) {
 	d.Lock()
 	defer d.Unlock()
 	err = d.db.QueryRow("SELECT Id FROM Collections where Name=?", name).Scan(&id)
+
+	if err == sql.ErrNoRows {
+		err = ErrNotFound
+	}
+
 	return
+
 }
 
 func (d *DB) GetCollectionModified(cId int) (modified int, err error) {
@@ -368,13 +374,6 @@ func (d *DB) PutBSO(cId int, bId string, payload *string, sortIndex *int, ttl *i
 
 	tx.Commit()
 	return
-}
-
-func (d *DB) DeleteCollection(name string) error {
-	d.Lock()
-	defer d.Unlock()
-
-	return ErrNotImplemented
 }
 
 // DeleteBSOs deletes multiple BSO. It returns the modified
@@ -673,4 +672,76 @@ func (d *DB) updateBSO(
 	_, err = tx.Exec(dml, values[0:i]...)
 
 	return
+}
+
+func (d *DB) CreateCollection(name string) (cId int, err error) {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+
+	modified := Now()
+	cId, err = d.createCollection(tx, modified, name)
+
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return 0, err
+	}
+
+	return
+}
+
+func (d *DB) createCollection(tx dbTx, modified int, name string) (cId int, err error) {
+
+	dml := "INSERT INTO Collections (Name, Modified) VALUES (?,?)"
+
+	results, err := tx.Exec(dml, name, modified)
+	if err != nil {
+		return 0, err
+	}
+
+	cId64, err := results.LastInsertId()
+	if err != nil {
+		return 0, err
+	} else {
+		return int(cId64), nil
+	}
+}
+
+func (d *DB) DeleteCollection(cId int) (err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	tx, err := d.db.Begin()
+	if err != nil {
+		return
+	}
+
+	if err = d.deleteCollection(tx, cId); err != nil {
+		tx.Rollback()
+		return
+	}
+
+	tx.Commit()
+	return
+}
+
+func (d *DB) deleteCollection(tx dbTx, cId int) error {
+	dmlB := "DELETE FROM BSO WHERE CollectionId=?"
+	dmlC := "DELETE FROM Collections WHERE Id=?"
+
+	if _, err := tx.Exec(dmlB, cId); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(dmlC, cId); err != nil {
+		return err
+	}
+
+	return nil
 }

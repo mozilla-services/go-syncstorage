@@ -665,3 +665,39 @@ func TestPublicGetBSOs(t *testing.T) {
 		assert.Equal("b1", results.BSOs[1].Id)
 	}
 }
+
+func TestCreateCollection(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	cName := "NewCollection"
+	cId, err := db.CreateCollection(cName)
+	if assert.Nil(err) {
+		assert.NotEqual(0, cId)
+		assertId, err := db.GetCollectionId(cName)
+		if assert.Nil(err) {
+			assert.Equal(assertId, cId)
+		}
+	}
+}
+
+func TestDeleteCollection(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	cName := "NewConnection"
+	cId, err := db.CreateCollection(cName)
+	if assert.Nil(err) {
+		err = db.DeleteCollection(cId)
+
+		// make sure it was deleted
+		if assert.Nil(err) {
+			id, err := db.GetCollectionId(cName)
+			assert.Equal(0, id)
+			assert.Equal(ErrNotFound, err)
+		}
+	}
+
+}
