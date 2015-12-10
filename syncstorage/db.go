@@ -675,42 +675,31 @@ func (d *DB) updateBSO(
 }
 
 func (d *DB) CreateCollection(name string) (cId int, err error) {
+	d.Lock()
+	defer d.Unlock()
+
 	tx, err := d.db.Begin()
 	if err != nil {
 		return 0, err
 	}
 
 	modified := Now()
-	cId, err = d.createCollection(tx, modified, name)
-
-	if err != nil {
-		tx.Rollback()
-		return
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return 0, err
-	}
-
-	return
-}
-
-func (d *DB) createCollection(tx dbTx, modified int, name string) (cId int, err error) {
-
 	dml := "INSERT INTO Collections (Name, Modified) VALUES (?,?)"
 
 	results, err := tx.Exec(dml, name, modified)
 	if err != nil {
+		tx.Rollback()
 		return 0, err
 	}
 
 	cId64, err := results.LastInsertId()
 	if err != nil {
+		tx.Rollback()
 		return 0, err
-	} else {
-		return int(cId64), nil
 	}
+
+	tx.Commit()
+	return int(cId64), nil
 }
 
 func (d *DB) DeleteCollection(cId int) (err error) {
@@ -722,26 +711,19 @@ func (d *DB) DeleteCollection(cId int) (err error) {
 		return
 	}
 
-	if err = d.deleteCollection(tx, cId); err != nil {
-		tx.Rollback()
-		return
-	}
-
-	tx.Commit()
-	return
-}
-
-func (d *DB) deleteCollection(tx dbTx, cId int) error {
 	dmlB := "DELETE FROM BSO WHERE CollectionId=?"
 	dmlC := "DELETE FROM Collections WHERE Id=?"
 
 	if _, err := tx.Exec(dmlB, cId); err != nil {
+		tx.Rollback()
 		return err
 	}
 
 	if _, err := tx.Exec(dmlC, cId); err != nil {
+		tx.Rollback()
 		return err
 	}
 
-	return nil
+	tx.Commit()
+	return
 }
