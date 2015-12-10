@@ -699,5 +699,47 @@ func TestDeleteCollection(t *testing.T) {
 			assert.Equal(ErrNotFound, err)
 		}
 	}
+}
 
+func TestDeleteBSOs(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	// create some testing data
+	cId := 1
+	create := PostBSOInput{
+		"b0": NewPutBSOInput(String("payload 0"), Int(10), nil),
+		"b1": NewPutBSOInput(String("payload 1"), Int(10), nil),
+		"b2": NewPutBSOInput(String("payload 2"), Int(10), nil),
+	}
+
+	_, err := db.PostBSOs(cId, create)
+	if assert.NoError(err) {
+
+		_, err = db.DeleteBSO(cId, "b0")
+		assert.NoError(err)
+
+		// deleting non existant bId returns no errors
+		_, err = db.DeleteBSO(cId, "bxi0")
+		assert.NoError(err)
+
+		// deleting multiple bIds
+		_, err = db.DeleteBSOs(cId, "b1", "b2")
+		assert.NoError(err)
+
+	}
+
+	var b *BSO
+	b, err = db.GetBSO(cId, "b0")
+	assert.Nil(b)
+	assert.Nil(err)
+
+	b, err = db.GetBSO(cId, "b1")
+	assert.Nil(b)
+	assert.Nil(err)
+
+	b, err = db.GetBSO(cId, "b2")
+	assert.Nil(b)
+	assert.Nil(err)
 }

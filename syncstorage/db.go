@@ -378,17 +378,40 @@ func (d *DB) PutBSO(cId int, bId string, payload *string, sortIndex *int, ttl *i
 
 // DeleteBSOs deletes multiple BSO. It returns the modified
 // timestamp for the collection on success
-func (d *DB) DeleteBSOs(cId int, bIds []string) (int, error) {
+func (d *DB) DeleteBSOs(cId int, bIds ...string) (modified int, err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	return 0, ErrNotImplemented
+	modified = Now()
+
+	tx, err := d.db.Begin()
+	if err != nil {
+		return
+	}
+
+	dml := "DELETE FROM BSO WHERE Id IN (?" +
+		strings.Repeat(",?", len(bIds)-1) + ")"
+
+	// https://golang.org/doc/faq#convert_slice_of_interface
+	ids := make([]interface{}, len(bIds))
+	for i, v := range bIds {
+		ids[i] = v
+	}
+
+	_, err = tx.Exec(dml, ids...)
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
+	tx.Commit()
+	return
 }
 
 // DeleteBSO deletes a single BSO and returns the
 // modified timestamp for the collection
-func DeleteBSO(cId int, bId string) (int, error) {
-	return 0, ErrNotImplemented
+func (d *DB) DeleteBSO(cId int, bId string) (int, error) {
+	return d.DeleteBSOs(cId, bId)
 }
 
 func (d *DB) touchCollection(tx dbTx, cId, modified int) (err error) {
