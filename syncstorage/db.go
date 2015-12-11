@@ -750,3 +750,81 @@ func (d *DB) DeleteCollection(cId int) (err error) {
 	tx.Commit()
 	return
 }
+
+type DBPageStats struct {
+	Size  int
+	Total int
+	Free  int
+}
+
+// FreePercent calculates how much of total space is used up by
+// free pages (empty of data)
+func (s *DBPageStats) FreePercent() int {
+	if s.Total == 0 {
+		return 0
+	}
+
+	return int(float32(s.Free) / float32(s.Total) * 100)
+}
+
+func (d *DB) Usage() (stats *DBPageStats, err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	stats = &DBPageStats{}
+
+	err = d.db.QueryRow("PRAGMA page_count").Scan(&stats.Total)
+	if err != nil {
+		return nil, err
+	}
+
+	err = d.db.QueryRow("PRAGMA freelist_count").Scan(&stats.Free)
+	if err != nil {
+		return nil, err
+	}
+
+	err = d.db.QueryRow("PRAGMA page_size").Scan(&stats.Size)
+	if err != nil {
+		return nil, err
+	}
+
+	return
+}
+
+// PurgeExpired removes all BSOs that have expired out
+func (d *DB) PurgeExpired() (int, error) {
+	d.Lock()
+	defer d.Unlock()
+
+	dmlBSO := "DELETE FROM BSO WHERE TTL <= ?"
+	r, err := d.db.Exec(dmlBSO, Now())
+
+	if err != nil {
+		return 0, err
+	}
+
+	purged, err := r.RowsAffected()
+
+	return int(purged), err
+}
+
+// Optimize recovers disk space by removing empty db pages
+// if the number of free pages makes up more than `threshold`
+// percent of the total pages
+
+func (d *DB) Optimize(thresholdPercent int) (err error) {
+	stats, err := d.Usage()
+
+	if err != nil {
+		return
+	}
+
+	d.Lock()
+	defer d.Unlock()
+
+	if stats.FreePercent() >= thresholdPercent {
+		_, err = d.db.Exec("VACUUM")
+	}
+
+	return
+}

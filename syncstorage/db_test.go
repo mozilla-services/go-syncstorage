@@ -5,7 +5,9 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -742,4 +744,91 @@ func TestDeleteBSOs(t *testing.T) {
 	b, err = db.GetBSO(cId, "b2")
 	assert.Nil(b)
 	assert.Nil(err)
+}
+
+func TestUsageStats(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	cId := 1
+	payload := strings.Repeat("x", 1024)
+
+	create := PostBSOInput{
+		"b0": NewPutBSOInput(&payload, Int(10), nil),
+		"b1": NewPutBSOInput(&payload, Int(10), nil),
+		"b2": NewPutBSOInput(&payload, Int(10), nil),
+	}
+
+	_, err := db.PostBSOs(cId, create)
+	if assert.NoError(err) {
+
+		_, err = db.DeleteBSOs(cId, "b0", "b1")
+		if assert.NoError(err) {
+			pageStats, err := db.Usage()
+			if assert.NoError(err) {
+
+				// numbers pulled from previous tests
+				assert.Equal(12, pageStats.Total)  // total pages in database
+				assert.Equal(2, pageStats.Free)    // unused pages (from delete)
+				assert.Equal(1024, pageStats.Size) // bytes/page
+			}
+		}
+	}
+}
+
+func TestPurgeExpired(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	cId := 1
+	payload := strings.Repeat("x", 10)
+
+	create := PostBSOInput{
+		"b0": NewPutBSOInput(&payload, Int(10), Int(1)),
+		"b1": NewPutBSOInput(&payload, Int(10), Int(1)),
+		"b2": NewPutBSOInput(&payload, Int(10), Int(1)),
+	}
+
+	_, err := db.PostBSOs(cId, create)
+	if assert.NoError(err) {
+		time.Sleep(10 * time.Millisecond)
+		purged, err := db.PurgeExpired()
+		if assert.NoError(err) {
+			assert.Equal(3, purged)
+		}
+	}
+}
+
+func TestOptimize(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+
+	cId := 1
+	payload := strings.Repeat("x", 1024)
+
+	create := PostBSOInput{
+		"b0": NewPutBSOInput(&payload, Int(10), Int(1)),
+		"b1": NewPutBSOInput(&payload, Int(10), Int(1)),
+		"b2": NewPutBSOInput(&payload, Int(10), Int(1)),
+	}
+
+	_, err := db.PostBSOs(cId, create)
+	if assert.NoError(err) {
+		time.Sleep(10 * time.Millisecond)
+		purged, err := db.PurgeExpired()
+		if assert.NoError(err) {
+			assert.Equal(3, purged)
+			stats, err := db.Usage()
+			if assert.NoError(err) {
+				assert.Equal(25, stats.FreePercent()) // we know this from a previous test ;)
+				assert.NoError(db.Optimize(20))
+
+				stats, _ := db.Usage()
+				assert.Equal(0, stats.FreePercent())
+			}
+		}
+	}
 }
