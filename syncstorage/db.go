@@ -404,6 +404,13 @@ func (d *DB) DeleteBSOs(cId int, bIds ...string) (modified int, err error) {
 		return
 	}
 
+	// update the collection
+	err = d.touchCollection(tx, cId, modified)
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
 	tx.Commit()
 	return
 }
@@ -811,7 +818,6 @@ func (d *DB) PurgeExpired() (int, error) {
 // Optimize recovers disk space by removing empty db pages
 // if the number of free pages makes up more than `threshold`
 // percent of the total pages
-
 func (d *DB) Optimize(thresholdPercent int) (err error) {
 	stats, err := d.Usage()
 
