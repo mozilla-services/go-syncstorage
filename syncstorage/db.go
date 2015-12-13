@@ -811,14 +811,13 @@ func (d *DB) PurgeExpired() (int, error) {
 	}
 
 	purged, err := r.RowsAffected()
-
 	return int(purged), err
 }
 
 // Optimize recovers disk space by removing empty db pages
 // if the number of free pages makes up more than `threshold`
 // percent of the total pages
-func (d *DB) Optimize(thresholdPercent int) (err error) {
+func (d *DB) Optimize(thresholdPercent int) (ItHappened bool, err error) {
 	stats, err := d.Usage()
 
 	if err != nil {
@@ -830,6 +829,7 @@ func (d *DB) Optimize(thresholdPercent int) (err error) {
 
 	if stats.FreePercent() >= thresholdPercent {
 		_, err = d.db.Exec("VACUUM")
+		ItHappened = true
 	}
 
 	return

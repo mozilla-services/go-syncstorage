@@ -824,7 +824,9 @@ func TestOptimize(t *testing.T) {
 			stats, err := db.Usage()
 			if assert.NoError(err) {
 				assert.Equal(25, stats.FreePercent()) // we know this from a previous test ;)
-				assert.NoError(db.Optimize(20))
+				vac, err := db.Optimize(20)
+				assert.NoError(err)
+				assert.True(vac)
 
 				stats, _ := db.Usage()
 				assert.Equal(0, stats.FreePercent())
