@@ -19,7 +19,7 @@ func getTestDB() (*DB, error) {
 	}
 
 	path := f.Name()
-	db, err := New(path)
+	db, err := NewDB(path)
 
 	if err != nil {
 		return nil, err
