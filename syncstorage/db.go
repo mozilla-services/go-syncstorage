@@ -169,12 +169,6 @@ func NewDB(path string) (*DB, error) {
   work is handled by private functions.
 */
 
-func (d *DB) AddCollection(name string) (cId int, err error) {
-	d.Lock()
-	defer d.Unlock()
-
-}
-
 func (d *DB) GetCollectionId(name string) (id int, err error) {
 	d.Lock()
 	defer d.Unlock()
@@ -427,6 +421,12 @@ func (d *DB) DeleteBSO(cId int, bId string) (int, error) {
 	return d.DeleteBSOs(cId, bId)
 }
 
+func (d *DB) TouchCollection(cId, modified int) (err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	return d.touchCollection(d.db, cId, modified)
+}
 func (d *DB) touchCollection(tx dbTx, cId, modified int) (err error) {
 	_, err = tx.Exec(`UPDATE Collections SET modified=? WHERE Id=?`, modified, cId)
 	return

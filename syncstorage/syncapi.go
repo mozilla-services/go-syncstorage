@@ -10,11 +10,23 @@ type SyncApi interface {
 	GetCollectionId(name string) (id int, err error)
 	GetCollectionModified(cId int) (modified int, err error)
 
-	AddCollection(string) (int, error)
+	CreateCollection(name string) (cId int, err error)
+	DeleteCollection(cId int) (err error)
+	TouchCollection(cId, modified int) error
+
 	InfoCollections() (map[string]int, error)
 	InfoCollectionUsage() (map[string]int, error)
 	InfoCollectionCounts() (map[string]int, error)
 
+	PostBSOs(cId int, input PostBSOInput) (*PostResults, error)
+	PutBSO(
+		cId int,
+		bId string,
+		payload *string,
+		sortIndex *int,
+		ttl *int) (modified int, err error)
+
+	GetBSO(cId int, bId string) (b *BSO, err error)
 	GetBSOs(
 		cId int,
 		ids []string,
@@ -22,13 +34,10 @@ type SyncApi interface {
 		sort SortType,
 		limit int,
 		offset int) (r *GetResults, err error)
-	GetBSO(cId int, bId string) (b *BSO, err error)
 
-	PostBSOs(cId int, input PostBSOInput) (*PostResults, error)
-	PutBSO(cId int, bId string, payload *string, sortIndex *int, ttl *int) (modified int, err error)
+	DeleteBSO(cId int, bId string) (int, error)
 	DeleteBSOs(cId int, bIds ...string) (modified int, err error)
-	CreateCollection(name string) (cId int, err error)
-	DeleteCollection(cId int) (err error)
+
 	PurgeExpired() (int, error)
 
 	Usage() (stats *DBPageStats, err error)
