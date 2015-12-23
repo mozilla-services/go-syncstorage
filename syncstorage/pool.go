@@ -23,12 +23,14 @@ var (
 // running into system Too Many Files errors
 
 type Pool struct {
-	sync.Mutex
-
 	basePath []string
 	pathfunc PathMaker
 
 	cache *lru.Cache
+
+	// inout stores when a *DB has been lent out and
+	// when it has been returned
+	locks map[string]*sync.Mutex
 }
 
 func NewPool(basepath string, p PathMaker) (*Pool, error) {
@@ -50,6 +52,7 @@ func NewPool(basepath string, p PathMaker) (*Pool, error) {
 		basePath: path,
 		pathfunc: p,
 		cache:    cache,
+		locks:    make(map[string]*sync.Mutex),
 	}, nil
 
 }
@@ -60,13 +63,12 @@ func (p *Pool) PathAndFile(uid string) (path string, file string) {
 	return
 }
 
-func (p *Pool) getDB(uid string) (*DB, error) {
+func (p *Pool) borrowdb(uid string) (*DB, error) {
+	if p.locks[uid] == nil {
+		p.locks[uid] = &sync.Mutex{}
+	}
 
-	// lock the pool so we can be sure that
-	// there is only one *DB set for a key at a time
-	p.Lock()
-	defer p.Unlock()
-
+	p.locks[uid].Lock()
 	var db *DB
 	var ok bool
 
@@ -93,12 +95,12 @@ func (p *Pool) getDB(uid string) (*DB, error) {
 			return nil, err
 		}
 
-		pDebug("Cache - Add %s", uid)
+		pDebug("Cache - Add + Return %s", uid)
 		p.cache.Add(uid, db)
 
 		return db, nil
 	} else {
-		pDebug("Cache - Hit %s", uid)
+		pDebug("Cache - Hit + Return %s", uid)
 		db, ok = dbx.(*DB)
 		if !ok {
 			// TODO remove this, or log it?
@@ -107,7 +109,10 @@ func (p *Pool) getDB(uid string) (*DB, error) {
 
 		return db, nil
 	}
+}
 
+func (p *Pool) returndb(uid string) {
+	p.locks[uid].Unlock()
 }
 
 // =======================================================
@@ -137,7 +142,9 @@ func (p *Pool) GetBSOs(uid string) (r *GetResults, err error) {
 }
 
 func (p *Pool) GetBSO(uid string, cId int, bId string) (b *BSO, err error) {
-	db, err := p.getDB(uid)
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+
 	if err != nil {
 		return
 	}
@@ -150,7 +157,9 @@ func (p *Pool) PostBSOs(uid string, cId int, input PostBSOInput) (*PostResults, 
 }
 func (p *Pool) PutBSO(uid string, cId int, bId string, payload *string, sortIndex *int, ttl *int) (modified int, err error) {
 
-	db, err := p.getDB(uid)
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+
 	if err != nil {
 		return
 	}
