@@ -47,10 +47,14 @@ func TestCollectionId(t *testing.T) {
 }
 
 func TestInfoCollections(t *testing.T) {
-
-	assert := assert.New(t)
 	db, _ := getTestDB()
 	defer removeTestDB(db)
+
+	testInfoCollections(db, t)
+}
+
+func testInfoCollections(db SyncApi, t *testing.T) {
+	assert := assert.New(t)
 
 	id, err := db.GetCollectionId("bookmarks")
 	assert.NoError(err)
