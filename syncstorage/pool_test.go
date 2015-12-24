@@ -88,28 +88,6 @@ func TestPoolBorrowAllowsOnlyOne(t *testing.T) {
 	assert.True(<-ch)
 }
 
-func TestPoolPutGetBSO(t *testing.T) {
-	assert := assert.New(t)
-
-	uid := "abc123"
-	cId := 1
-	bId := "bso1"
-	sortIndex := Int(12)
-	payload := String("this is a big load")
-
-	p, _ := NewPool(getTempBase(), TwoLevelPath)
-
-	_, err := p.PutBSO(uid, cId, bId, payload, sortIndex, nil)
-	assert.NoError(err)
-
-	b, err := p.GetBSO(uid, cId, bId)
-	if assert.NoError(err) {
-		assert.Equal(bId, b.Id)
-		assert.Equal(*payload, b.Payload)
-		assert.Equal(*sortIndex, b.SortIndex)
-	}
-}
-
 // Use poolwrap to test that the abstracted interface for SyncApi
 // works all the way through
 func TestPoolSyncApiGetCollectionId(t *testing.T) {
