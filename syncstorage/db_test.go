@@ -34,8 +34,8 @@ func TestNewDB(t *testing.T) {
 	assert.NoError(t, err)
 	defer removeTestDB(db)
 }
-func TestBsoExists(t *testing.T) {
 
+func TestBsoExists(t *testing.T) {
 	assert := assert.New(t)
 
 	db, _ := getTestDB()
@@ -367,12 +367,14 @@ func TestPrivateGetBSOsSort(t *testing.T) {
 }
 
 func TestGetCollectionId(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiGetCollectionId(db, t)
 }
 
 func TestGetCollectionModified(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 
@@ -380,89 +382,104 @@ func TestGetCollectionModified(t *testing.T) {
 }
 
 func TestCreateCollection(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiCreateCollection(db, t)
 }
 
 func TestDeleteCollection(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiDeleteCollection(db, t)
 }
 
 func TestTouchCollection(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiTouchCollection(db, t)
 }
 
 func TestInfoCollections(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiInfoCollections(db, t)
 }
 
 func TestInfoCollectionUsage(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiInfoCollectionUsage(db, t)
 }
 
 func TestInfoCollectionCounts(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiInfoCollectionCounts(db, t)
 }
 
 func TestPublicPostBSOs(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiPostBSOs(db, t)
 }
 
 func TestPublicPutBSO(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiPutBSO(db, t)
 }
 
 func TestPublicGetBSO(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiGetBSO(db, t)
 }
 
 func TestPublicGetBSOs(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiGetBSOs(db, t)
 }
 
 func TestDeleteBSO(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiDeleteBSO(db, t)
 }
 func TestDeleteBSOs(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiDeleteBSOs(db, t)
 }
 
 func TestPurgeExpired(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiPurgeExpired(db, t)
 }
 
 func TestUsageStats(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiUsageStats(db, t)
 }
 
 func TestOptimize(t *testing.T) {
+	t.Parallel()
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 	testApiOptimize(db, t)

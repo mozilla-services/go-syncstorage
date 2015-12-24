@@ -113,66 +113,83 @@ func TestPoolPutGetBSO(t *testing.T) {
 // Use poolwrap to test that the abstracted interface for SyncApi
 // works all the way through
 func TestPoolSyncApiGetCollectionId(t *testing.T) {
+	t.Parallel()
 	testApiGetCollectionId(newPoolwrap(), t)
 }
 func TestPoolSyncApiGetCollectionModified(t *testing.T) {
+	t.Parallel()
 	testApiGetCollectionModified(newPoolwrap(), t)
 }
 func TestPoolSyncApiCreateCollection(t *testing.T) {
+	t.Parallel()
 	testApiCreateCollection(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiDeleteCollection(t *testing.T) {
+	t.Parallel()
 	testApiDeleteCollection(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiTouchCollection(t *testing.T) {
+	t.Parallel()
 	testApiTouchCollection(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiInfoCollections(t *testing.T) {
+	t.Parallel()
 	testApiInfoCollections(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiInfoCollectionUsage(t *testing.T) {
+	t.Parallel()
 	testApiInfoCollectionUsage(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiInfoCollectionCounts(t *testing.T) {
+	t.Parallel()
 	testApiInfoCollectionCounts(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiPublicPostBSOs(t *testing.T) {
+	t.Parallel()
 	testApiPostBSOs(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiPublicPutBSO(t *testing.T) {
+	t.Parallel()
 	testApiPutBSO(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiPublicGetBSO(t *testing.T) {
+	t.Parallel()
 	testApiGetBSO(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiPublicGetBSOs(t *testing.T) {
+	t.Parallel()
 	testApiGetBSOs(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiDeleteBSO(t *testing.T) {
+	t.Parallel()
 	testApiDeleteBSO(newPoolwrap(), t)
 }
 func TestPoolSyncApiDeleteBSOs(t *testing.T) {
+	t.Parallel()
 	testApiDeleteBSOs(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiPurgeExpired(t *testing.T) {
+	t.Parallel()
 	testApiPurgeExpired(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiUsageStats(t *testing.T) {
+	t.Parallel()
 	testApiUsageStats(newPoolwrap(), t)
 }
 
 func TestPoolSyncApiOptimize(t *testing.T) {
+	t.Parallel()
 	testApiOptimize(newPoolwrap(), t)
 }
