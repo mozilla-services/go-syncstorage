@@ -23,6 +23,7 @@ var (
 // running into system Too Many Files errors
 
 type Pool struct {
+	sync.Mutex
 	basePath []string
 	pathfunc PathMaker
 
@@ -64,9 +65,11 @@ func (p *Pool) PathAndFile(uid string) (path string, file string) {
 }
 
 func (p *Pool) borrowdb(uid string) (*DB, error) {
+	p.Lock()
 	if p.locks[uid] == nil {
 		p.locks[uid] = &sync.Mutex{}
 	}
+	p.Unlock()
 
 	p.locks[uid].Lock()
 	var db *DB
@@ -122,38 +125,88 @@ func (p *Pool) returndb(uid string) {
 // =======================================================
 
 func (p *Pool) GetCollectionId(uid string, name string) (id int, err error) {
-	return 0, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.GetCollectionId(name)
 }
 
 func (p *Pool) GetCollectionModified(uid string, cId int) (modified int, err error) {
-	return 0, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.GetCollectionModified(cId)
 }
 
 func (p *Pool) CreateCollection(uid string, name string) (cId int, err error) {
-	return 0, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.CreateCollection(name)
 }
 func (p *Pool) DeleteCollection(uid string, cId int) (err error) {
-	return ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.DeleteCollection(cId)
 }
-func (p *Pool) TouchCollection(cId, modified int) (err error) {
-	return ErrNotImplemented
+func (p *Pool) TouchCollection(uid string, cId, modified int) (err error) {
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.TouchCollection(cId, modified)
 }
 
 func (p *Pool) InfoCollections(uid string) (map[string]int, error) {
-	return nil, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return nil, err
+	}
+	return db.InfoCollections()
 }
 func (p *Pool) InfoQuota(uid string) (used, quota int, err error) {
-	return 0, 0, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.InfoQuota()
 }
 func (p *Pool) InfoCollectionUsage(uid string) (map[string]int, error) {
-	return nil, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return nil, err
+	}
+	return db.InfoCollectionUsage()
 }
 func (p *Pool) InfoCollectionCounts(uid string) (map[string]int, error) {
-	return nil, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return nil, err
+	}
+	return db.InfoCollectionCounts()
 }
 
 func (p *Pool) PostBSOs(uid string, cId int, input PostBSOInput) (*PostResults, error) {
-	return nil, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return nil, err
+	}
+	return db.PostBSOs(cId, input)
 }
 
 func (p *Pool) PutBSO(
@@ -177,31 +230,69 @@ func (p *Pool) PutBSO(
 func (p *Pool) GetBSO(uid string, cId int, bId string) (b *BSO, err error) {
 	db, err := p.borrowdb(uid)
 	defer p.returndb(uid)
-
 	if err != nil {
 		return
 	}
 
 	return db.GetBSO(cId, bId)
 }
-func (p *Pool) GetBSOs(uid string) (r *GetResults, err error) {
-	return nil, ErrNotImplemented
+func (p *Pool) GetBSOs(
+	uid string,
+	cId int,
+	ids []string,
+	newer int,
+	sort SortType,
+	limit int,
+	offset int) (r *GetResults, err error) {
+
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+
+	return db.GetBSOs(cId, ids, newer, sort, limit, offset)
 }
 
-func (p *Pool) DeleteBSO(uid string, cId, bId int) (modified int, err error) {
-	return 0, ErrNotImplemented
+func (p *Pool) DeleteBSO(uid string, cId int, bId string) (modified int, err error) {
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.DeleteBSO(cId, bId)
 }
 func (p *Pool) DeleteBSOs(uid string, cId int, bIds ...string) (modified int, err error) {
-	return 0, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.DeleteBSOs(cId, bIds...)
 }
 
-func (p *Pool) PurgeExpired(uid string) (int, error) {
-	return 0, ErrNotImplemented
+func (p *Pool) PurgeExpired(uid string) (removed int, err error) {
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.PurgeExpired()
 }
 
 func (p *Pool) Usage(uid string) (stats *DBPageStats, err error) {
-	return nil, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.Usage()
 }
 func (p *Pool) Optimize(uid string, thresholdPercent int) (ItHappened bool, err error) {
-	return false, ErrNotImplemented
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.Optimize(thresholdPercent)
 }

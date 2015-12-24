@@ -483,7 +483,7 @@ func (d *DB) DeleteBSOs(cId int, bIds ...string) (modified int, err error) {
 }
 
 // PurgeExpired removes all BSOs that have expired out
-func (d *DB) PurgeExpired() (int, error) {
+func (d *DB) PurgeExpired() (removed int, err error) {
 	d.Lock()
 	defer d.Unlock()
 

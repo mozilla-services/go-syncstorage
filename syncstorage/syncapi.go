@@ -39,7 +39,7 @@ type SyncApi interface {
 	DeleteBSO(cId int, bId string) (int, error)
 	DeleteBSOs(cId int, bIds ...string) (modified int, err error)
 
-	PurgeExpired() (int, error)
+	PurgeExpired() (removed int, error error)
 
 	Usage() (stats *DBPageStats, err error)
 	Optimize(thresholdPercent int) (ItHappened bool, err error)

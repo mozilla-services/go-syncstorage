@@ -110,9 +110,69 @@ func TestPoolPutGetBSO(t *testing.T) {
 	}
 }
 
-// wrapPool makes a pool adhere to the SyncApi interface
-// which allows us to reuse tests
-type wrapPool struct {
-	uid  string
-	pool *Pool
+// Use poolwrap to test that the abstracted interface for SyncApi
+// works all the way through
+func TestPoolSyncApiGetCollectionId(t *testing.T) {
+	testApiGetCollectionId(newPoolwrap(), t)
+}
+func TestPoolSyncApiGetCollectionModified(t *testing.T) {
+	testApiGetCollectionModified(newPoolwrap(), t)
+}
+func TestPoolSyncApiCreateCollection(t *testing.T) {
+	testApiCreateCollection(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiDeleteCollection(t *testing.T) {
+	testApiDeleteCollection(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiTouchCollection(t *testing.T) {
+	testApiTouchCollection(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiInfoCollections(t *testing.T) {
+	testApiInfoCollections(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiInfoCollectionUsage(t *testing.T) {
+	testApiInfoCollectionUsage(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiInfoCollectionCounts(t *testing.T) {
+	testApiInfoCollectionCounts(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiPublicPostBSOs(t *testing.T) {
+	testApiPostBSOs(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiPublicPutBSO(t *testing.T) {
+	testApiPutBSO(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiPublicGetBSO(t *testing.T) {
+	testApiGetBSO(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiPublicGetBSOs(t *testing.T) {
+	testApiGetBSOs(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiDeleteBSO(t *testing.T) {
+	testApiDeleteBSO(newPoolwrap(), t)
+}
+func TestPoolSyncApiDeleteBSOs(t *testing.T) {
+	testApiDeleteBSOs(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiPurgeExpired(t *testing.T) {
+	testApiPurgeExpired(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiUsageStats(t *testing.T) {
+	testApiUsageStats(newPoolwrap(), t)
+}
+
+func TestPoolSyncApiOptimize(t *testing.T) {
+	testApiOptimize(newPoolwrap(), t)
 }
