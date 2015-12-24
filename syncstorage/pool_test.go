@@ -109,3 +109,10 @@ func TestPoolPutGetBSO(t *testing.T) {
 		assert.Equal(*sortIndex, b.SortIndex)
 	}
 }
+
+// wrapPool makes a pool adhere to the SyncApi interface
+// which allows us to reuse tests
+type wrapPool struct {
+	uid  string
+	pool *Pool
+}

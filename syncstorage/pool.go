@@ -124,8 +124,16 @@ func (p *Pool) returndb(uid string) {
 func (p *Pool) GetCollectionId(uid string, name string) (id int, err error) {
 	return 0, ErrNotImplemented
 }
+
 func (p *Pool) GetCollectionModified(uid string, cId int) (modified int, err error) {
 	return 0, ErrNotImplemented
+}
+
+func (p *Pool) CreateCollection(uid string, name string) (cId int, err error) {
+	return 0, ErrNotImplemented
+}
+func (p *Pool) DeleteCollection(uid string, cId int) (err error) {
+	return ErrNotImplemented
 }
 
 func (p *Pool) InfoCollections(uid string) (map[string]int, error) {
@@ -168,12 +176,6 @@ func (p *Pool) PutBSO(uid string, cId int, bId string, payload *string, sortInde
 }
 func (p *Pool) DeleteBSOs(uid string, cId int, bIds ...string) (modified int, err error) {
 	return 0, ErrNotImplemented
-}
-func (p *Pool) CreateCollection(uid string, name string) (cId int, err error) {
-	return 0, ErrNotImplemented
-}
-func (p *Pool) DeleteCollection(uid string, cId int) (err error) {
-	return ErrNotImplemented
 }
 func (p *Pool) PurgeExpired(uid string) (int, error) {
 	return 0, ErrNotImplemented

@@ -189,6 +189,67 @@ func (d *DB) GetCollectionModified(cId int) (modified int, err error) {
 	return
 }
 
+func (d *DB) CreateCollection(name string) (cId int, err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	tx, err := d.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+
+	modified := Now()
+	dml := "INSERT INTO Collections (Name, Modified) VALUES (?,?)"
+
+	results, err := tx.Exec(dml, name, modified)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	cId64, err := results.LastInsertId()
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	tx.Commit()
+	return int(cId64), nil
+}
+
+func (d *DB) DeleteCollection(cId int) (err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	tx, err := d.db.Begin()
+	if err != nil {
+		return
+	}
+
+	dmlB := "DELETE FROM BSO WHERE CollectionId=?"
+	dmlC := "DELETE FROM Collections WHERE Id=?"
+
+	if _, err := tx.Exec(dmlB, cId); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if _, err := tx.Exec(dmlC, cId); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+	return
+}
+
+func (d *DB) TouchCollection(cId, modified int) (err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	return d.touchCollection(d.db, cId, modified)
+}
+
 // InfoCollections create a map of collection names to last modified times
 func (d *DB) InfoCollections() (map[string]int, error) {
 	d.Lock()
@@ -274,31 +335,6 @@ func (d *DB) InfoCollectionCounts() (map[string]int, error) {
 	return results, nil
 }
 
-func (d *DB) GetBSOs(
-	cId int,
-	ids []string,
-	newer int,
-	sort SortType,
-	limit int,
-	offset int) (r *GetResults, err error) {
-
-	d.Lock()
-	defer d.Unlock()
-
-	r, err = d.getBSOs(d.db, cId, ids, newer, sort, limit, offset)
-
-	return
-}
-
-func (d *DB) GetBSO(cId int, bId string) (b *BSO, err error) {
-	d.Lock()
-	defer d.Unlock()
-
-	b, err = d.getBSO(d.db, cId, bId)
-
-	return
-}
-
 type PostBSOInput map[string]*PutBSOInput
 type PutBSOInput struct {
 	TTL, SortIndex *int
@@ -376,6 +412,37 @@ func (d *DB) PutBSO(cId int, bId string, payload *string, sortIndex *int, ttl *i
 	return
 }
 
+func (d *DB) GetBSO(cId int, bId string) (b *BSO, err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	b, err = d.getBSO(d.db, cId, bId)
+
+	return
+}
+
+func (d *DB) GetBSOs(
+	cId int,
+	ids []string,
+	newer int,
+	sort SortType,
+	limit int,
+	offset int) (r *GetResults, err error) {
+
+	d.Lock()
+	defer d.Unlock()
+
+	r, err = d.getBSOs(d.db, cId, ids, newer, sort, limit, offset)
+
+	return
+}
+
+// DeleteBSO deletes a single BSO and returns the
+// modified timestamp for the collection
+func (d *DB) DeleteBSO(cId int, bId string) (int, error) {
+	return d.DeleteBSOs(cId, bId)
+}
+
 // DeleteBSOs deletes multiple BSO. It returns the modified
 // timestamp for the collection on success
 func (d *DB) DeleteBSOs(cId int, bIds ...string) (modified int, err error) {
@@ -415,18 +482,67 @@ func (d *DB) DeleteBSOs(cId int, bIds ...string) (modified int, err error) {
 	return
 }
 
-// DeleteBSO deletes a single BSO and returns the
-// modified timestamp for the collection
-func (d *DB) DeleteBSO(cId int, bId string) (int, error) {
-	return d.DeleteBSOs(cId, bId)
-}
-
-func (d *DB) TouchCollection(cId, modified int) (err error) {
+// PurgeExpired removes all BSOs that have expired out
+func (d *DB) PurgeExpired() (int, error) {
 	d.Lock()
 	defer d.Unlock()
 
-	return d.touchCollection(d.db, cId, modified)
+	dmlBSO := "DELETE FROM BSO WHERE TTL <= ?"
+	r, err := d.db.Exec(dmlBSO, Now())
+
+	if err != nil {
+		return 0, err
+	}
+
+	purged, err := r.RowsAffected()
+	return int(purged), err
 }
+
+func (d *DB) Usage() (stats *DBPageStats, err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	stats = &DBPageStats{}
+
+	err = d.db.QueryRow("PRAGMA page_count").Scan(&stats.Total)
+	if err != nil {
+		return nil, err
+	}
+
+	err = d.db.QueryRow("PRAGMA freelist_count").Scan(&stats.Free)
+	if err != nil {
+		return nil, err
+	}
+
+	err = d.db.QueryRow("PRAGMA page_size").Scan(&stats.Size)
+	if err != nil {
+		return nil, err
+	}
+
+	return
+}
+
+// Optimize recovers disk space by removing empty db pages
+// if the number of free pages makes up more than `threshold`
+// percent of the total pages
+func (d *DB) Optimize(thresholdPercent int) (ItHappened bool, err error) {
+	stats, err := d.Usage()
+
+	if err != nil {
+		return
+	}
+
+	d.Lock()
+	defer d.Unlock()
+
+	if stats.FreePercent() >= thresholdPercent {
+		_, err = d.db.Exec("VACUUM")
+		ItHappened = true
+	}
+
+	return
+}
+
 func (d *DB) touchCollection(tx dbTx, cId, modified int) (err error) {
 	_, err = tx.Exec(`UPDATE Collections SET modified=? WHERE Id=?`, modified, cId)
 	return
@@ -710,60 +826,6 @@ func (d *DB) updateBSO(
 	return
 }
 
-func (d *DB) CreateCollection(name string) (cId int, err error) {
-	d.Lock()
-	defer d.Unlock()
-
-	tx, err := d.db.Begin()
-	if err != nil {
-		return 0, err
-	}
-
-	modified := Now()
-	dml := "INSERT INTO Collections (Name, Modified) VALUES (?,?)"
-
-	results, err := tx.Exec(dml, name, modified)
-	if err != nil {
-		tx.Rollback()
-		return 0, err
-	}
-
-	cId64, err := results.LastInsertId()
-	if err != nil {
-		tx.Rollback()
-		return 0, err
-	}
-
-	tx.Commit()
-	return int(cId64), nil
-}
-
-func (d *DB) DeleteCollection(cId int) (err error) {
-	d.Lock()
-	defer d.Unlock()
-
-	tx, err := d.db.Begin()
-	if err != nil {
-		return
-	}
-
-	dmlB := "DELETE FROM BSO WHERE CollectionId=?"
-	dmlC := "DELETE FROM Collections WHERE Id=?"
-
-	if _, err := tx.Exec(dmlB, cId); err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if _, err := tx.Exec(dmlC, cId); err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	tx.Commit()
-	return
-}
-
 type DBPageStats struct {
 	Size  int
 	Total int
@@ -778,65 +840,4 @@ func (s *DBPageStats) FreePercent() int {
 	}
 
 	return int(float32(s.Free) / float32(s.Total) * 100)
-}
-
-func (d *DB) Usage() (stats *DBPageStats, err error) {
-	d.Lock()
-	defer d.Unlock()
-
-	stats = &DBPageStats{}
-
-	err = d.db.QueryRow("PRAGMA page_count").Scan(&stats.Total)
-	if err != nil {
-		return nil, err
-	}
-
-	err = d.db.QueryRow("PRAGMA freelist_count").Scan(&stats.Free)
-	if err != nil {
-		return nil, err
-	}
-
-	err = d.db.QueryRow("PRAGMA page_size").Scan(&stats.Size)
-	if err != nil {
-		return nil, err
-	}
-
-	return
-}
-
-// PurgeExpired removes all BSOs that have expired out
-func (d *DB) PurgeExpired() (int, error) {
-	d.Lock()
-	defer d.Unlock()
-
-	dmlBSO := "DELETE FROM BSO WHERE TTL <= ?"
-	r, err := d.db.Exec(dmlBSO, Now())
-
-	if err != nil {
-		return 0, err
-	}
-
-	purged, err := r.RowsAffected()
-	return int(purged), err
-}
-
-// Optimize recovers disk space by removing empty db pages
-// if the number of free pages makes up more than `threshold`
-// percent of the total pages
-func (d *DB) Optimize(thresholdPercent int) (ItHappened bool, err error) {
-	stats, err := d.Usage()
-
-	if err != nil {
-		return
-	}
-
-	d.Lock()
-	defer d.Unlock()
-
-	if stats.FreePercent() >= thresholdPercent {
-		_, err = d.db.Exec("VACUUM")
-		ItHappened = true
-	}
-
-	return
 }

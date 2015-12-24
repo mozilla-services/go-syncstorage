@@ -15,6 +15,7 @@ type SyncApi interface {
 	TouchCollection(cId, modified int) error
 
 	InfoCollections() (map[string]int, error)
+	InfoQuota() (used, quota int, err error)
 	InfoCollectionUsage() (map[string]int, error)
 	InfoCollectionCounts() (map[string]int, error)
 
