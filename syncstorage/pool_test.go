@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -123,7 +124,51 @@ func TestPoolLRU(t *testing.T) {
 	}
 
 	assert.Equal(cachesize, pool.cache.Len())
+}
 
+// TestPoolParallel uses a very small LRU cache and uses multiple
+// goroutines to update users in parallel
+func TestPoolParallel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping in short mode")
+	}
+
+	assert := assert.New(t)
+	cachesize := 1
+
+	var wg sync.WaitGroup
+
+	pool, err := NewPoolCacheSize(getTempBase(), TwoLevelPath, cachesize)
+	if !assert.NoError(err) {
+		return
+	}
+	users := 5
+	for u := 0; u < users; u++ {
+		uid := strconv.Itoa(u)
+		_, err := pool.CreateCollection(uid, "test")
+		if !assert.NoError(err) {
+			return
+		}
+	}
+
+	for u := 0; u < users; u++ {
+		wg.Add(1)
+		go func(uid string) {
+			defer wg.Done()
+
+			cId, _ := pool.GetCollectionId(uid, "test")
+			modified := Now()
+			for i := 0; i < 5; i++ {
+				err := pool.TouchCollection(uid, cId, modified)
+				time.Sleep(1 * time.Millisecond)
+				if !assert.NoError(err) {
+					return
+				}
+			}
+		}(strconv.Itoa(u))
+	}
+
+	wg.Wait()
 }
 
 // Use poolwrap to test that the abstracted interface for SyncApi

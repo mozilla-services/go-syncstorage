@@ -95,16 +95,20 @@ func (p *Pool) borrowdb(uid string) (*DB, error) {
 	if p.locks[uid] == nil {
 		p.locks[uid] = &sync.Mutex{}
 	}
+
+	// put this Lock() inside the main pool lock
+	// so this doesn't race the cache eviction callback
+	// deleting the mutex
+	p.locks[uid].Lock()
+
 	p.Unlock()
 
-	p.locks[uid].Lock()
 	var db *DB
 	var ok bool
 
 	dbx, ok := p.cache.Get(uid)
 
 	if !ok {
-		pDebugCache("Miss %s", uid)
 		storageDir, filename := p.PathAndFile(uid)
 
 		// create the sub-directory tree if required
@@ -118,14 +122,14 @@ func (p *Pool) borrowdb(uid string) (*DB, error) {
 
 		// TODO clean the UID of any weird characters, ie: os.PathSeparator
 		dbFile := storageDir + string(os.PathSeparator) + filename
-		pDebug("Creating DB %s", dbFile)
+		pDebug("Create/Open DB %s", dbFile)
 		db, err := NewDB(dbFile)
 		if err != nil {
 			return nil, err
 		}
 
-		pDebugCache("Add %s", uid)
 		p.cache.Add(uid, db)
+		pDebugCache("Add %s", uid)
 
 		return db, nil
 	} else {
@@ -141,7 +145,14 @@ func (p *Pool) borrowdb(uid string) (*DB, error) {
 }
 
 func (p *Pool) returndb(uid string) {
-	p.locks[uid].Unlock()
+	p.Lock()
+	defer p.Unlock()
+
+	// it might have been evicted so check if it
+	// is still there before attempting to unlock
+	if p.locks[uid] != nil {
+		p.locks[uid].Unlock()
+	}
 }
 
 // =======================================================
