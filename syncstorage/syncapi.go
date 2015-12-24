@@ -27,7 +27,7 @@ type SyncApi interface {
 		sortIndex *int,
 		ttl *int) (modified int, err error)
 
-	GetBSO(cId, bId string) (b *BSO, err error)
+	GetBSO(cId int, bId string) (b *BSO, err error)
 	GetBSOs(
 		cId int,
 		ids []string,
@@ -36,7 +36,7 @@ type SyncApi interface {
 		limit int,
 		offset int) (r *GetResults, err error)
 
-	DeleteBSO(cId, bId string) (int, error)
+	DeleteBSO(cId int, bId string) (int, error)
 	DeleteBSOs(cId int, bIds ...string) (modified int, err error)
 
 	PurgeExpired() (int, error)
