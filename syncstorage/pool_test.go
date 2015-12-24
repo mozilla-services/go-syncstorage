@@ -3,6 +3,7 @@ package syncstorage
 import (
 	"io/ioutil"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -86,6 +87,43 @@ func TestPoolBorrowAllowsOnlyOne(t *testing.T) {
 
 	p.returndb(uid)
 	assert.True(<-ch)
+}
+
+// make a pool with a very small cache size so it must evict
+// *DBs to make room
+func TestPoolLRU(t *testing.T) {
+	assert := assert.New(t)
+	cachesize := 1
+
+	pool, err := NewPoolCacheSize(getTempBase(), TwoLevelPath, cachesize)
+	if !assert.NoError(err) {
+		return
+	}
+
+	users := 5
+	name := "custom"
+	cIds := make([]int, users)
+
+	for i := 0; i < users; i++ {
+		uid := "123456" + strconv.Itoa(i)
+		cIds[i], err = pool.CreateCollection(uid, name)
+		if !assert.NoError(err) {
+			return
+		}
+	}
+
+	for i := 0; i < users; i++ {
+		uid := "123456" + strconv.Itoa(i)
+		cId, err := pool.GetCollectionId(uid, name)
+		if !assert.NoError(err) {
+			return
+		}
+
+		assert.Equal(cIds[i], cId)
+	}
+
+	assert.Equal(cachesize, pool.cache.Len())
+
 }
 
 // Use poolwrap to test that the abstracted interface for SyncApi

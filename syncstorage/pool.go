@@ -12,7 +12,8 @@ import (
 )
 
 var (
-	pDebug = Debug("syncstorage:pool")
+	pDebug      = Debug("syncstorage:pool")
+	pDebugCache = Debug("syncstorage:pool:cache")
 
 	ErrPoolUnexpectedType = errors.New("Unexpected Type from cache")
 )
@@ -35,7 +36,10 @@ type Pool struct {
 }
 
 func NewPool(basepath string, p PathMaker) (*Pool, error) {
+	return NewPoolCacheSize(basepath, p, 25)
+}
 
+func NewPoolCacheSize(basepath string, p PathMaker, cacheSize int) (*Pool, error) {
 	if p == nil {
 		p = DefaultPathMaker
 	}
@@ -47,14 +51,36 @@ func NewPool(basepath string, p PathMaker) (*Pool, error) {
 
 	path := strings.Split(filepath.Clean(basepath), string(os.PathSeparator))
 
-	cache, _ := lru.New(25)
-
-	return &Pool{
+	// make the pool first
+	pool := &Pool{
 		basePath: path,
 		pathfunc: p,
-		cache:    cache,
+		cache:    nil,
 		locks:    make(map[string]*sync.Mutex),
-	}, nil
+	}
+
+	onevict := func(k interface{}, v interface{}) {
+		key, ok := k.(string)
+		if !ok {
+			pDebugCache("Evict error, not a string key")
+			return
+		}
+
+		pool.Lock()
+		// when a cache item is evicted from the pool it should be removed
+		delete(pool.locks, key)
+		pool.Unlock()
+
+		pDebugCache("Evicted %s", key)
+	}
+
+	cache, err := lru.NewWithEvict(cacheSize, onevict)
+	if err != nil {
+		return nil, err
+	}
+
+	pool.cache = cache
+	return pool, nil
 
 }
 
@@ -78,7 +104,7 @@ func (p *Pool) borrowdb(uid string) (*DB, error) {
 	dbx, ok := p.cache.Get(uid)
 
 	if !ok {
-		pDebug("Cache - Miss %s", uid)
+		pDebugCache("Miss %s", uid)
 		storageDir, filename := p.PathAndFile(uid)
 
 		// create the sub-directory tree if required
@@ -98,12 +124,12 @@ func (p *Pool) borrowdb(uid string) (*DB, error) {
 			return nil, err
 		}
 
-		pDebug("Cache - Add + Return %s", uid)
+		pDebugCache("Add %s", uid)
 		p.cache.Add(uid, db)
 
 		return db, nil
 	} else {
-		pDebug("Cache - Hit + Return %s", uid)
+		pDebugCache("Hit %s", uid)
 		db, ok = dbx.(*DB)
 		if !ok {
 			// TODO remove this, or log it?
