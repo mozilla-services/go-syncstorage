@@ -134,6 +134,8 @@ func TestPoolParallel(t *testing.T) {
 	}
 
 	assert := assert.New(t)
+
+	// smallest cache size to force evictions to happen
 	cachesize := 1
 
 	var wg sync.WaitGroup

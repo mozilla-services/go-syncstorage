@@ -59,6 +59,9 @@ func NewPoolCacheSize(basepath string, p PathMaker, cacheSize int) (*Pool, error
 		locks:    make(map[string]*sync.Mutex),
 	}
 
+	// onevict is called by the cache as a notification
+	// that an item has been evicted. We can use this
+	// to also clean up the locks map
 	onevict := func(k interface{}, v interface{}) {
 		key, ok := k.(string)
 		if !ok {
