@@ -23,12 +23,14 @@ func PathMakerMaker(levels int) PathMaker {
 	return func(uid string) []string {
 		parts := strings.Split(uid, "")
 
-		if levels > len(parts) {
-			levels = len(parts)
+		// copy it to prevent races, ie: don't change the closure!
+		mylevels := levels
+		if mylevels > len(parts) {
+			mylevels = len(parts)
 		}
 
-		path := make([]string, levels)
-		for i := 0; i < levels; i++ {
+		path := make([]string, mylevels)
+		for i := 0; i < mylevels; i++ {
 			path[i], parts = parts[len(parts)-1], parts[:len(parts)-1]
 		}
 
