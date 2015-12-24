@@ -135,9 +135,15 @@ func (p *Pool) CreateCollection(uid string, name string) (cId int, err error) {
 func (p *Pool) DeleteCollection(uid string, cId int) (err error) {
 	return ErrNotImplemented
 }
+func (p *Pool) TouchCollection(cId, modified int) (err error) {
+	return ErrNotImplemented
+}
 
 func (p *Pool) InfoCollections(uid string) (map[string]int, error) {
 	return nil, ErrNotImplemented
+}
+func (p *Pool) InfoQuota(uid string) (used, quota int, err error) {
+	return 0, 0, ErrNotImplemented
 }
 func (p *Pool) InfoCollectionUsage(uid string) (map[string]int, error) {
 	return nil, ErrNotImplemented
@@ -145,8 +151,27 @@ func (p *Pool) InfoCollectionUsage(uid string) (map[string]int, error) {
 func (p *Pool) InfoCollectionCounts(uid string) (map[string]int, error) {
 	return nil, ErrNotImplemented
 }
-func (p *Pool) GetBSOs(uid string) (r *GetResults, err error) {
+
+func (p *Pool) PostBSOs(uid string, cId int, input PostBSOInput) (*PostResults, error) {
 	return nil, ErrNotImplemented
+}
+
+func (p *Pool) PutBSO(
+	uid string,
+	cId int,
+	bId string,
+	payload *string,
+	sortIndex *int,
+	ttl *int) (modified int, err error) {
+
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+
+	if err != nil {
+		return
+	}
+
+	return db.PutBSO(cId, bId, payload, sortIndex, ttl)
 }
 
 func (p *Pool) GetBSO(uid string, cId int, bId string) (b *BSO, err error) {
@@ -159,24 +184,17 @@ func (p *Pool) GetBSO(uid string, cId int, bId string) (b *BSO, err error) {
 
 	return db.GetBSO(cId, bId)
 }
-
-func (p *Pool) PostBSOs(uid string, cId int, input PostBSOInput) (*PostResults, error) {
+func (p *Pool) GetBSOs(uid string) (r *GetResults, err error) {
 	return nil, ErrNotImplemented
 }
-func (p *Pool) PutBSO(uid string, cId int, bId string, payload *string, sortIndex *int, ttl *int) (modified int, err error) {
 
-	db, err := p.borrowdb(uid)
-	defer p.returndb(uid)
-
-	if err != nil {
-		return
-	}
-
-	return db.PutBSO(cId, bId, payload, sortIndex, ttl)
+func (p *Pool) DeleteBSO(uid string, cId, bId int) (modified int, err error) {
+	return 0, ErrNotImplemented
 }
 func (p *Pool) DeleteBSOs(uid string, cId int, bIds ...string) (modified int, err error) {
 	return 0, ErrNotImplemented
 }
+
 func (p *Pool) PurgeExpired(uid string) (int, error) {
 	return 0, ErrNotImplemented
 }
