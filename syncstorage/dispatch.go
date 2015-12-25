@@ -9,12 +9,12 @@ import (
 // database accesses over them. This is to provide less lock contention
 // as a Pool manages a cache of open files
 type Dispatch struct {
-	pools []*Pool
-	num   uint16
+	pools    []*Pool
+	numPools uint16
 }
 
-func NewDispatch(num uint16, basepath string, p PathMaker, cachesize int) (d *Dispatch, err error) {
-	pools := make([]*Pool, num)
+func NewDispatch(numPools uint16, basepath string, p PathMaker, cachesize int) (d *Dispatch, err error) {
+	pools := make([]*Pool, numPools)
 	for k, _ := range pools {
 		pools[k], err = NewPoolCacheSize(basepath, p, cachesize)
 		if err != nil {
@@ -23,8 +23,8 @@ func NewDispatch(num uint16, basepath string, p PathMaker, cachesize int) (d *Di
 	}
 
 	d = &Dispatch{
-		pools: pools,
-		num:   num,
+		pools:    pools,
+		numPools: numPools,
 	}
 
 	return
@@ -37,7 +37,7 @@ func (d *Dispatch) Index(uid string) uint16 {
 
 	// There are 20 bytes in a sha1 sum, we only need the
 	// last 2 to determine the id
-	return binary.BigEndian.Uint16(h[18:]) % d.num
+	return binary.BigEndian.Uint16(h[18:]) % d.numPools
 }
 
 // =======================================================

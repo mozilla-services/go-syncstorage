@@ -1,6 +1,6 @@
 package syncstorage
 
-// wrapPool makes a pool adhere to the SyncApi interface
+// poolwrap makes a pool adhere to the SyncApi interface
 // which allows us to reuse tests
 type poolwrap struct {
 	uid  string
