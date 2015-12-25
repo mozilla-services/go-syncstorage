@@ -159,7 +159,7 @@ func (p *Pool) returndb(uid string) {
 }
 
 // =======================================================
-// Below implements the public API of *DB, except each
+// Below implements approximately SyncApi except each
 // method takes a `uid string`. This `uid` is used for
 // the file path of the sqlite3 files.
 // =======================================================
