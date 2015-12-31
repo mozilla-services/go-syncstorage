@@ -12,8 +12,10 @@ import (
 )
 
 var (
-	pDebug      = Debug("syncstorage:pool")
-	pDebugCache = Debug("syncstorage:pool:cache")
+	pDebug       = Debug("syncstorage:pool")
+	pDebugCache  = Debug("syncstorage:pool:cache")
+	pDebugCacheB = Debug("syncstorage:pool:cache:borrow")
+	pDebugCacheR = Debug("syncstorage:pool:cache:return")
 
 	ErrPoolUnexpectedType = errors.New("Unexpected Type from cache")
 )
@@ -105,16 +107,16 @@ func (p *Pool) PathAndFile(uid string) (path string, file string) {
 
 func (p *Pool) borrowdb(uid string) (*DB, error) {
 	p.Lock()
-	if p.locks[uid] == nil {
+	//make a new lock for uid if it doesn't exist
+	if _, found := p.locks[uid]; !found {
 		p.locks[uid] = &sync.Mutex{}
+		pDebugCacheB("Created a new lock for %s", uid)
 	}
-
-	// put this Lock() inside the main pool lock
-	// so this doesn't race the cache eviction callback
-	// deleting the mutex
-	p.locks[uid].Lock()
-
 	p.Unlock()
+
+	pDebugCacheB("Attempt Lock for %s", uid)
+	p.locks[uid].Lock()
+	pDebugCacheB("Locked %s", uid)
 
 	var db *DB
 	var ok bool
@@ -142,7 +144,7 @@ func (p *Pool) borrowdb(uid string) (*DB, error) {
 		}
 
 		p.cache.Add(uid, db)
-		pDebugCache("Add %s", uid)
+		pDebugCache("Miss+Added %s", uid)
 
 		return db, nil
 	} else {
@@ -163,8 +165,12 @@ func (p *Pool) returndb(uid string) {
 
 	// it might have been evicted so check if it
 	// is still there before attempting to unlock
-	if p.locks[uid] != nil {
-		p.locks[uid].Unlock()
+	if lock, ok := p.locks[uid]; ok {
+		pDebugCacheR("Found %s", uid)
+		lock.Unlock()
+		pDebugCacheR("Unlocked %s", uid)
+	} else {
+		pDebugCacheR("NOT Found %s", uid)
 	}
 }
 
