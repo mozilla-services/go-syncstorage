@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"os"
@@ -52,7 +53,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "statsfile, t",
-			Value: "./writestats.db",
+			Value: "./dispatch-benchmark-stats.db",
 			Usage: "sqlite3 database to write stats to",
 		},
 		cli.IntFlag{
@@ -164,8 +165,48 @@ func main() {
 		}
 
 		wg.Wait()
-		fmt.Printf("PUT %d in %v\n", requests, time.Now().Sub(start))
+		took := time.Now().Sub(start)
+		fmt.Printf("PUT %d in %v\n", requests, took)
+		RecordStatistics(c.String("statsfile"), users, writers, requests, pools, cachesize, took)
 	}
 
 	app.Run(os.Args)
+}
+
+// RecordStatistics writes run stats into a sqlite3 table so we can
+// do some data analysis over it
+func RecordStatistics(statsfile string, users, writers, requests, pools, cachesize int, took time.Duration) error {
+
+	db, err := sql.Open("sqlite3", statsfile)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	create := `CREATE TABLE IF NOT EXISTS stats (
+		time DATETIME,
+		users NUMBER,
+		writers NUMBER,
+		requests NUMBER,
+		pools NUMBER,
+		cachesize NUMBER,
+		took NUMBER
+	)`
+
+	if _, err := db.Exec(create); err != nil {
+		return fmt.Errorf("stats create err: %s", err.Error())
+	}
+
+	dml := `INSERT INTO stats
+			(time, users, writers, requests, pools, cachesize, took)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	// in milliseconds
+	tookMS := took.Nanoseconds() / 1000 / 1000
+
+	if _, err := db.Exec(dml, time.Now(), users, writers, requests, pools, cachesize, tookMS); err != nil {
+		return fmt.Errorf("stats insert err: %s", err.Error())
+	}
+
+	return nil
 }
