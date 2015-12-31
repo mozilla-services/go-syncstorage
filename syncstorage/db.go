@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
-	. "github.com/tj/go-debug"
+	. "github.com/mostlygeek/go-debug"
 )
 
 var dbDebug = Debug("syncstorage:db")

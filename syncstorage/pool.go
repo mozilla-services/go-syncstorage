@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/golang-lru"
-	. "github.com/tj/go-debug"
+	. "github.com/mostlygeek/go-debug"
 )
 
 var (

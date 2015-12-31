@@ -9,8 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/codegangsta/cli"
+	. "github.com/mostlygeek/go-debug"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
-	. "github.com/tj/go-debug"
 )
 
 var (
@@ -38,71 +39,133 @@ type work struct {
 
 func main() {
 
-	tmpdir := os.TempDir() + "dispatch_test"
-	fmt.Println("Using basedir: ", tmpdir)
+	app := cli.NewApp()
+	app.Name = "benchmark-dispatch"
+	app.Usage = "Benchmark how dispatch works under various scenarios"
 
-	var wg sync.WaitGroup
+	app.Flags = []cli.Flag{
 
-	uidCh := make(chan *work, 16)
-	done := make(chan struct{})
+		cli.StringFlag{
+			Name:  "basedir, b",
+			Value: os.TempDir() + "dispatch_benchmark",
+			Usage: "Where to put temp sqlite files",
+		},
+		cli.StringFlag{
+			Name:  "statsfile, t",
+			Value: "./writestats.db",
+			Usage: "sqlite3 database to write stats to",
+		},
+		cli.IntFlag{
+			Name:  "users, u",
+			Value: 100,
+			Usage: "Unique number of users",
+		},
 
-	numRecordsToWrite := 2500
+		cli.IntFlag{
+			Name:  "writers, w",
+			Value: 1,
+			Usage: "How many goroutines to use dispatch",
+		},
 
-	// generate uids
-	go func() {
+		cli.IntFlag{
+			Name:  "requests, r",
+			Value: 100,
+			Usage: "number of PUT requests to generate",
+		},
 
-		// generate a list of 250K users
-		uids := make([]string, 250000)
-		for u := 0; u < len(uids); u++ {
-			uids[u] = strconv.Itoa(100000000 + u)
-		}
+		cli.IntFlag{
+			Name:  "pools, p",
+			Value: 4,
+			Usage: "Number of pools in the dispatcher",
+		},
 
-		numUids := len(uids)
-		for i := 0; i < numRecordsToWrite; i++ {
-			index := rand.Intn(numUids)
-			uidCh <- &work{i: i, uid: uids[index]}
-		}
-
-		close(done)
-	}()
-
-	dispatch, err := syncstorage.NewDispatch(4, tmpdir, syncstorage.TwoLevelPath, 32)
-	if err != nil {
-		panic(err)
+		cli.IntFlag{
+			Name:  "cachesize, c",
+			Value: 32,
+			Usage: "Number of open sqlite files per pool",
+		},
 	}
 
-	var rLimit syscall.Rlimit
-	err = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
-	if err != nil {
-		fmt.Println("Error Getting Rlimit ", err)
-	}
-	fmt.Println("Open File limit: ", rLimit.Cur)
+	app.Action = func(c *cli.Context) {
 
-	start := time.Now()
-	for i := 0; i < 1; i++ {
-		wg.Add(1)
-		go func(workerId int) {
-			defer wg.Done()
+		basedir := c.String("basedir")
+		users := c.Int("users")
+		writers := c.Int("writers")
+		requests := c.Int("requests")
+		pools := c.Int("pools")
+		cachesize := c.Int("cachesize")
 
-			for {
-				select {
-				case work := <-uidCh:
-					debug("%06d. %d => %s", work.i, workerId, work.uid)
-					bId := RandStringBytesRmndr(8)
-					payload := RandStringBytesRmndr(200 + rand.Intn(300))
-					_, err := dispatch.PutBSO(work.uid, 1, bId, &payload, nil, nil)
-					if err != nil {
-						fmt.Printf("ERROR in worker %d for %s: %v\n", workerId, work.uid, err)
-						panic(":(")
-					}
-					break
-				case <-done:
-					return
-				}
+		fmt.Println("Using basedir: ", basedir)
+
+		var rLimit syscall.Rlimit
+		err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+		if err != nil {
+			fmt.Println("Error Getting Rlimit ", err)
+		}
+		fmt.Println("Open File limit: ", rLimit.Cur)
+		if uint64(pools*cachesize) > rLimit.Cur {
+			fmt.Println("WARNING! pools*cachesize > file limit")
+		} else {
+			fmt.Println("Total file handler cache size: ", pools*cachesize)
+		}
+
+		var wg sync.WaitGroup
+		uidCh := make(chan *work)
+		done := make(chan struct{})
+
+		// generate uids
+		go func() {
+			uids := make([]string, users)
+			for u := 0; u < len(uids); u++ {
+				uids[u] = strconv.Itoa(100000000 + u)
 			}
-		}(i)
+
+			numUids := len(uids)
+			for i := 0; i < requests; i++ {
+				index := rand.Intn(numUids)
+				uidCh <- &work{i: i, uid: uids[index]}
+			}
+
+			close(done)
+		}()
+
+		dispatch, err := syncstorage.NewDispatch(uint16(pools), basedir, syncstorage.TwoLevelPath, cachesize)
+		if err != nil {
+			panic(err)
+		}
+
+		start := time.Now()
+		for i := 0; i < writers; i++ {
+			wg.Add(1)
+			go func(workerId int) {
+				defer wg.Done()
+
+				for {
+					select {
+					case work := <-uidCh:
+						debug("%06d. %d => %s", work.i, workerId, work.uid)
+
+						bId := RandStringBytesRmndr(8)
+						payload := RandStringBytesRmndr(200 + rand.Intn(300))
+						_, err := dispatch.PutBSO(work.uid, 1, bId, &payload, nil, nil)
+						debug("%06d. %d - done", work.i, workerId)
+
+						if err != nil {
+							fmt.Printf("ERROR in worker %d for %s: %v\n", workerId, work.uid, err)
+							panic(":(")
+						}
+
+						break
+					case <-done:
+						return
+					}
+				}
+			}(i)
+		}
+
+		wg.Wait()
+		fmt.Printf("PUT %d in %v\n", requests, time.Now().Sub(start))
 	}
 
-	wg.Wait()
-	fmt.Printf("PUT %d in %v\n", numRecordsToWrite, time.Now().Sub(start))
+	app.Run(os.Args)
 }
