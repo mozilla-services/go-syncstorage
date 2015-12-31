@@ -14,7 +14,7 @@ var (
 	TwoLevelPath = PathMakerMaker(2)
 
 	// three level, ie: "abc" => c/b/a
-	ThreeLevelPath = PathMakerMaker(2)
+	ThreeLevelPath = PathMakerMaker(3)
 )
 
 // PathMakerMaker is meta... makes a PathMaker func that turns

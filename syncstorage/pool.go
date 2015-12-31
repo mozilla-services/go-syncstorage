@@ -69,6 +69,16 @@ func NewPoolCacheSize(basepath string, p PathMaker, cacheSize int) (*Pool, error
 			return
 		}
 
+		// attempt to close it
+		db, ok := v.(*DB)
+		if !ok {
+			pDebugCache("Evict error, not *DB object for value")
+			return
+		} else {
+			pDebugCache("Evicted. Closing database: %s", key)
+			db.Close()
+		}
+
 		pool.Lock()
 		// when a cache item is evicted from the pool it should be removed
 		delete(pool.locks, key)
