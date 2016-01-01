@@ -33,7 +33,7 @@ func RandStringBytesRmndr(n int) string {
 	return string(b)
 }
 
-type work struct {
+type task struct {
 	i   int
 	uid string
 }
@@ -111,7 +111,10 @@ func main() {
 		}
 
 		var wg sync.WaitGroup
-		uidCh := make(chan *work)
+		todoCh := make(chan *task)
+
+		// when a task is complete a message is sent to this channel
+		compCh := make(chan *task)
 		done := make(chan struct{})
 
 		// generate uids
@@ -124,10 +127,47 @@ func main() {
 			numUids := len(uids)
 			for i := 0; i < requests; i++ {
 				index := rand.Intn(numUids)
-				uidCh <- &work{i: i, uid: uids[index]}
+				todoCh <- &task{i: i, uid: uids[index]}
 			}
+		}()
 
-			close(done)
+		// record stats and stop everything when done
+		go func() {
+			count := 0
+
+			var start time.Time
+			var jobId string
+
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-compCh:
+					count += 1
+					if count == 1 {
+						// initialize things
+						start = time.Now()
+						jobId = start.Format("jan-02-2006-03:04:05.000")
+						InitStats(c.String("statsfile"), jobId, users, writers, requests, pools, cachesize)
+					}
+					if count == requests {
+
+						if err := UpdateStats(c.String("statsfile"), jobId, count, start); err != nil {
+							debug("ERROR: %v", err)
+						} else {
+							debug("hmm")
+						}
+						close(done) // close this to trigger all workers to stop
+						return
+					}
+				case <-ticker.C:
+					// update stats
+					if err := UpdateStats(c.String("statsfile"), jobId, count, start); err != nil {
+						debug("ERROR: %v", err)
+					}
+				}
+			}
 		}()
 
 		dispatch, err := syncstorage.NewDispatch(uint16(pools), basedir, syncstorage.TwoLevelPath, cachesize)
@@ -143,18 +183,20 @@ func main() {
 
 				for {
 					select {
-					case work := <-uidCh:
-						debug("%06d. %d => %s", work.i, workerId, work.uid)
+					case task := <-todoCh:
+						debug("%06d. %d => %s", task.i, workerId, task.uid)
 
 						bId := RandStringBytesRmndr(8)
 						payload := RandStringBytesRmndr(200 + rand.Intn(300))
-						_, err := dispatch.PutBSO(work.uid, 1, bId, &payload, nil, nil)
-						debug("%06d. %d - done", work.i, workerId)
+						_, err := dispatch.PutBSO(task.uid, 1, bId, &payload, nil, nil)
+						debug("%06d. %d - done", task.i, workerId)
 
 						if err != nil {
-							fmt.Printf("ERROR in worker %d for %s: %v\n", workerId, work.uid, err)
+							fmt.Printf("ERROR in worker %d for %s: %v\n", workerId, task.uid, err)
 							panic(":(")
 						}
+
+						compCh <- task
 
 						break
 					case <-done:
@@ -167,7 +209,6 @@ func main() {
 		wg.Wait()
 		took := time.Now().Sub(start)
 		fmt.Printf("PUT %d in %v\n", requests, took)
-		RecordStatistics(c.String("statsfile"), users, writers, requests, pools, cachesize, took)
 	}
 
 	app.Run(os.Args)
@@ -175,7 +216,14 @@ func main() {
 
 // RecordStatistics writes run stats into a sqlite3 table so we can
 // do some data analysis over it
-func RecordStatistics(statsfile string, users, writers, requests, pools, cachesize int, took time.Duration) error {
+func InitStats(
+	statsfile,
+	id string,
+	users,
+	writers,
+	requests,
+	pools,
+	cachesize int) error {
 
 	db, err := sql.Open("sqlite3", statsfile)
 	if err != nil {
@@ -184,13 +232,23 @@ func RecordStatistics(statsfile string, users, writers, requests, pools, cachesi
 	defer db.Close()
 
 	create := `CREATE TABLE IF NOT EXISTS stats (
-		time DATETIME,
+		Id VARCHAR,
+
 		users NUMBER,
 		writers NUMBER,
-		requests NUMBER,
+
 		pools NUMBER,
 		cachesize NUMBER,
-		took NUMBER
+
+		requests NUMBER,
+
+		-- records progress for very long running jobs
+		completed NUMBER,
+
+		-- total time taken, updated as completed is updated
+		took NUMBER,
+
+		PRIMARY KEY(Id)
 	)`
 
 	if _, err := db.Exec(create); err != nil {
@@ -198,14 +256,31 @@ func RecordStatistics(statsfile string, users, writers, requests, pools, cachesi
 	}
 
 	dml := `INSERT INTO stats
-			(time, users, writers, requests, pools, cachesize, took)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`
+			(id, users, writers, requests, pools, cachesize)
+			VALUES (?, ?, ?, ?, ?, ?)`
 
-	// in milliseconds
-	tookMS := took.Nanoseconds() / 1000 / 1000
-
-	if _, err := db.Exec(dml, time.Now(), users, writers, requests, pools, cachesize, tookMS); err != nil {
+	if _, err := db.Exec(dml, id, users, writers, requests, pools, cachesize); err != nil {
 		return fmt.Errorf("stats insert err: %s", err.Error())
+	}
+
+	return nil
+}
+
+func UpdateStats(
+	statsfile,
+	id string,
+	completed int,
+	start time.Time) error {
+	db, err := sql.Open("sqlite3", statsfile)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	took := time.Now().Sub(start).Nanoseconds() / 1000 / 1000
+	dml := "UPDATE stats SET completed=?, took=? WHERE Id=?"
+	if _, err := db.Exec(dml, completed, took, id); err != nil {
+		return fmt.Errorf("stats update err: %s", err.Error())
 	}
 
 	return nil
