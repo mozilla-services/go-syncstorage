@@ -5,15 +5,36 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
 	"github.com/stretchr/testify/assert"
 )
+
+var (
+	collectionNames = []string{
+		"bookmarks",
+		"history",
+		"forms",
+		"prefs",
+		"tabs",
+		"passwords",
+		"crypto",
+		"client",
+		"keys",
+		"meta",
+	}
+)
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 func makeTestDeps() *Dependencies {
 	dir, _ := ioutil.TempDir(os.TempDir(), "sync_storage_api_test")
@@ -128,19 +149,6 @@ func TestInfoCollectionUsage(t *testing.T) {
 	uid := "12345"
 	deps := makeTestDeps()
 
-	collectionNames := []string{
-		"bookmarks",
-		"history",
-		"forms",
-		"prefs",
-		"tabs",
-		"passwords",
-		"crypto",
-		"client",
-		"keys",
-		"meta",
-	}
-
 	sizes := []int{463, 467, 479, 487, 491}
 
 	for _, cName := range collectionNames {
@@ -178,7 +186,50 @@ func TestInfoCollectionUsage(t *testing.T) {
 	}
 }
 
-func TestCollectionCounts(t *testing.T) { t.Skip("TODO") }
+func TestCollectionCounts(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	uid := "12345"
+	deps := makeTestDeps()
+
+	expected := make(map[string]int)
+
+	for _, cName := range collectionNames {
+		expected[cName] = 5 + rand.Intn(25)
+	}
+
+	for cName, numBSOs := range expected {
+		cId, err := deps.Dispatch.GetCollectionId(uid, cName)
+		if !assert.NoError(err, "getting cID: %v", err) {
+			return
+		}
+
+		payload := "hello"
+		for i := 0; i < numBSOs; i++ {
+			bId := fmt.Sprintf("bid%d", i)
+			_, err = deps.Dispatch.PutBSO(uid, cId, bId, &payload, nil, nil)
+			if !assert.NoError(err, "failed PUT into %s, bid(%s): %v", cName, bId, err) {
+				return
+			}
+		}
+	}
+
+	resp := testRequest("GET", "http://test/1.5/"+uid+"/info/collection_counts", nil, deps)
+	data := resp.Body.Bytes()
+
+	var collections map[string]int
+	err := json.Unmarshal(data, &collections)
+	if !assert.NoError(err) {
+		return
+	}
+
+	fmt.Println(string(data))
+
+	for cName, expectedCount := range expected {
+		assert.Equal(expectedCount, collections[cName])
+	}
+}
 
 func TestCollectionGET(t *testing.T)    { t.Skip("TODO") }
 func TestCollectionPOST(t *testing.T)   { t.Skip("TODO") }

@@ -38,7 +38,7 @@ func NewRouter(d *Dependencies) *mux.Router {
 	info.HandleFunc("/collections", makeSyncHandler(d, handleInfoCollections)).Methods("GET")
 	info.HandleFunc("/quota", makeSyncHandler(d, notImplemented)).Methods("GET")
 	info.HandleFunc("/collection_usage", makeSyncHandler(d, handleInfoCollectionUsage)).Methods("GET")
-	info.HandleFunc("/collection_counts", makeSyncHandler(d, notImplemented)).Methods("GET")
+	info.HandleFunc("/collection_counts", makeSyncHandler(d, handleInfoCollectionCounts)).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", makeSyncHandler(d, notImplemented)).Methods("DELETE")
@@ -130,7 +130,14 @@ func handleInfoCollectionUsage(w http.ResponseWriter, r *http.Request, d *Depend
 	}
 }
 
-//func handleInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
+func handleInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+	results, err := d.Dispatch.InfoCollectionCounts(uid)
+	if err != nil {
+		errorResponse(w, r, d, err)
+	} else {
+		jsonResponse(w, r, d, results)
+	}
+}
 
 //func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
 //func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
