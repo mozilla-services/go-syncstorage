@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
@@ -43,12 +45,14 @@ func testRequest(method, urlStr string, body io.Reader, deps *Dependencies) *htt
 }
 
 func TestHeartbeat(t *testing.T) {
+	t.Parallel()
 	w := testRequest("GET", "http://test/__heartbeat__", nil, nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "OK", w.Body.String())
 }
 
 func TestEchoUid(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	w := testRequest("GET", "http://test/1.5/123456/echo-uid", nil, nil)
@@ -65,6 +69,7 @@ func TestEchoUid(t *testing.T) {
 }
 
 func TestInfoCollections(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	deps := makeTestDeps()
 
@@ -115,16 +120,72 @@ func TestInfoCollections(t *testing.T) {
 	}
 }
 
-func TestInfoQuota(t *testing.T)           { t.Skip("TODO") }
-func TestInfoCollectionUsage(t *testing.T) { t.Skip("TODO") }
-func TestCollectionCounts(t *testing.T)    { t.Skip("TODO") }
+func TestInfoQuota(t *testing.T) { t.Skip("TODO") }
+func TestInfoCollectionUsage(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
 
-func TestStorageCollectionGET(t *testing.T)    { t.Skip("TODO") }
-func TestStorageCollectionPOST(t *testing.T)   { t.Skip("TODO") }
-func TestStorageCollectionDELETE(t *testing.T) { t.Skip("TODO") }
+	uid := "12345"
+	deps := makeTestDeps()
 
-func TestStorageBsoGET(t *testing.T)    { t.Skip("TODO") }
-func TestStorageBsoPUT(t *testing.T)    { t.Skip("TODO") }
-func TestStorageBsoDELETE(t *testing.T) { t.Skip("TODO") }
+	collectionNames := []string{
+		"bookmarks",
+		"history",
+		"forms",
+		"prefs",
+		"tabs",
+		"passwords",
+		"crypto",
+		"client",
+		"keys",
+		"meta",
+	}
+
+	sizes := []int{463, 467, 479, 487, 491}
+
+	for _, cName := range collectionNames {
+		cId, err := deps.Dispatch.GetCollectionId(uid, cName)
+		if !assert.NoError(err, "getting cID: %v", err) {
+			return
+		}
+
+		for id, size := range sizes {
+			payload := strings.Repeat("x", size)
+			bId := fmt.Sprintf("bid_%d", id)
+			_, err = deps.Dispatch.PutBSO(uid, cId, bId, &payload, nil, nil)
+			if !assert.NoError(err, "failed PUT into %s, bid(%s): %v", cName, bId, err) {
+				return
+			}
+		}
+	}
+
+	resp := testRequest("GET", "http://test/1.5/"+uid+"/info/collection_usage", nil, deps)
+	data := resp.Body.Bytes()
+
+	var collections map[string]int
+	err := json.Unmarshal(data, &collections)
+	if !assert.NoError(err) {
+		return
+	}
+
+	var total int
+	for _, s := range sizes {
+		total += s
+	}
+
+	for _, cName := range collectionNames {
+		assert.Equal(total, collections[cName])
+	}
+}
+
+func TestCollectionCounts(t *testing.T) { t.Skip("TODO") }
+
+func TestCollectionGET(t *testing.T)    { t.Skip("TODO") }
+func TestCollectionPOST(t *testing.T)   { t.Skip("TODO") }
+func TestCollectionDELETE(t *testing.T) { t.Skip("TODO") }
+
+func TestBsoGET(t *testing.T)    { t.Skip("TODO") }
+func TestBsoPUT(t *testing.T)    { t.Skip("TODO") }
+func TestBsoDELETE(t *testing.T) { t.Skip("TODO") }
 
 func TestDelete(t *testing.T) { t.Skip("TODO") }

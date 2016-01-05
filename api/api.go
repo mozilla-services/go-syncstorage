@@ -37,7 +37,7 @@ func NewRouter(d *Dependencies) *mux.Router {
 	info := v.PathPrefix("/info/").Subrouter()
 	info.HandleFunc("/collections", makeSyncHandler(d, handleInfoCollections)).Methods("GET")
 	info.HandleFunc("/quota", makeSyncHandler(d, notImplemented)).Methods("GET")
-	info.HandleFunc("/collection_usage", makeSyncHandler(d, notImplemented)).Methods("GET")
+	info.HandleFunc("/collection_usage", makeSyncHandler(d, handleInfoCollectionUsage)).Methods("GET")
 	info.HandleFunc("/collection_counts", makeSyncHandler(d, notImplemented)).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
@@ -121,4 +121,21 @@ func handleInfoCollections(w http.ResponseWriter, r *http.Request, d *Dependenci
 	}
 }
 
-//func infoCollections(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string)
+func handleInfoCollectionUsage(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+	results, err := d.Dispatch.InfoCollectionUsage(uid)
+	if err != nil {
+		errorResponse(w, r, d, err)
+	} else {
+		jsonResponse(w, r, d, results)
+	}
+}
+
+//func handleInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
+
+//func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
+//func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
+//func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
+
+//func hBsoGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
+//func hBSOPUT(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
+//func hBsoDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
