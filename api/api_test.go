@@ -114,3 +114,17 @@ func TestInfoCollections(t *testing.T) {
 		}
 	}
 }
+
+func TestInfoQuota(t *testing.T)           { t.Skip("TODO") }
+func TestInfoCollectionUsage(t *testing.T) { t.Skip("TODO") }
+func TestCollectionCounts(t *testing.T)    { t.Skip("TODO") }
+
+func TestStorageCollectionGET(t *testing.T)    { t.Skip("TODO") }
+func TestStorageCollectionPOST(t *testing.T)   { t.Skip("TODO") }
+func TestStorageCollectionDELETE(t *testing.T) { t.Skip("TODO") }
+
+func TestStorageBsoGET(t *testing.T)    { t.Skip("TODO") }
+func TestStorageBsoPUT(t *testing.T)    { t.Skip("TODO") }
+func TestStorageBsoDELETE(t *testing.T) { t.Skip("TODO") }
+
+func TestDelete(t *testing.T) { t.Skip("TODO") }
