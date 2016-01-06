@@ -224,15 +224,15 @@ func TestCollectionCounts(t *testing.T) {
 		return
 	}
 
-	fmt.Println(string(data))
-
 	for cName, expectedCount := range expected {
 		assert.Equal(expectedCount, collections[cName])
 	}
 }
 
-func TestCollectionGET(t *testing.T)    { t.Skip("TODO") }
-func TestCollectionPOST(t *testing.T)   { t.Skip("TODO") }
+func TestCollectionGET(t *testing.T) { t.Skip("TODO") }
+func TestCollectionPOST(t *testing.T) {
+	t.Skip("TODO")
+}
 func TestCollectionDELETE(t *testing.T) { t.Skip("TODO") }
 
 func TestBsoGET(t *testing.T)    { t.Skip("TODO") }
@@ -240,3 +240,14 @@ func TestBsoPUT(t *testing.T)    { t.Skip("TODO") }
 func TestBsoDELETE(t *testing.T) { t.Skip("TODO") }
 
 func TestDelete(t *testing.T) { t.Skip("TODO") }
+
+func testExtractPostRequestBSOs(t *testing.T) {
+
+	json := `[
+		{"Id":"bso1", "Payload": "testing1"},
+		{"Id":"bso1", "SortIndex": 1},
+		{"Id":"bso1", "TTL": 86400},
+	]
+	`
+
+}

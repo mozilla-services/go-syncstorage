@@ -234,9 +234,9 @@ func testApiPostBSOs(db SyncApi, t *testing.T) {
 	cId := 1
 
 	create := PostBSOInput{
-		"b0": NewPutBSOInput(String("payload 0"), Int(10), nil),
-		"b1": NewPutBSOInput(String("payload 1"), Int(-1), nil),
-		"b2": NewPutBSOInput(String("payload 2"), Int(100), nil),
+		NewPutBSOInput("b0", String("payload 0"), Int(10), nil),
+		NewPutBSOInput("b1", String("payload 1"), Int(-1), nil),
+		NewPutBSOInput("b2", String("payload 2"), Int(100), nil),
 	}
 
 	results, err := db.PostBSOs(cId, create)
@@ -256,8 +256,8 @@ func testApiPostBSOs(db SyncApi, t *testing.T) {
 	assert.Equal(results.Modified, cModified)
 
 	updates := PostBSOInput{
-		"b0": NewPutBSOInput(String("updated 0"), Int(11), Int(100000)),
-		"b2": NewPutBSOInput(String("updated 2"), Int(22), Int(10000)),
+		NewPutBSOInput("b0", String("updated 0"), Int(11), Int(100000)),
+		NewPutBSOInput("b2", String("updated 2"), Int(22), Int(10000)),
 	}
 
 	results2, err := db.PostBSOs(cId, updates)
@@ -382,9 +382,9 @@ func testApiDeleteBSOs(db SyncApi, t *testing.T) {
 	// create some testing data
 	cId := 1
 	create := PostBSOInput{
-		"b0": NewPutBSOInput(String("payload 0"), Int(10), nil),
-		"b1": NewPutBSOInput(String("payload 1"), Int(10), nil),
-		"b2": NewPutBSOInput(String("payload 2"), Int(10), nil),
+		NewPutBSOInput("b0", String("payload 0"), Int(10), nil),
+		NewPutBSOInput("b1", String("payload 1"), Int(10), nil),
+		NewPutBSOInput("b2", String("payload 2"), Int(10), nil),
 	}
 
 	_, err := db.PostBSOs(cId, create)
@@ -423,9 +423,9 @@ func testApiUsageStats(db SyncApi, t *testing.T) {
 	payload := strings.Repeat("x", 1024)
 
 	create := PostBSOInput{
-		"b0": NewPutBSOInput(&payload, Int(10), nil),
-		"b1": NewPutBSOInput(&payload, Int(10), nil),
-		"b2": NewPutBSOInput(&payload, Int(10), nil),
+		NewPutBSOInput("b0", &payload, Int(10), nil),
+		NewPutBSOInput("b1", &payload, Int(10), nil),
+		NewPutBSOInput("b2", &payload, Int(10), nil),
 	}
 
 	_, err := db.PostBSOs(cId, create)
@@ -452,9 +452,9 @@ func testApiPurgeExpired(db SyncApi, t *testing.T) {
 	payload := strings.Repeat("x", 10)
 
 	create := PostBSOInput{
-		"b0": NewPutBSOInput(&payload, Int(10), Int(1)),
-		"b1": NewPutBSOInput(&payload, Int(10), Int(1)),
-		"b2": NewPutBSOInput(&payload, Int(10), Int(1)),
+		NewPutBSOInput("b0", &payload, Int(10), Int(1)),
+		NewPutBSOInput("b1", &payload, Int(10), Int(1)),
+		NewPutBSOInput("b2", &payload, Int(10), Int(1)),
 	}
 
 	_, err := db.PostBSOs(cId, create)
@@ -473,9 +473,9 @@ func testApiOptimize(db SyncApi, t *testing.T) {
 	payload := strings.Repeat("x", 1024)
 
 	create := PostBSOInput{
-		"b0": NewPutBSOInput(&payload, Int(10), Int(1)),
-		"b1": NewPutBSOInput(&payload, Int(10), Int(1)),
-		"b2": NewPutBSOInput(&payload, Int(10), Int(1)),
+		NewPutBSOInput("b0", &payload, Int(10), Int(1)),
+		NewPutBSOInput("b1", &payload, Int(10), Int(1)),
+		NewPutBSOInput("b2", &payload, Int(10), Int(1)),
 	}
 
 	_, err := db.PostBSOs(cId, create)

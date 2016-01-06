@@ -9,6 +9,15 @@ import (
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
 )
 
+var (
+	ErrMissingBSOId    = errors.Error("Missing BSO Id")
+	ErrInvalidPostJSON = errors.Error("Malformed POST JSON")
+)
+
+const (
+	MAX_BSO_PER_POST_REQUEST = 100
+)
+
 // Dependencies holds run time created resources for handlers to use
 type Dependencies struct {
 	Dispatch *syncstorage.Dispatch
@@ -35,17 +44,17 @@ func NewRouter(d *Dependencies) *mux.Router {
 	v.HandleFunc("/echo-uid", makeSyncHandler(d, handleUIDecho)).Methods("GET")
 
 	info := v.PathPrefix("/info/").Subrouter()
-	info.HandleFunc("/collections", makeSyncHandler(d, handleInfoCollections)).Methods("GET")
+	info.HandleFunc("/collections", makeSyncHandler(d, hInfoCollections)).Methods("GET")
 	info.HandleFunc("/quota", makeSyncHandler(d, notImplemented)).Methods("GET")
-	info.HandleFunc("/collection_usage", makeSyncHandler(d, handleInfoCollectionUsage)).Methods("GET")
-	info.HandleFunc("/collection_counts", makeSyncHandler(d, handleInfoCollectionCounts)).Methods("GET")
+	info.HandleFunc("/collection_usage", makeSyncHandler(d, hInfoCollectionUsage)).Methods("GET")
+	info.HandleFunc("/collection_counts", makeSyncHandler(d, hInfoCollectionCounts)).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", makeSyncHandler(d, notImplemented)).Methods("DELETE")
 
-	storage.HandleFunc("/{collection}", makeSyncHandler(d, notImplemented)).Methods("GET")
-	storage.HandleFunc("/{collection}", makeSyncHandler(d, notImplemented)).Methods("POST")
-	storage.HandleFunc("/{collection}", makeSyncHandler(d, notImplemented)).Methods("DELETE")
+	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionGET)).Methods("GET")
+	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionPOST)).Methods("POST")
+	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionDELETE)).Methods("DELETE")
 
 	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, notImplemented)).Methods("GET")
 	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, notImplemented)).Methods("PUT")
@@ -112,7 +121,7 @@ func handleUIDecho(w http.ResponseWriter, r *http.Request, d *Dependencies, uid 
 	okResponse(w, uid)
 }
 
-func handleInfoCollections(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+func hInfoCollections(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
 	info, err := d.Dispatch.InfoCollections(uid)
 	if err != nil {
 		errorResponse(w, r, d, err)
@@ -121,7 +130,7 @@ func handleInfoCollections(w http.ResponseWriter, r *http.Request, d *Dependenci
 	}
 }
 
-func handleInfoCollectionUsage(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+func hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
 	results, err := d.Dispatch.InfoCollectionUsage(uid)
 	if err != nil {
 		errorResponse(w, r, d, err)
@@ -130,7 +139,7 @@ func handleInfoCollectionUsage(w http.ResponseWriter, r *http.Request, d *Depend
 	}
 }
 
-func handleInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+func hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
 	results, err := d.Dispatch.InfoCollectionCounts(uid)
 	if err != nil {
 		errorResponse(w, r, d, err)
@@ -139,9 +148,54 @@ func handleInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Depen
 	}
 }
 
-//func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
-//func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
-//func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
+func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+	notImplemented(w, r, d, uid)
+}
+func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+	notImplemented(w, r, d, uid)
+}
+
+func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+	// accept text/plain from old (broken) clients
+	if ct := r.Header.Get("Content-Type"); ct != "application/json" && ct != "text/plain" {
+		http.Error(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
+		return
+	}
+	/*
+
+		collection := mux.Vars(r)["collection"]
+		cId, err := d.Dispatch.GetCollectionId(uid, collection)
+		if err != nil {
+			errorResponse(w, r, d, err)
+		}
+
+		// parsing the results is sort of ugly since fields can be left out
+		// if they are not to be submitted
+		postBSO := make([]map[string]interface{}, 10)
+		decoder := json.NewDecoder(r.Body)
+
+		err = decoder.Decode(&postBSO)
+		if err != nil {
+			http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+			return
+		}
+
+		if len(postBSO) > MAX_BSO_PER_POST_REQUEST {
+			http.Error(w, fmt.Sprintf("Exceeded %d BSO per rquest", MAX_BSO_PER_POST_REQUEST),
+				http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		// Build the post request object
+		//todo := make(syncstorage.PostBSOInput)
+		return
+	*/
+}
+
+func extractPostRequestBSOs(r *http.Request) (syncstorage.PostBSOInput, error) {
+
+	return nil, nil
+}
 
 //func hBsoGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
 //func hBSOPUT(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}

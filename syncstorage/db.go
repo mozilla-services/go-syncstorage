@@ -335,18 +335,20 @@ func (d *DB) InfoCollectionCounts() (map[string]int, error) {
 	return results, nil
 }
 
-type PostBSOInput map[string]*PutBSOInput
+type PostBSOInput []*PutBSOInput
 type PutBSOInput struct {
-	TTL, SortIndex *int
-	Payload        *string
+	Id        string  `json:"id"`
+	Payload   *string `json:"payload"`
+	TTL       *int    `json:"ttl"`
+	SortIndex *int    `json:"sortindex"`
 }
 
-func NewPutBSOInput(payload *string, sortIndex, ttl *int) *PutBSOInput {
+func NewPutBSOInput(id string, payload *string, sortIndex, ttl *int) *PutBSOInput {
 	if ttl == nil {
 		t := DEFAULT_BSO_TTL
 		ttl = &t
 	}
-	return &PutBSOInput{TTL: ttl, SortIndex: sortIndex, Payload: payload}
+	return &PutBSOInput{Id: id, TTL: ttl, SortIndex: sortIndex, Payload: payload}
 }
 
 func (d *DB) PostBSOs(cId int, input PostBSOInput) (*PostResults, error) {
@@ -361,13 +363,13 @@ func (d *DB) PostBSOs(cId int, input PostBSOInput) (*PostResults, error) {
 	modified := Now()
 	results := NewPostResults(modified)
 
-	for bId, data := range input {
-		err = d.putBSO(tx, cId, bId, modified, data.Payload, data.SortIndex, data.TTL)
+	for _, data := range input {
+		err = d.putBSO(tx, cId, data.Id, modified, data.Payload, data.SortIndex, data.TTL)
 		if err != nil {
-			results.AddFailure(bId, err.Error())
+			results.AddFailure(data.Id, err.Error())
 			continue
 		} else {
-			results.AddSuccess(bId)
+			results.AddSuccess(data.Id)
 		}
 	}
 
