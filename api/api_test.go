@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -55,8 +56,11 @@ func testRequest(method, urlStr string, body io.Reader, deps *Dependencies) *htt
 		panic(err)
 	}
 
-	w := httptest.NewRecorder()
+	return testSendRequest(req, deps)
+}
 
+func testSendRequest(req *http.Request, deps *Dependencies) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
 	if deps == nil {
 		deps = makeTestDeps()
 	}
@@ -231,7 +235,65 @@ func TestCollectionCounts(t *testing.T) {
 
 func TestCollectionGET(t *testing.T) { t.Skip("TODO") }
 func TestCollectionPOST(t *testing.T) {
-	t.Skip("TODO")
+	t.Parallel()
+	assert := assert.New(t)
+	deps := makeTestDeps()
+
+	uid := "123456"
+
+	// Make sure INSERT works first
+	body := bytes.NewBufferString(`[
+		{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+		{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+		{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+	]`)
+
+	req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/bookmarks", body)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp := testSendRequest(req, deps)
+	assert.Equal(200, resp.Code)
+
+	var results syncstorage.PostResults
+	err := json.Unmarshal(resp.Body.Bytes(), &results)
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Len(results.Success, 3)
+	assert.Len(results.Failed, 0)
+
+	cId, _ := deps.Dispatch.GetCollectionId(uid, "bookmarks")
+	for _, bId := range []string{"bso1", "bso2", "bso3"} {
+		bso, _ := deps.Dispatch.GetBSO(uid, cId, bId)
+		assert.Equal("initial payload", bso.Payload)
+		assert.Equal(1, bso.SortIndex)
+	}
+
+	// Test that updates work
+	body = bytes.NewBufferString(`[
+		{"Id":"bso1", "SortIndex": 2},
+		{"Id":"bso2", "Payload": "updated payload"},
+		{"Id":"bso3", "Payload": "updated payload", "SortIndex":3}
+	]`)
+
+	req2, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/bookmarks", body)
+	req2.Header.Add("Content-Type", "application/json")
+	resp = testSendRequest(req2, deps)
+	assert.Equal(200, resp.Code)
+
+	bso, _ := deps.Dispatch.GetBSO(uid, cId, "bso1")
+	assert.Equal(bso.Payload, "initial payload") // stayed the same
+	assert.Equal(bso.SortIndex, 2)               // it updated
+
+	bso, _ = deps.Dispatch.GetBSO(uid, cId, "bso2")
+	assert.Equal(bso.Payload, "updated payload") // updated
+	assert.Equal(bso.SortIndex, 1)               // same
+
+	bso, _ = deps.Dispatch.GetBSO(uid, cId, "bso3")
+	assert.Equal(bso.Payload, "updated payload") // updated
+	assert.Equal(bso.SortIndex, 3)               // updated
+
 }
 func TestCollectionDELETE(t *testing.T) { t.Skip("TODO") }
 
@@ -240,14 +302,3 @@ func TestBsoPUT(t *testing.T)    { t.Skip("TODO") }
 func TestBsoDELETE(t *testing.T) { t.Skip("TODO") }
 
 func TestDelete(t *testing.T) { t.Skip("TODO") }
-
-func testExtractPostRequestBSOs(t *testing.T) {
-
-	json := `[
-		{"Id":"bso1", "Payload": "testing1"},
-		{"Id":"bso1", "SortIndex": 1},
-		{"Id":"bso1", "TTL": 86400},
-	]
-	`
-
-}

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -10,8 +11,8 @@ import (
 )
 
 var (
-	ErrMissingBSOId    = errors.Error("Missing BSO Id")
-	ErrInvalidPostJSON = errors.Error("Malformed POST JSON")
+	ErrMissingBSOId    = errors.New("Missing BSO Id")
+	ErrInvalidPostJSON = errors.New("Malformed POST JSON")
 )
 
 const (
@@ -161,40 +162,49 @@ func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, ui
 		http.Error(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
 		return
 	}
-	/*
 
-		collection := mux.Vars(r)["collection"]
-		cId, err := d.Dispatch.GetCollectionId(uid, collection)
-		if err != nil {
-			errorResponse(w, r, d, err)
-		}
+	collection := mux.Vars(r)["collection"]
+	cId, err := d.Dispatch.GetCollectionId(uid, collection)
+	if err != nil {
+		errorResponse(w, r, d, err)
+	}
 
-		// parsing the results is sort of ugly since fields can be left out
-		// if they are not to be submitted
-		postBSO := make([]map[string]interface{}, 10)
-		decoder := json.NewDecoder(r.Body)
+	// parsing the results is sort of ugly since fields can be left out
+	// if they are not to be submitted
+	var posted syncstorage.PostBSOInput
 
-		err = decoder.Decode(&postBSO)
-		if err != nil {
-			http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
-			return
-		}
-
-		if len(postBSO) > MAX_BSO_PER_POST_REQUEST {
-			http.Error(w, fmt.Sprintf("Exceeded %d BSO per rquest", MAX_BSO_PER_POST_REQUEST),
-				http.StatusRequestEntityTooLarge)
-			return
-		}
-
-		// Build the post request object
-		//todo := make(syncstorage.PostBSOInput)
+	decoder := json.NewDecoder(r.Body)
+	err = decoder.Decode(&posted)
+	if err != nil {
+		http.Error(w, "Invalid JSON posted", http.StatusBadRequest)
 		return
-	*/
+	}
+
+	if len(posted) > MAX_BSO_PER_POST_REQUEST {
+		http.Error(w, fmt.Sprintf("Exceeded %d BSO per rquest", MAX_BSO_PER_POST_REQUEST),
+			http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	// check for missing/invalid Ids
+	for _, b := range posted {
+		if !syncstorage.BSOIdOk(b.Id) {
+			http.Error(w, "Invalid or missing Id in data", http.StatusBadRequest)
+			return
+		}
+	}
+
+	results, err := d.Dispatch.PostBSOs(uid, cId, posted)
+	if err != nil {
+		errorResponse(w, r, d, err)
+	} else {
+		jsonResponse(w, r, d, results)
+	}
 }
 
-func extractPostRequestBSOs(r *http.Request) (syncstorage.PostBSOInput, error) {
-
-	return nil, nil
+func extractPostRequestBSOs(data []byte) (posted syncstorage.PostBSOInput, err error) {
+	err = json.Unmarshal(data, &posted)
+	return
 }
 
 //func hBsoGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
