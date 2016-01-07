@@ -28,12 +28,16 @@ func TestValidateBSOIds(t *testing.T) {
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-": true,
 		"012345678-ab": true,
 		"a":            true,
+		"?12345678-ab": true,
+		".":            true,
 
 		// should not validate ... this could be a lot ...
-		"":             false,
-		"?12345678-ab": false,
-		".":            false,
+		"":     false,
+		"\t":   false,
+		"\t\n": false,
+		"\r":   false,
 
+		// range
 		strings.Repeat("a", 65): false,
 		strings.Repeat("a", 64): true,
 	}
@@ -45,7 +49,7 @@ func TestValidateBSOIds(t *testing.T) {
 	}
 
 	// one wrong value should result in false
-	if ValidateBSOId("ok", "?notOK") != false {
+	if ValidateBSOId("ok", "\n") != false {
 		t.Errorf("expected fail on any wrong value")
 	}
 

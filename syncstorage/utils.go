@@ -10,7 +10,7 @@ var (
 )
 
 func init() {
-	bsoIdCheck = regexp.MustCompile("^[A-Za-z0-9_-]{1,64}$")
+	bsoIdCheck = regexp.MustCompile("^[[:print:]]{1,64}$")
 }
 
 func Now() int {
