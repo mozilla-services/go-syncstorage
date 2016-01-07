@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
@@ -150,7 +152,84 @@ func hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Dependenci
 }
 
 func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
-	notImplemented(w, r, d, uid)
+
+	// query params that control searching
+	var (
+		err           error
+		ids           []string
+		newer         int
+		full          bool
+		limit, offset int
+		sort          = syncstorage.SORT_NEWEST
+	)
+
+	if err = r.ParseForm(); err != nil {
+		http.Error(w, "Bad query parameters", http.StatusBadRequest)
+		return
+	}
+
+	if v := r.Form.Get("ids"); v != "" {
+		ids = strings.Split(v, ",")
+		for i, id := range ids {
+			id = strings.TrimSpace(id)
+			if syncstorage.BSOIdOk(id) {
+				ids[i] = id
+			} else {
+				http.Error(w, fmt.Sprintf("Invalid bso id %s", id), http.StatusBadRequest)
+				return
+			}
+		}
+
+		if len(ids) > 100 {
+			http.Error(w, fmt.Sprintf("Too many ids provided"), http.StatusRequestEntityTooLarge)
+			return
+		}
+	}
+
+	if v := r.Form.Get("newer"); v != "" {
+		newer, err = strconv.Atoi(v)
+		if err != nil || !syncstorage.NewerOk(newer) {
+			http.Error(w, "Invalid newer value", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if v := r.Form.Get("full"); v != "" {
+		full = true
+	}
+
+	if v := r.Form.Get("limit"); v != "" {
+		limit, err = strconv.Atoi(v)
+		if err != nil || !syncstorage.LimitOk(limit) {
+			http.Error(w, "Invalid limit value", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if v := r.Form.Get("offset"); v != "" {
+		offset, err = strconv.Atoi(v)
+		if err != nil || !syncstorage.OffsetOk(offset) {
+			http.Error(w, "Invalid offset value", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if v := r.Form.Get("sort"); v != "" {
+		switch v {
+		case "newest":
+			sort = syncstorage.SORT_NEWEST
+		case "oldest":
+			sort = syncstorage.SORT_OLDEST
+		case "index":
+			sort = syncstorage.SORT_INDEX
+		default:
+			http.Error(w, "Invalid sort value", http.StatusBadRequest)
+			return
+		}
+	}
+
+	okResponse(w, fmt.Sprintf("ids: %v, newer: %d, full: %v, limit: %d, offset: %d, sort: %v, `%v`", ids, newer, full, limit, offset, sort, r.Form.Get("ids")))
+
 }
 func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
 	notImplemented(w, r, d, uid)

@@ -233,7 +233,53 @@ func TestCollectionCounts(t *testing.T) {
 	}
 }
 
-func TestCollectionGET(t *testing.T) { t.Skip("TODO") }
+func TestCollectionGETValidatesData(t *testing.T) {
+
+	t.Parallel()
+	assert := assert.New(t)
+	uid := "1234"
+
+	base := "http://test/1.5/" + uid + "/storage/bookmarks?"
+	reqs := map[string]int{
+		base + "ids=":                        200,
+		base + "ids=abd,123,456":             200,
+		base + "ids=no spaces allowed, here": 400,
+
+		base + "newer=":      200,
+		base + "newer=1004":  200,
+		base + "newer=-1":    400,
+		base + "newer=abcde": 400,
+
+		base + "full=ok": 200,
+		base + "full=":   200,
+
+		base + "limit=":    200,
+		base + "limit=123": 200,
+		base + "limit=a":   400,
+		base + "limit=0":   400,
+		base + "limit=-1":  400,
+
+		base + "offset=":    200,
+		base + "offset=0":   200,
+		base + "offset=123": 200,
+		base + "offset=a":   400,
+		base + "offset=-1":  400,
+
+		base + "sort=":        200,
+		base + "sort=newest":  200,
+		base + "sort=oldest":  200,
+		base + "sort=index":   200,
+		base + "sort=invalid": 400,
+	}
+
+	for url, expected := range reqs {
+		resp := testRequest("GET", url, nil, nil)
+		assert.Equal(expected, resp.Code, url)
+	}
+
+	_ = assert
+}
+
 func TestCollectionPOST(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
