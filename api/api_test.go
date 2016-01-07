@@ -243,7 +243,7 @@ func TestCollectionGETValidatesData(t *testing.T) {
 	reqs := map[string]int{
 		base + "ids=":                        200,
 		base + "ids=abd,123,456":             200,
-		base + "ids=no spaces allowed, here": 400,
+		base + "ids=no\ttabs\tallowed, here": 400,
 
 		base + "newer=":      200,
 		base + "newer=1004":  200,
