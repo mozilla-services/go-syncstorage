@@ -55,9 +55,9 @@ func NewRouter(d *Dependencies) *mux.Router {
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", makeSyncHandler(d, notImplemented)).Methods("DELETE")
 
-	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionGET)).Methods("GET")
-	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionPOST)).Methods("POST")
-	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionDELETE)).Methods("DELETE")
+	storage.HandleFunc("/{collection}", makeSyncHandler(d, addcid(hCollectionGET))).Methods("GET")
+	storage.HandleFunc("/{collection}", makeSyncHandler(d, addcid(hCollectionPOST))).Methods("POST")
+	storage.HandleFunc("/{collection}", makeSyncHandler(d, addcid(hCollectionDELETE))).Methods("DELETE")
 
 	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, notImplemented)).Methods("GET")
 	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, notImplemented)).Methods("PUT")
@@ -67,6 +67,7 @@ func NewRouter(d *Dependencies) *mux.Router {
 }
 
 type syncHandler func(http.ResponseWriter, *http.Request, *Dependencies, string)
+type storageHandler func(http.ResponseWriter, *http.Request, *Dependencies, string, int)
 
 func makeSyncHandler(d *Dependencies, h syncHandler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +82,20 @@ func makeSyncHandler(d *Dependencies, h syncHandler) http.HandlerFunc {
 
 		// finally pass it off to the handler
 		h(w, r, d, uid)
+	})
+}
+
+// addcid adds another closure layer for extract the collection id from /1.5/{uid}/storage/{collection}
+// so other handlers don't need to repeat this code
+func addcid(h storageHandler) syncHandler {
+	return syncHandler(func(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+		collection := mux.Vars(r)["collection"]
+		cId, err := d.Dispatch.GetCollectionId(uid, collection)
+		if err != nil {
+			errorResponse(w, r, d, err)
+		} else {
+			h(w, r, d, uid, cId)
+		}
 	})
 }
 
@@ -151,7 +166,7 @@ func hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Dependenci
 	}
 }
 
-func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string, cId int) {
 
 	// query params that control searching
 	var (
@@ -231,21 +246,15 @@ func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid
 	okResponse(w, fmt.Sprintf("ids: %v, newer: %d, full: %v, limit: %d, offset: %d, sort: %v, `%v`", ids, newer, full, limit, offset, sort, r.Form.Get("ids")))
 
 }
-func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string, cId int) {
 	notImplemented(w, r, d, uid)
 }
 
-func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string, cId int) {
 	// accept text/plain from old (broken) clients
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" && ct != "text/plain" {
 		http.Error(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
 		return
-	}
-
-	collection := mux.Vars(r)["collection"]
-	cId, err := d.Dispatch.GetCollectionId(uid, collection)
-	if err != nil {
-		errorResponse(w, r, d, err)
 	}
 
 	// parsing the results is sort of ugly since fields can be left out
@@ -253,7 +262,7 @@ func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, ui
 	var posted syncstorage.PostBSOInput
 
 	decoder := json.NewDecoder(r.Body)
-	err = decoder.Decode(&posted)
+	err := decoder.Decode(&posted)
 	if err != nil {
 		http.Error(w, "Invalid JSON posted", http.StatusBadRequest)
 		return
