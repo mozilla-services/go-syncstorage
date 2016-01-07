@@ -290,11 +290,6 @@ func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, ui
 	}
 }
 
-func extractPostRequestBSOs(data []byte) (posted syncstorage.PostBSOInput, err error) {
-	err = json.Unmarshal(data, &posted)
-	return
-}
-
 //func hBsoGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
 //func hBSOPUT(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
 //func hBsoDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
