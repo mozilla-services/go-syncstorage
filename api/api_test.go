@@ -326,7 +326,7 @@ func TestCollectionPOST(t *testing.T) {
 	req2, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/bookmarks", body)
 	req2.Header.Add("Content-Type", "application/json")
 	resp = testSendRequest(req2, deps)
-	assert.Equal(200, resp.Code)
+	assert.Equal(http.StatusOK, resp.Code)
 
 	bso, _ := deps.Dispatch.GetBSO(uid, cId, "bso1")
 	assert.Equal(bso.Payload, "initial payload") // stayed the same
@@ -339,7 +339,23 @@ func TestCollectionPOST(t *testing.T) {
 	bso, _ = deps.Dispatch.GetBSO(uid, cId, "bso3")
 	assert.Equal(bso.Payload, "updated payload") // updated
 	assert.Equal(bso.SortIndex, 3)               // updated
+}
 
+func TestCollectionPOSTTooLargePayload(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	deps := makeTestDeps()
+
+	uid := "123456"
+	template := `[{"id":"%s", "payload": "%s", "sortindex": 1, "ttl": 2100000}]`
+	bodydata := fmt.Sprintf(template, "test", strings.Repeat("x", MAX_BSO_PAYLOAD_SIZE+1))
+
+	body := bytes.NewBufferString(bodydata)
+	req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/bookmarks", body)
+	req.Header.Add("Content-Type", "application/json")
+
+	res := testSendRequest(req, deps)
+	assert.Equal(http.StatusBadRequest, res.Code)
 }
 func TestCollectionDELETE(t *testing.T) { t.Skip("TODO") }
 

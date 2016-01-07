@@ -19,6 +19,7 @@ var (
 
 const (
 	MAX_BSO_PER_POST_REQUEST = 100
+	MAX_BSO_PAYLOAD_SIZE     = 256 * 1024
 )
 
 // Dependencies holds run time created resources for handlers to use
@@ -269,15 +270,21 @@ func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, ui
 	}
 
 	if len(posted) > MAX_BSO_PER_POST_REQUEST {
-		http.Error(w, fmt.Sprintf("Exceeded %d BSO per rquest", MAX_BSO_PER_POST_REQUEST),
+		http.Error(w, fmt.Sprintf("Exceeded %d BSO per request", MAX_BSO_PER_POST_REQUEST),
 			http.StatusRequestEntityTooLarge)
 		return
 	}
 
-	// check for missing/invalid Ids
+	// validate basic bso data
 	for _, b := range posted {
 		if !syncstorage.BSOIdOk(b.Id) {
 			http.Error(w, "Invalid or missing Id in data", http.StatusBadRequest)
+			return
+		}
+
+		if b.Payload != nil && len(*b.Payload) > MAX_BSO_PAYLOAD_SIZE {
+			http.Error(w, fmt.Sprintf("%s payload greater than max of %d bytes",
+				b.Id, MAX_BSO_PAYLOAD_SIZE), http.StatusBadRequest)
 			return
 		}
 	}
