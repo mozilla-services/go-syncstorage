@@ -13,8 +13,9 @@ func init() {
 	bsoIdCheck = regexp.MustCompile("^[[:print:]]{1,64}$")
 }
 
+// Now returns the number of millisecond since the unix epoch
 func Now() int {
-	return int(time.Now().UnixNano() / 1000)
+	return int(time.Now().UnixNano() / 1000 / 1000)
 }
 
 // ValidateBSOIds checks if all provided Is are 12 characters long
