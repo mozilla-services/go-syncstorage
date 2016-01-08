@@ -9,8 +9,11 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	. "github.com/mostlygeek/go-debug"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
 )
+
+var apiDebug = Debug("syncapi")
 
 var (
 	ErrMissingBSOId    = errors.New("Missing BSO Id")
@@ -20,13 +23,19 @@ var (
 const (
 	MAX_BSO_PER_POST_REQUEST = 100
 	MAX_BSO_PAYLOAD_SIZE     = 256 * 1024
+
+	// maximum number of BSOs per GET request
+	MAX_BSO_GET_LIMIT = 2500
 )
 
 // Dependencies holds run time created resources for handlers to use
 type Dependencies struct {
 	Dispatch *syncstorage.Dispatch
 
-	// Todo:
+	// Settings that tweak web behaviour
+	MaxBSOGetLimit int
+
+	// Other dependent services:
 	// HawkAuth
 	// Datadog
 	// Logging
@@ -112,10 +121,12 @@ func okResponse(w http.ResponseWriter, s string) {
 	fmt.Fprint(w, s)
 }
 
-// ErrorResponse writes an error to the HTTP response but also does stuff
+// errorResponse is used for Internal server errors which should have been
+// caused by bugs. It is meant to aid in debugging
 // on the serverside to aid in debugging
 func errorResponse(w http.ResponseWriter, r *http.Request, d *Dependencies, err error) {
 	// TODO someting with err and d...logging ? sentry? etc.
+	apiDebug("errorResponse: err=%s", err.Error())
 	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 }
 
@@ -171,12 +182,13 @@ func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid
 
 	// query params that control searching
 	var (
-		err           error
-		ids           []string
-		newer         int
-		full          bool
-		limit, offset int
-		sort          = syncstorage.SORT_NEWEST
+		err    error
+		ids    []string
+		newer  int
+		full   bool
+		limit  int
+		offset int
+		sort   = syncstorage.SORT_NEWEST
 	)
 
 	if err = r.ParseForm(); err != nil {
@@ -202,9 +214,17 @@ func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid
 		}
 	}
 
+	// we expect to get sync's two decimal timestamps, these need
+	// to be converted to milliseconds
 	if v := r.Form.Get("newer"); v != "" {
-		newer, err = strconv.Atoi(v)
-		if err != nil || !syncstorage.NewerOk(newer) {
+		floatNew, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			http.Error(w, "Invalid newer param format", http.StatusBadRequest)
+			return
+		}
+
+		newer = int(floatNew * 1000)
+		if !syncstorage.NewerOk(newer) {
 			http.Error(w, "Invalid newer value", http.StatusBadRequest)
 			return
 		}
@@ -220,6 +240,26 @@ func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid
 			http.Error(w, "Invalid limit value", http.StatusBadRequest)
 			return
 		}
+	}
+
+	// assign a default value for limit if nothing is supplied
+	if limit == 0 {
+		if d.MaxBSOGetLimit > 0 { // only use this if it was set
+			limit = d.MaxBSOGetLimit
+		} else {
+			limit = MAX_BSO_GET_LIMIT
+		}
+	}
+
+	// make sure limit is smaller than d.MaxBSOGetLimit if it is set
+	if limit > d.MaxBSOGetLimit && d.MaxBSOGetLimit > 0 {
+		limit = d.MaxBSOGetLimit
+	}
+
+	// finally a global max that we never want to go over
+	// TODO is this value ok for prod?
+	if limit > MAX_BSO_GET_LIMIT {
+		limit = MAX_BSO_GET_LIMIT
 	}
 
 	if v := r.Form.Get("offset"); v != "" {
@@ -244,9 +284,28 @@ func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid
 		}
 	}
 
-	okResponse(w, fmt.Sprintf("ids: %v, newer: %d, full: %v, limit: %d, offset: %d, sort: %v, `%v`", ids, newer, full, limit, offset, sort, r.Form.Get("ids")))
+	results, err := d.Dispatch.GetBSOs(uid, cId, ids, newer, sort, limit, offset)
+	if err != nil {
+		errorResponse(w, r, d, err)
+		return
+	}
 
+	w.Header().Set("X-Weave-Records", strconv.Itoa(results.Total))
+	if results.More {
+		w.Header().Set("X-Weave-Next-Offset", strconv.Itoa(results.Offset))
+	}
+
+	if full {
+		jsonResponse(w, r, d, results.BSOs)
+	} else {
+		bsoIds := make([]string, len(results.BSOs))
+		for i, b := range results.BSOs {
+			bsoIds[i] = b.Id
+		}
+		jsonResponse(w, r, d, bsoIds)
+	}
 }
+
 func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string, cId int) {
 	notImplemented(w, r, d, uid)
 }

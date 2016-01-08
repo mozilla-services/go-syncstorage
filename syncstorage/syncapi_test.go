@@ -211,6 +211,10 @@ func testApiPutBSO(db SyncApi, t *testing.T) {
 	assert.Equal("foo", bso.Payload)
 	assert.Equal(1, bso.SortIndex)
 
+	// sleep a bit so we have a least a 100th of a millisecond difference
+	// between the operations
+	time.Sleep(19 * time.Millisecond)
+
 	// test the UPDATE
 	modified2, err := db.PutBSO(cId, bId, String("bar"), Int(2), Int(DEFAULT_BSO_TTL))
 	assert.NoError(err)

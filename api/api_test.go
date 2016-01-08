@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -233,6 +234,175 @@ func TestCollectionCounts(t *testing.T) {
 	}
 }
 
+type jsResult []jsObject
+type jsObject struct {
+	Id        string  `json:"id"`
+	Modified  float64 `json:"modified"`
+	Payload   string  `json:"payload"`
+	SortIndex int     `json:"sortindex"`
+}
+
+func TestCollectionGET(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	deps := makeTestDeps()
+	uid := "123456"
+
+	// serverside limiting of the max requests!
+	deps.MaxBSOGetLimit = 4
+
+	// MAKE SOME TEST DATA
+	cId, _ := deps.Dispatch.GetCollectionId(uid, "bookmarks")
+	payload := "some data"
+	numBSOsToMake := 5
+
+	for i := 0; i < numBSOsToMake; i++ {
+		bId := "bid_" + strconv.Itoa(i)
+		sortindex := i
+		_, err := deps.Dispatch.PutBSO(uid, cId, bId, &payload, &sortindex, nil)
+
+		// sleep a bit so we get some spacing between bso modified times
+		// a doublel digit sleep is required since we're only accurate
+		// to the 100th of a millisecond ala sync1.5 api
+		time.Sleep(19 * time.Millisecond)
+		if !assert.NoError(err) {
+			return
+		}
+	}
+
+	base := "http://test/1.5/" + uid + "/storage/bookmarks"
+
+	// Without `full` just the bsoIds are returned
+	{
+		resp := testRequest("GET", base+`?sort=newest`, nil, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+		assert.Equal(`["bid_4","bid_3","bid_2","bid_1"]`, resp.Body.String())
+	}
+
+	// test different sort order
+	{
+		resp := testRequest("GET", base+`?sort=oldest`, nil, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+		assert.Equal(`["bid_0","bid_1","bid_2","bid_3"]`, resp.Body.String())
+	}
+
+	// test full param
+	{
+		resp := testRequest("GET", base+"?ids=bid_0,bid_1&full=yes&sort=oldest", nil, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+
+		body := resp.Body.Bytes()
+		var results jsResult
+
+		if assert.NoError(json.Unmarshal(body, &results), "JSON Decode error") {
+			assert.Len(results, 2)
+			assert.Equal("bid_0", results[0].Id)
+			assert.Equal("bid_1", results[1].Id)
+
+			assert.Equal(payload, results[0].Payload)
+			assert.Equal(payload, results[1].Payload)
+
+			assert.Equal(0, results[0].SortIndex)
+			assert.Equal(1, results[1].SortIndex)
+		}
+	}
+
+	// test limit+offset works
+	{
+		resp := testRequest("GET", base+`?sort=oldest&limit=2`, nil, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+		assert.Equal(`["bid_0","bid_1"]`, resp.Body.String())
+
+		offset := resp.Header().Get("X-Weave-Next-Offset")
+		if !assert.Equal("2", offset) {
+			return
+		}
+
+		resp2 := testRequest("GET", base+`?sort=oldest&limit=2&offset=`+offset, nil, deps)
+		if !assert.Equal(http.StatusOK, resp2.Code) {
+			return
+		}
+		assert.Equal(`["bid_2","bid_3"]`, resp2.Body.String())
+	}
+
+	// test automatic max offset. An artificially small MaxBSOGetLimit is defined
+	// in deps to make sure this behaves as expected
+	{
+		// Get everything but make sure the `limit` we have works
+		resp := testRequest("GET", base+`?full=yes&sort=newest`, nil, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+
+		body := resp.Body.Bytes()
+		var results jsResult
+
+		if assert.NoError(json.Unmarshal(body, &results), "JSON Decode error") {
+
+			assert.Len(results, deps.MaxBSOGetLimit)
+
+			// make sure sort=oldest works
+			assert.Equal("bid_4", results[0].Id)
+			assert.Equal(payload, results[0].Payload)
+			assert.Equal(4, results[0].SortIndex)
+
+			assert.Equal("4", resp.Header().Get("X-Weave-Next-Offset"))
+		}
+	}
+
+	// Test newer param
+	{
+		for i := 0; i < numBSOsToMake-1; i++ {
+			id := strconv.Itoa(i)
+			idexpected := strconv.Itoa(i + 1)
+
+			// Get everything but make sure the `limit` we have works
+			resp := testRequest("GET", base+"?full=yes&ids=bid_"+id, nil, deps)
+			if !assert.Equal(http.StatusOK, resp.Code) {
+				return
+			}
+
+			body := resp.Body.Bytes()
+			var results jsResult
+
+			if assert.NoError(json.Unmarshal(body, &results), "JSON Decode error") {
+				if !assert.Len(results, 1) {
+					return
+				}
+
+				modified := fmt.Sprintf("%.02f", results[0].Modified)
+				url := base + "?full=yes&limit=1&sort=oldest&newer=" + modified
+
+				resp2 := testRequest("GET", url, nil, deps)
+				if !assert.Equal(http.StatusOK, resp2.Code) {
+					return
+				}
+
+				body2 := resp2.Body.Bytes()
+				var results2 jsResult
+				if assert.NoError(json.Unmarshal(body2, &results2), "JSON Decode error") {
+					if !assert.Len(results2, 1) {
+						return
+					}
+					if !assert.Equal("bid_"+idexpected, results2[0].Id, "modified timestamp precision error?") {
+						return
+					}
+				}
+
+			}
+		}
+	}
+
+}
+
 func TestCollectionGETValidatesData(t *testing.T) {
 
 	t.Parallel()
@@ -272,12 +442,14 @@ func TestCollectionGETValidatesData(t *testing.T) {
 		base + "sort=invalid": 400,
 	}
 
-	for url, expected := range reqs {
-		resp := testRequest("GET", url, nil, nil)
-		assert.Equal(expected, resp.Code, url)
-	}
+	// reuse a single deps to not a make a bunch
+	// of new storage sub-dirs in testing
+	deps := makeTestDeps()
 
-	_ = assert
+	for url, expected := range reqs {
+		resp := testRequest("GET", url, nil, deps)
+		assert.Equal(expected, resp.Code, fmt.Sprintf("url:%s => %s", url, resp.Body.String()))
+	}
 }
 
 func TestCollectionPOST(t *testing.T) {
