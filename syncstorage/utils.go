@@ -7,10 +7,12 @@ import (
 
 var (
 	bsoIdCheck *regexp.Regexp
+	cNameCheck *regexp.Regexp
 )
 
 func init() {
 	bsoIdCheck = regexp.MustCompile("^[[:print:]]{1,64}$")
+	cNameCheck = regexp.MustCompile(`^[\w-\.]{1,32}$`)
 }
 
 // Now returns the number of millisecond since the unix epoch
@@ -71,6 +73,10 @@ func OffsetOk(offset int) bool {
 
 func NewerOk(newer int) bool {
 	return (newer >= 0)
+}
+
+func CollectionNameOk(cName string) bool {
+	return cNameCheck.MatchString(cName)
 }
 
 func String(s string) *string { return &s }

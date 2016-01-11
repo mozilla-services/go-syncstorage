@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
@@ -56,5 +58,33 @@ func TestValidateBSOIds(t *testing.T) {
 	// one wrong value should result in false
 	if ValidateBSOId("ok", "alsoOK") != true {
 		t.Errorf("expected all to validate")
+	}
+}
+
+func TestValidateCollectionNames(t *testing.T) {
+
+	// any combination of 32 url safe base64 characters
+	expectTrue := []string{
+		"012345678901234567890123456789aa",
+		"abcdefghijklmnopqrstuvwyz",
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+		"0123456789",
+		"-_.",
+	}
+
+	// anything > 32 chars, not in the url safe base64 character set
+	// ...
+	expectFalse := []string{
+		"", // too short
+		"012345678901234567890123456789aas", // too long
+		"abcd@",
+	}
+
+	for _, test := range expectTrue {
+		assert.True(t, CollectionNameOk(test))
+	}
+
+	for _, test := range expectFalse {
+		assert.False(t, CollectionNameOk(test))
 	}
 }

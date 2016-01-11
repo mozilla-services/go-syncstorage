@@ -401,6 +401,13 @@ func TestCollectionGET(t *testing.T) {
 		}
 	}
 
+	// test non existant collection returns an empty list
+	{
+		url := "http://test/1.5/" + uid + "/storage/this_is_not_a_real_collection"
+		resp := testRequest("GET", url, nil, deps)
+		fmt.Println(resp.Code, resp.Body.String())
+	}
+
 }
 
 func TestCollectionGETValidatesData(t *testing.T) {

@@ -65,9 +65,9 @@ func NewRouter(d *Dependencies) *mux.Router {
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", makeSyncHandler(d, notImplemented)).Methods("DELETE")
 
-	storage.HandleFunc("/{collection}", makeSyncHandler(d, addcid(hCollectionGET))).Methods("GET")
-	storage.HandleFunc("/{collection}", makeSyncHandler(d, addcid(hCollectionPOST))).Methods("POST")
-	storage.HandleFunc("/{collection}", makeSyncHandler(d, addcid(hCollectionDELETE))).Methods("DELETE")
+	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionGET)).Methods("GET")
+	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionPOST)).Methods("POST")
+	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionDELETE)).Methods("DELETE")
 
 	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, notImplemented)).Methods("GET")
 	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, notImplemented)).Methods("PUT")
@@ -178,7 +178,20 @@ func hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Dependenci
 	}
 }
 
-func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string, cId int) {
+func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+
+	collection := mux.Vars(r)["collection"]
+	cId, err := d.Dispatch.GetCollectionId(uid, collection)
+	if err != nil {
+		if err == syncstorage.ErrNotFound {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("[]"))
+			return
+		} else {
+			errorResponse(w, r, d, err)
+		}
+		return
+	}
 
 	// query params that control searching
 	var (
@@ -310,7 +323,7 @@ func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, 
 	notImplemented(w, r, d, uid)
 }
 
-func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string, cId int) {
+func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
 	// accept text/plain from old (broken) clients
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" && ct != "text/plain" {
 		http.Error(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
@@ -345,6 +358,16 @@ func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, ui
 			http.Error(w, fmt.Sprintf("%s payload greater than max of %d bytes",
 				b.Id, MAX_BSO_PAYLOAD_SIZE), http.StatusBadRequest)
 			return
+		}
+	}
+
+	collection := mux.Vars(r)["collection"]
+	cId, err := d.Dispatch.GetCollectionId(uid, collection)
+	if err != nil {
+		if err == syncstorage.ErrNotFound {
+			// create the collection
+		} else {
+			errorResponse(w, r, d, err)
 		}
 	}
 
