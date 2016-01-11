@@ -72,13 +72,29 @@ func testApiDeleteCollection(db SyncApi, t *testing.T) {
 	cName := "NewConnection"
 	cId, err := db.CreateCollection(cName)
 	if assert.Nil(err) {
+
+		bIds := []string{"1", "2", "3"}
+		for _, bId := range bIds {
+			if _, err := db.PutBSO(cId, bId, String("test"), nil, nil); !assert.NoError(err) {
+				return
+			}
+		}
+
 		err = db.DeleteCollection(cId)
 
 		// make sure it was deleted
 		if assert.Nil(err) {
+
+			// make sure BSOs are deleted
+			for _, bId := range bIds {
+				b, err := db.GetBSO(cId, bId)
+				assert.Exactly(ErrNotFound, err)
+				assert.Nil(b)
+			}
+
 			id, err := db.GetCollectionId(cName)
 			assert.Equal(0, id)
-			assert.Equal(ErrNotFound, err)
+			assert.Exactly(ErrNotFound, err)
 		}
 	}
 }
