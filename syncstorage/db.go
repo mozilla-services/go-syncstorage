@@ -18,11 +18,12 @@ var (
 	ErrNotImplemented = errors.New("Not Implemented")
 	ErrNothingToDo    = errors.New("Nothing to do")
 
-	ErrInvalidBSOId        = errors.New("Invalid BSO Id")
-	ErrInvalidCollectionId = errors.New("Invalid Collection Id")
-	ErrInvalidPayload      = errors.New("Invalid Payload")
-	ErrInvalidSortIndex    = errors.New("Invalid Sort Index")
-	ErrInvalidTTL          = errors.New("Invalid TTL")
+	ErrInvalidBSOId          = errors.New("Invalid BSO Id")
+	ErrInvalidCollectionId   = errors.New("Invalid Collection Id")
+	ErrInvalidCollectionName = errors.New("Invalid Collection Name")
+	ErrInvalidPayload        = errors.New("Invalid Payload")
+	ErrInvalidSortIndex      = errors.New("Invalid Sort Index")
+	ErrInvalidTTL            = errors.New("Invalid TTL")
 
 	ErrInvalidLimit  = errors.New("Invalid LIMIT")
 	ErrInvalidOffset = errors.New("Invalid OFFSET")
@@ -172,6 +173,12 @@ func NewDB(path string) (*DB, error) {
 func (d *DB) GetCollectionId(name string) (id int, err error) {
 	d.Lock()
 	defer d.Unlock()
+
+	if !CollectionNameOk(name) {
+		err = ErrInvalidCollectionName
+		return
+	}
+
 	err = d.db.QueryRow("SELECT Id FROM Collections where Name=?", name).Scan(&id)
 
 	if err == sql.ErrNoRows {
@@ -192,6 +199,11 @@ func (d *DB) GetCollectionModified(cId int) (modified int, err error) {
 func (d *DB) CreateCollection(name string) (cId int, err error) {
 	d.Lock()
 	defer d.Unlock()
+
+	if !CollectionNameOk(name) {
+		err = ErrInvalidCollectionName
+		return
+	}
 
 	tx, err := d.db.Begin()
 	if err != nil {
