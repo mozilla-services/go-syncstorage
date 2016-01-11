@@ -307,7 +307,7 @@ func testApiGetBSO(db SyncApi, t *testing.T) {
 	}
 
 	bso, err = db.GetBSO(cId, "nope")
-	assert.NoError(err)
+	assert.Exactly(ErrNotFound, err)
 	assert.Nil(bso)
 }
 
@@ -373,7 +373,7 @@ func testApiDeleteBSO(db SyncApi, t *testing.T) {
 	}
 
 	bso, err := db.GetBSO(cId, bId)
-	assert.NoError(err)
+	assert.Exactly(ErrNotFound, err)
 	assert.Nil(bso)
 }
 
@@ -406,15 +406,15 @@ func testApiDeleteBSOs(db SyncApi, t *testing.T) {
 	var b *BSO
 	b, err = db.GetBSO(cId, "b0")
 	assert.Nil(b)
-	assert.Nil(err)
+	assert.Exactly(ErrNotFound, err)
 
 	b, err = db.GetBSO(cId, "b1")
 	assert.Nil(b)
-	assert.Nil(err)
+	assert.Exactly(ErrNotFound, err)
 
 	b, err = db.GetBSO(cId, "b2")
 	assert.Nil(b)
-	assert.Nil(err)
+	assert.Exactly(ErrNotFound, err)
 }
 
 func testApiUsageStats(db SyncApi, t *testing.T) {
