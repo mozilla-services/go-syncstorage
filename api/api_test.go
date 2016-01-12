@@ -595,12 +595,23 @@ func TestCollectionDELETE(t *testing.T) {
 		return
 	}
 
+	cId, err := deps.Dispatch.GetCollectionId(uid, "my_collection")
+	if !assert.NoError(err) {
+		return
+	}
+
 	resp = testRequest("DELETE", "http://test/1.5/"+uid+"/storage/my_collection", nil, deps)
 	assert.Equal(http.StatusOK, resp.Code)
 	assert.Equal("ok", resp.Body.String())
 
-	_, err := deps.Dispatch.GetCollectionId(uid, "my_collection")
+	_, err = deps.Dispatch.GetCollectionId(uid, "my_collection")
 	assert.Exactly(syncstorage.ErrNotFound, err)
+
+	for _, bId := range []string{"bso1", "bso2", "bso3"} {
+		b, err := deps.Dispatch.GetBSO(uid, cId, bId)
+		assert.Nil(b)
+		assert.Exactly(syncstorage.ErrNotFound, err)
+	}
 }
 
 func TestBsoGET(t *testing.T)    { t.Skip("TODO") }
