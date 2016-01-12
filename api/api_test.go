@@ -405,7 +405,9 @@ func TestCollectionGET(t *testing.T) {
 	{
 		url := "http://test/1.5/" + uid + "/storage/this_is_not_a_real_collection"
 		resp := testRequest("GET", url, nil, deps)
-		fmt.Println(resp.Code, resp.Body.String())
+
+		assert.Equal(http.StatusOK, resp.Code)
+		assert.Equal("[]", resp.Body.String())
 	}
 
 }
@@ -520,6 +522,41 @@ func TestCollectionPOST(t *testing.T) {
 	assert.Equal(bso.SortIndex, 3)               // updated
 }
 
+func TestCollectionPOSTCreatesCollection(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	deps := makeTestDeps()
+
+	uid := "123456"
+
+	// Make sure INSERT works first
+	body := bytes.NewBufferString(`[
+		{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+		{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+		{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+	]`)
+
+	cName := "my_new_collection"
+
+	req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/"+cName, body)
+	req.Header.Add("Content-Type", "application/json")
+	resp := testSendRequest(req, deps)
+	if !assert.Equal(http.StatusOK, resp.Code) {
+		return
+	}
+
+	cId, err := deps.Dispatch.GetCollectionId(uid, cName)
+	if !assert.NoError(err) {
+		return
+	}
+
+	for _, bId := range []string{"bso1", "bso2", "bso3"} {
+		b, err := deps.Dispatch.GetBSO(uid, cId, bId)
+		assert.NotNil(b)
+		assert.NoError(err)
+	}
+}
+
 func TestCollectionPOSTTooLargePayload(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
@@ -536,7 +573,35 @@ func TestCollectionPOSTTooLargePayload(t *testing.T) {
 	res := testSendRequest(req, deps)
 	assert.Equal(http.StatusBadRequest, res.Code)
 }
-func TestCollectionDELETE(t *testing.T) { t.Skip("TODO") }
+
+func TestCollectionDELETE(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	deps := makeTestDeps()
+
+	uid := "123456"
+
+	// Make sure INSERT works first
+	body := bytes.NewBufferString(`[
+		{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+		{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+		{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+	]`)
+
+	req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/my_collection", body)
+	req.Header.Add("Content-Type", "application/json")
+	resp := testSendRequest(req, deps)
+	if !assert.Equal(http.StatusOK, resp.Code) {
+		return
+	}
+
+	resp = testRequest("DELETE", "http://test/1.5/"+uid+"/storage/my_collection", nil, deps)
+	assert.Equal(http.StatusOK, resp.Code)
+	assert.Equal("ok", resp.Body.String())
+
+	_, err := deps.Dispatch.GetCollectionId(uid, "my_collection")
+	assert.Exactly(syncstorage.ErrNotFound, err)
+}
 
 func TestBsoGET(t *testing.T)    { t.Skip("TODO") }
 func TestBsoPUT(t *testing.T)    { t.Skip("TODO") }

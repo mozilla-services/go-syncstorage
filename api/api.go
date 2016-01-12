@@ -95,18 +95,29 @@ func makeSyncHandler(d *Dependencies, h syncHandler) http.HandlerFunc {
 	})
 }
 
-// addcid adds another closure layer for extract the collection id from /1.5/{uid}/storage/{collection}
-// so other handlers don't need to repeat this code
-func addcid(h storageHandler) syncHandler {
-	return syncHandler(func(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
-		collection := mux.Vars(r)["collection"]
-		cId, err := d.Dispatch.GetCollectionId(uid, collection)
-		if err != nil {
-			errorResponse(w, r, d, err)
-		} else {
-			h(w, r, d, uid, cId)
+// getCollectionId turns the collection name in the URI to its internal Id number. the `automake`
+// parameter will auto-make it if it doesn't exist
+func getCollectionId(r *http.Request, d *Dependencies, uid string, automake bool) (cId int, err error) {
+	collection := mux.Vars(r)["collection"]
+
+	if !syncstorage.CollectionNameOk(collection) {
+		err = syncstorage.ErrInvalidCollectionName
+		return
+	}
+
+	cId, err = d.Dispatch.GetCollectionId(uid, collection)
+
+	if err == nil {
+		return
+	}
+
+	if err == syncstorage.ErrNotFound {
+		if automake {
+			cId, err = d.Dispatch.CreateCollection(uid, collection)
 		}
-	})
+	}
+
+	return
 }
 
 func notImplemented(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
@@ -180,19 +191,6 @@ func hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, d *Dependenci
 
 func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
 
-	collection := mux.Vars(r)["collection"]
-	cId, err := d.Dispatch.GetCollectionId(uid, collection)
-	if err != nil {
-		if err == syncstorage.ErrNotFound {
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte("[]"))
-			return
-		} else {
-			errorResponse(w, r, d, err)
-		}
-		return
-	}
-
 	// query params that control searching
 	var (
 		err    error
@@ -203,6 +201,20 @@ func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid
 		offset int
 		sort   = syncstorage.SORT_NEWEST
 	)
+
+	cId, err := getCollectionId(r, d, uid, false)
+
+	if err != nil {
+		if err == syncstorage.ErrNotFound {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("[]"))
+			return
+		} else {
+			errorResponse(w, r, d, err)
+			return
+
+		}
+	}
 
 	if err = r.ParseForm(); err != nil {
 		http.Error(w, "Bad query parameters", http.StatusBadRequest)
@@ -319,8 +331,21 @@ func hCollectionGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid
 	}
 }
 
-func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string, cId int) {
-	notImplemented(w, r, d, uid)
+func hCollectionDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+
+	cId, err := getCollectionId(r, d, uid, false)
+	if err == nil {
+		err = d.Dispatch.DeleteCollection(uid, cId)
+	}
+
+	if err != nil {
+		if err != syncstorage.ErrNotFound {
+			errorResponse(w, r, d, err)
+		}
+	} else {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("ok"))
+	}
 }
 
 func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
@@ -361,14 +386,14 @@ func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, ui
 		}
 	}
 
-	collection := mux.Vars(r)["collection"]
-	cId, err := d.Dispatch.GetCollectionId(uid, collection)
+	cId, err := getCollectionId(r, d, uid, true) // automake the collection if it doesn't exit
 	if err != nil {
-		if err == syncstorage.ErrNotFound {
-			// create the collection
+		if err == syncstorage.ErrInvalidCollectionName {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		} else {
 			errorResponse(w, r, d, err)
 		}
+		return
 	}
 
 	results, err := d.Dispatch.PostBSOs(uid, cId, posted)
