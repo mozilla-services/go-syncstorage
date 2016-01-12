@@ -1,6 +1,7 @@
 package syncstorage
 
 import (
+	"fmt"
 	"regexp"
 	"time"
 )
@@ -36,6 +37,12 @@ func Now() int {
 	ms = ms + 10 - (ms % 10)
 
 	return ms
+}
+
+// ModifiedToString turns the output of Now(), an integer of milliseconds since
+// the epoch to the sync 1.5's seconds w/ two decimals format
+func ModifiedToString(modified int) string {
+	return fmt.Sprintf("%.2f", float64(modified)/1000)
 }
 
 // ValidateBSOIds checks if all provided Is are 12 characters long

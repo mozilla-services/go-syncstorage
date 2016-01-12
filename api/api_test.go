@@ -664,7 +664,93 @@ func TestBsoGET(t *testing.T) {
 	}
 }
 
-func TestBsoPUT(t *testing.T)    { t.Skip("TODO") }
-func TestBsoDELETE(t *testing.T) { t.Skip("TODO") }
+func TestBsoPUT(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	deps := makeTestDeps()
+	uid := "123456"
+	collection := "bookmarks"
+	testNum := 0
 
-func TestDelete(t *testing.T) { t.Skip("TODO") }
+	cId, _ := deps.Dispatch.GetCollectionId(uid, collection)
+
+	{
+		testNum++
+		bsoId := "test" + strconv.Itoa(testNum)
+		data := `{"payload":"hello","sortindex":1, "ttl": 1000000}`
+		body := bytes.NewBufferString(data)
+		resp := testRequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+
+		b, err := deps.Dispatch.GetBSO(uid, cId, bsoId)
+		assert.NotNil(b)
+		assert.Equal("hello", b.Payload)
+		assert.Equal(1, b.SortIndex)
+		assert.NoError(err)
+		assert.NotEqual("", resp.Header().Get("X-Last-Modified"))
+	}
+
+	{ // test with fewer params
+		testNum++
+		bsoId := "test" + strconv.Itoa(testNum)
+		data := `{"payload":"hello","sortindex":1}`
+		body := bytes.NewBufferString(data)
+		resp := testRequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+
+		b, err := deps.Dispatch.GetBSO(uid, cId, bsoId)
+		assert.NotNil(b)
+		assert.NoError(err)
+	}
+
+	{ // test with fewer params
+		testNum++
+		bsoId := "test" + strconv.Itoa(testNum)
+		data := `{"payload":"hello", "sortindex":1}`
+		body := bytes.NewBufferString(data)
+		resp := testRequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+
+		b, err := deps.Dispatch.GetBSO(uid, cId, bsoId)
+		assert.NotNil(b)
+		assert.NoError(err)
+	}
+
+	{ // Test Updates
+		testNum++
+		bsoId := "test" + strconv.Itoa(testNum)
+		data := `{"payload":"hello", "sortindex":1}`
+		body := bytes.NewBufferString(data)
+		resp := testRequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+
+		b, err := deps.Dispatch.GetBSO(uid, cId, bsoId)
+		assert.NotNil(b)
+		assert.NoError(err)
+
+		data = `{"payload":"updated", "sortindex":2}`
+		body = bytes.NewBufferString(data)
+		resp = testRequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, deps)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+
+		b, err = deps.Dispatch.GetBSO(uid, cId, bsoId)
+		assert.NotNil(b)
+		assert.NoError(err)
+		assert.Equal("updated", b.Payload)
+		assert.Equal(2, b.SortIndex)
+	}
+
+}
+
+func TestBsoDELETE(t *testing.T) { t.Skip("TODO") }
+func TestDelete(t *testing.T)    { t.Skip("TODO") }

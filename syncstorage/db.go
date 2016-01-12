@@ -28,6 +28,8 @@ var (
 	ErrInvalidLimit  = errors.New("Invalid LIMIT")
 	ErrInvalidOffset = errors.New("Invalid OFFSET")
 	ErrInvalidNewer  = errors.New("Invalid NEWER than")
+
+	ErrPayloadTooBig = errors.New("BSO payload too big")
 )
 
 // dbTx allows passing of sql.DB or sql.Tx
@@ -584,6 +586,10 @@ func (d *DB) putBSO(tx dbTx,
 
 	if ttl != nil && !TTLOk(*ttl) {
 		return ErrInvalidTTL
+	}
+
+	if payload != nil && len(*payload) >= (256*1024) {
+		return ErrPayloadTooBig
 	}
 
 	exists, err := d.bsoExists(tx, cId, bId)

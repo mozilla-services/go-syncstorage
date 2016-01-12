@@ -428,15 +428,65 @@ func hBsoGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string
 	}
 
 	if err == syncstorage.ErrNotFound {
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		http.NotFound(w, r)
+		return
 	} else {
 		errorResponse(w, r, d, err)
 	}
 }
 
 func hBsoPUT(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
-	notImplemented(w, r, d, uid)
+
+	bId, ok := mux.Vars(r)["bsoId"]
+	if !ok || !syncstorage.BSOIdOk(bId) {
+		http.Error(w, "Invalid bso ID", http.StatusBadRequest)
+		return
+	}
+
+	var (
+		cId      int
+		modified int
+		err      error
+	)
+
+	var bso struct {
+		Payload   *string `json:"payload"`
+		SortIndex *int    `json:"sortindex"`
+		TTL       *int    `json:"ttl"`
+	}
+
+	cId, err = getCollectionId(r, d, uid, false)
+	if err == syncstorage.ErrNotFound {
+		http.NotFound(w, r)
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	err = decoder.Decode(&bso)
+
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	modified, err = d.Dispatch.PutBSO(uid, cId, bId, bso.Payload, bso.SortIndex, bso.TTL)
+
+	if err != nil {
+		if err == syncstorage.ErrPayloadTooBig {
+			http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	m := syncstorage.ModifiedToString(modified)
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("X-Last-Modified", m)
+	w.Write([]byte(m))
 }
+
 func hBsoDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
 	notImplemented(w, r, d, uid)
 }

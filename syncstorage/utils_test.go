@@ -24,6 +24,17 @@ func randData(n int) string {
 	return string(b)
 }
 
+func TestModifiedToString(t *testing.T) {
+
+	// gets rounded up
+	assert.Equal(t, "1234.57", ModifiedToString(1234567))
+
+	// no rounding
+	assert.Equal(t, "1234.56", ModifiedToString(1234560))
+	assert.Equal(t, "12345.60", ModifiedToString(12345600))
+
+}
+
 func TestValidateBSOIds(t *testing.T) {
 
 	tests := map[string]bool{
