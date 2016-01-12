@@ -69,9 +69,9 @@ func NewRouter(d *Dependencies) *mux.Router {
 	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionPOST)).Methods("POST")
 	storage.HandleFunc("/{collection}", makeSyncHandler(d, hCollectionDELETE)).Methods("DELETE")
 
-	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, notImplemented)).Methods("GET")
-	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, notImplemented)).Methods("PUT")
-	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, notImplemented)).Methods("DELETE")
+	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, hBsoGET)).Methods("GET")
+	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, hBsoPUT)).Methods("PUT")
+	storage.HandleFunc("/{collection}/{bsoId}", makeSyncHandler(d, hBsoDELETE)).Methods("DELETE")
 
 	return r
 }
@@ -404,6 +404,39 @@ func hCollectionPOST(w http.ResponseWriter, r *http.Request, d *Dependencies, ui
 	}
 }
 
-//func hBsoGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
-//func hBSOPUT(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
-//func hBsoDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {}
+func hBsoGET(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+
+	bId, ok := mux.Vars(r)["bsoId"]
+	if !ok || !syncstorage.BSOIdOk(bId) {
+		http.Error(w, "Invalid bso ID", http.StatusBadRequest)
+		return
+	}
+
+	var (
+		cId int
+		err error
+		bso *syncstorage.BSO
+	)
+
+	cId, err = getCollectionId(r, d, uid, false)
+	if err == nil {
+		bso, err = d.Dispatch.GetBSO(uid, cId, bId)
+		if err == nil {
+			jsonResponse(w, r, d, bso)
+			return
+		}
+	}
+
+	if err == syncstorage.ErrNotFound {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	} else {
+		errorResponse(w, r, d, err)
+	}
+}
+
+func hBsoPUT(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+	notImplemented(w, r, d, uid)
+}
+func hBsoDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
+	notImplemented(w, r, d, uid)
+}

@@ -34,6 +34,15 @@ var (
 	}
 )
 
+// used for testing that the returned json data is good
+type jsResult []jsonBSO
+type jsonBSO struct {
+	Id        string  `json:"id"`
+	Modified  float64 `json:"modified"`
+	Payload   string  `json:"payload"`
+	SortIndex int     `json:"sortindex"`
+}
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
@@ -232,14 +241,6 @@ func TestCollectionCounts(t *testing.T) {
 	for cName, expectedCount := range expected {
 		assert.Equal(expectedCount, collections[cName])
 	}
-}
-
-type jsResult []jsObject
-type jsObject struct {
-	Id        string  `json:"id"`
-	Modified  float64 `json:"modified"`
-	Payload   string  `json:"payload"`
-	SortIndex int     `json:"sortindex"`
 }
 
 func TestCollectionGET(t *testing.T) {
@@ -614,7 +615,55 @@ func TestCollectionDELETE(t *testing.T) {
 	}
 }
 
-func TestBsoGET(t *testing.T)    { t.Skip("TODO") }
+func TestBsoGET(t *testing.T) {
+
+	t.Parallel()
+	assert := assert.New(t)
+	deps := makeTestDeps()
+	uid := "123456"
+	collection := "bookmarks"
+	bsoId := "test"
+
+	var (
+		cId int
+		err error
+	)
+
+	if cId, err = deps.Dispatch.GetCollectionId(uid, collection); !assert.NoError(err) {
+		return
+	}
+
+	payload := syncstorage.String("test")
+	sortIndex := syncstorage.Int(100)
+	if _, err = deps.Dispatch.PutBSO(uid, cId, bsoId, payload, sortIndex, nil); !assert.NoError(err) {
+		return
+	}
+
+	resp := testRequest("GET", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, nil, deps)
+	if !assert.Equal(http.StatusOK, resp.Code) {
+		return
+	}
+
+	var bso jsonBSO
+	if err = json.Unmarshal(resp.Body.Bytes(), &bso); assert.NoError(err) {
+		assert.Equal(bsoId, bso.Id)
+		assert.Equal(*payload, bso.Payload)
+		assert.Equal(*sortIndex, bso.SortIndex)
+	}
+
+	// test that we get a 404 from a bso that doesn't exist
+	{
+		resp := testRequest("GET", "http://test/1.5/"+uid+"/storage/"+collection+"/nope", nil, deps)
+		assert.Equal(http.StatusNotFound, resp.Code)
+	}
+
+	// test that we get a 404 from a collection that doesn't exist
+	{
+		resp := testRequest("GET", "http://test/1.5/"+uid+"/storage/nope/nope", nil, deps)
+		assert.Equal(http.StatusNotFound, resp.Code)
+	}
+}
+
 func TestBsoPUT(t *testing.T)    { t.Skip("TODO") }
 func TestBsoDELETE(t *testing.T) { t.Skip("TODO") }
 

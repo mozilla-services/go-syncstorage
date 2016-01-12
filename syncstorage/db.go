@@ -743,6 +743,10 @@ func (d *DB) getBSOs(
 // getBSO is a simpler interface to getBSOs that returns a single BSO
 func (d *DB) getBSO(tx dbTx, cId int, bId string) (*BSO, error) {
 
+	if !BSOIdOk(bId) {
+		return nil, ErrInvalidBSOId
+	}
+
 	b := &BSO{Id: bId}
 
 	query := "SELECT SortIndex, Payload, Modified, TTL FROM BSO WHERE CollectionId=? and Id=?"
