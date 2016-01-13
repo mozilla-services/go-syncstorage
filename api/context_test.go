@@ -740,5 +740,29 @@ func TestContextBsoPUT(t *testing.T) {
 
 }
 
-func TestContextBsoDELETE(t *testing.T) { t.Skip("TODO") }
-func TestContextDelete(t *testing.T)    { t.Skip("TODO") }
+func TestContextBsoDELETE(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := makeTestContext()
+	uid := "123456"
+	collection := "bookmarks"
+	bId := "test"
+
+	cId, _ := context.Dispatch.GetCollectionId(uid, collection)
+
+	if _, err := context.Dispatch.PutBSO(uid, cId, bId, syncstorage.String("hi"), nil, nil); !assert.NoError(err) {
+		return
+	}
+
+	resp := request("DELETE", "/1.5/"+uid+"/storage/"+collection+"/"+bId, nil, context)
+	if !assert.Equal(http.StatusOK, resp.Code) ||
+		!assert.NotEqual("", resp.Header().Get("X-Last-Modified")) {
+		return
+	}
+
+	b, err := context.Dispatch.GetBSO(uid, cId, bId)
+	assert.Exactly(syncstorage.ErrNotFound, err)
+	assert.Nil(b)
+}
+
+func TestContextDelete(t *testing.T) { t.Skip("TODO") }

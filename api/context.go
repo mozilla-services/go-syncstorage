@@ -57,7 +57,7 @@ func NewRouterFromContext(c *Context) *mux.Router {
 	storage.HandleFunc("/{collection}", c.hawk(c.uid(c.hCollectionDELETE))).Methods("DELETE")
 	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.uid(c.hBsoGET))).Methods("GET")
 	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.uid(c.hBsoPUT))).Methods("PUT")
-	storage.HandleFunc("/{collection}/{bsoId}", handleTODO).Methods("DELETE")
+	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.uid(c.hBsoDELETE))).Methods("DELETE")
 
 	return r
 }
@@ -405,19 +405,28 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 	}
 }
 
-func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
-
-	bId, ok := mux.Vars(r)["bsoId"]
+func (c *Context) getbso(w http.ResponseWriter, r *http.Request) (bId string, ok bool) {
+	bId, ok = mux.Vars(r)["bsoId"]
 	if !ok || !syncstorage.BSOIdOk(bId) {
 		http.Error(w, "Invalid bso ID", http.StatusBadRequest)
-		return
 	}
 
+	return
+}
+
+func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
+
 	var (
+		bId string
+		ok  bool
 		cId int
 		err error
 		bso *syncstorage.BSO
 	)
+
+	if bId, ok = c.getbso(w, r); !ok {
+		return
+	}
 
 	cId, err = c.getcid(r, uid, false)
 	if err == nil {
@@ -438,17 +447,17 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 
 func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 
-	bId, ok := mux.Vars(r)["bsoId"]
-	if !ok || !syncstorage.BSOIdOk(bId) {
-		http.Error(w, "Invalid bso ID", http.StatusBadRequest)
-		return
-	}
-
 	var (
+		bId      string
+		ok       bool
 		cId      int
 		modified int
 		err      error
 	)
+
+	if bId, ok = c.getbso(w, r); !ok {
+		return
+	}
 
 	var bso struct {
 		Payload   *string `json:"payload"`
@@ -488,8 +497,33 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 	w.Write([]byte(m))
 }
 
-/*
-func hBsoDELETE(w http.ResponseWriter, r *http.Request, d *Dependencies, uid string) {
-	notImplemented(w, r, d, uid)
+func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string) {
+	var (
+		bId      string
+		ok       bool
+		cId      int
+		modified int
+		err      error
+	)
+
+	if bId, ok = c.getbso(w, r); !ok {
+		return
+	}
+
+	cId, err = c.getcid(r, uid, false)
+	if err == syncstorage.ErrNotFound {
+		http.NotFound(w, r)
+		return
+	}
+
+	modified, err = c.Dispatch.DeleteBSO(uid, cId, bId)
+	if err != nil {
+		c.Error(w, r, err)
+		return
+	} else {
+		m := syncstorage.ModifiedToString(modified)
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("X-Last-Modified", m)
+		w.Write([]byte(m))
+	}
 }
-*/
