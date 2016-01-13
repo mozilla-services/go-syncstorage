@@ -34,7 +34,8 @@ func NewRouterFromContext(c *Context) *mux.Router {
 	r := mux.NewRouter()
 
 	r.HandleFunc("/__heartbeat__", c.handleHeartbeat)
-	r.HandleFunc("/", handleTODO).Methods("DELETE")
+	r.HandleFunc("/1.5/{uid:[0-9]+}", c.hawk(c.uid(c.hDeleteEverything))).Methods("DELETE")
+	r.HandleFunc("/1.5/{uid:[0-9]+}/storage", c.hawk(c.uid(c.hDeleteEverything))).Methods("DELETE")
 
 	// support sync api version 1.5
 	// https://docs.services.mozilla.com/storage/apis-1.5.html
@@ -47,6 +48,7 @@ func NewRouterFromContext(c *Context) *mux.Router {
 	info.HandleFunc("/collections", c.hawk(c.uid(c.hInfoCollections))).Methods("GET")
 	info.HandleFunc("/collection_usage", c.hawk(c.uid(c.hInfoCollectionUsage))).Methods("GET")
 	info.HandleFunc("/collection_counts", c.hawk(c.uid(c.hInfoCollectionCounts))).Methods("GET")
+
 	info.HandleFunc("/quota", handleTODO).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
@@ -522,6 +524,20 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 		return
 	} else {
 		m := syncstorage.ModifiedToString(modified)
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("X-Last-Modified", m)
+		w.Write([]byte(m))
+	}
+}
+
+func (c *Context) hDeleteEverything(w http.ResponseWriter, r *http.Request, uid string) {
+
+	err := c.Dispatch.DeleteEverything(uid)
+	if err != nil {
+		c.Error(w, r, err)
+		return
+	} else {
+		m := syncstorage.ModifiedToString(syncstorage.Now())
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("X-Last-Modified", m)
 		w.Write([]byte(m))

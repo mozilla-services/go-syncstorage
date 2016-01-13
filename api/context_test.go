@@ -765,4 +765,41 @@ func TestContextBsoDELETE(t *testing.T) {
 	assert.Nil(b)
 }
 
-func TestContextDelete(t *testing.T) { t.Skip("TODO") }
+func TestContextDelete(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := makeTestContext()
+	uid := "123456"
+
+	var (
+		cId int
+		err error
+	)
+
+	for _, url := range []string{"/1.5/" + uid, "/1.5/" + uid + "/storage"} {
+		if cId, err = context.Dispatch.CreateCollection(uid, "my_collection"); !assert.NoError(err) {
+			return
+		}
+
+		bId := "test"
+		payload := "data"
+		if _, err = context.Dispatch.PutBSO(uid, cId, bId, &payload, nil, nil); !assert.NoError(err) {
+			return
+		}
+
+		resp := request("DELETE", url, nil, context)
+		if !assert.Equal(http.StatusOK, resp.Code, url) ||
+			!assert.NotEqual("", resp.Header().Get("X-Last-Modified"), url) {
+			return
+		}
+
+		b, err := context.Dispatch.GetBSO(uid, cId, bId)
+		assert.Exactly(syncstorage.ErrNotFound, err)
+		assert.Nil(b)
+
+		cTest, err := context.Dispatch.GetCollectionId(uid, "my_collection")
+		assert.Exactly(syncstorage.ErrNotFound, err)
+		assert.Equal(0, cTest)
+	}
+
+}
