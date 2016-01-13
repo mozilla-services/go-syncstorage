@@ -141,3 +141,8 @@ func TestDispatchSyncApiOptimize(t *testing.T) {
 	t.Parallel()
 	testApiOptimize(newDispatchwrap(), t)
 }
+
+func TestDispatchSyncApiDeleteEverything(t *testing.T) {
+	t.Parallel()
+	testApiDeleteEverything(newDispatchwrap(), t)
+}

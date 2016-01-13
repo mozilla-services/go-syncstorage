@@ -144,3 +144,8 @@ func (d *Dispatch) Optimize(uid string, thresholdPercent int) (ItHappened bool, 
 	pool := d.pools[d.Index(uid)]
 	return pool.Optimize(uid, thresholdPercent)
 }
+
+func (d *Dispatch) DeleteEverything(uid string) error {
+	pool := d.pools[d.Index(uid)]
+	return pool.DeleteEverything(uid)
+}

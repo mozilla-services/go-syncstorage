@@ -518,5 +518,34 @@ func testApiOptimize(db SyncApi, t *testing.T) {
 	}
 }
 
-//func (db SyncApi, t *testing.T) {
+func testApiDeleteEverything(db SyncApi, t *testing.T) {
+	assert := assert.New(t)
+
+	var (
+		cId int
+		err error
+	)
+
+	if cId, err = db.CreateCollection("my_collection"); !assert.NoError(err) {
+		return
+	}
+
+	bId := "test"
+	if _, err = db.PutBSO(cId, bId, String("test"), nil, nil); !assert.NoError(err) {
+		return
+	}
+
+	if !assert.NoError(db.DeleteEverything()) {
+		return
+	}
+
+	b, err := db.GetBSO(cId, bId)
+	assert.Exactly(ErrNotFound, err)
+	assert.Nil(b)
+
+	cTest, err := db.GetCollectionId("my_collection")
+	assert.Exactly(ErrNotFound, err)
+	assert.Equal(0, cTest)
+}
+
 //func (db SyncApi, t *testing.T) {

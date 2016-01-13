@@ -352,3 +352,13 @@ func (p *Pool) Optimize(uid string, thresholdPercent int) (ItHappened bool, err 
 	}
 	return db.Optimize(thresholdPercent)
 }
+
+func (p *Pool) DeleteEverything(uid string) error {
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return err
+	}
+
+	return db.DeleteEverything()
+}

@@ -87,3 +87,7 @@ func (p *poolwrap) Usage() (stats *DBPageStats, err error) {
 func (p *poolwrap) Optimize(thresholdPercent int) (ItHappened bool, err error) {
 	return p.pool.Optimize(p.uid, thresholdPercent)
 }
+
+func (p *poolwrap) DeleteEverything() error {
+	return p.pool.DeleteEverything(p.uid)
+}

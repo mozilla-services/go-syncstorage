@@ -256,3 +256,7 @@ func TestPoolSyncApiOptimize(t *testing.T) {
 	t.Parallel()
 	testApiOptimize(newPoolwrap(), t)
 }
+func TestPoolSyncApiDeleteEverything(t *testing.T) {
+	t.Parallel()
+	testApiDeleteEverything(newPoolwrap(), t)
+}

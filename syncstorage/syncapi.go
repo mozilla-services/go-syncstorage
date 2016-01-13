@@ -43,4 +43,6 @@ type SyncApi interface {
 
 	Usage() (stats *DBPageStats, err error)
 	Optimize(thresholdPercent int) (ItHappened bool, err error)
+
+	DeleteEverything() error
 }

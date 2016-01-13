@@ -103,6 +103,22 @@ func (g *GetResults) String() string {
 	return s
 }
 
+type DBPageStats struct {
+	Size  int
+	Total int
+	Free  int
+}
+
+// FreePercent calculates how much of total space is used up by
+// free pages (empty of data)
+func (s *DBPageStats) FreePercent() int {
+	if s.Total == 0 {
+		return 0
+	}
+
+	return int(float32(s.Free) / float32(s.Total) * 100)
+}
+
 type DB struct {
 	sync.RWMutex
 
@@ -254,6 +270,24 @@ func (d *DB) DeleteCollection(cId int) (err error) {
 	}
 
 	tx.Commit()
+	return
+}
+
+// DeleteEverything will delete all data from the users database
+// it will also purge free pages to recover disk space
+func (d *DB) DeleteEverything() (err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	// opt to delete all the data and vacuum up free
+	// pages instead of dropping the database/file
+	// since we only care about freeing up disk blocks
+	dml := `
+	DELETE FROM BSO;
+	DELETE FROM Collections;
+	VACUUM;
+	`
+	_, err = d.db.Exec(dml)
 	return
 }
 
@@ -848,20 +882,4 @@ func (d *DB) updateBSO(
 	_, err = tx.Exec(dml, values[0:i]...)
 
 	return
-}
-
-type DBPageStats struct {
-	Size  int
-	Total int
-	Free  int
-}
-
-// FreePercent calculates how much of total space is used up by
-// free pages (empty of data)
-func (s *DBPageStats) FreePercent() int {
-	if s.Total == 0 {
-		return 0
-	}
-
-	return int(float32(s.Free) / float32(s.Total) * 100)
 }
