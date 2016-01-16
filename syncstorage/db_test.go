@@ -395,6 +395,13 @@ func TestDeleteCollection(t *testing.T) {
 	testApiDeleteCollection(db, t)
 }
 
+func TestDeleteEverything(t *testing.T) {
+	t.Parallel()
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+	testApiDeleteEverything(db, t)
+}
+
 func TestTouchCollection(t *testing.T) {
 	t.Parallel()
 	db, _ := getTestDB()

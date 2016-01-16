@@ -87,3 +87,7 @@ func (d *dispatchwrap) Usage() (stats *DBPageStats, err error) {
 func (d *dispatchwrap) Optimize(thresholdPercent int) (ItHappened bool, err error) {
 	return d.dispatch.Optimize(d.uid, thresholdPercent)
 }
+
+func (d *dispatchwrap) DeleteEverything() error {
+	return d.dispatch.DeleteEverything(d.uid)
+}

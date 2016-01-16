@@ -18,15 +18,18 @@ var (
 	ErrNotImplemented = errors.New("Not Implemented")
 	ErrNothingToDo    = errors.New("Nothing to do")
 
-	ErrInvalidBSOId        = errors.New("Invalid BSO Id")
-	ErrInvalidCollectionId = errors.New("Invalid Collection Id")
-	ErrInvalidPayload      = errors.New("Invalid Payload")
-	ErrInvalidSortIndex    = errors.New("Invalid Sort Index")
-	ErrInvalidTTL          = errors.New("Invalid TTL")
+	ErrInvalidBSOId          = errors.New("Invalid BSO Id")
+	ErrInvalidCollectionId   = errors.New("Invalid Collection Id")
+	ErrInvalidCollectionName = errors.New("Invalid Collection Name")
+	ErrInvalidPayload        = errors.New("Invalid Payload")
+	ErrInvalidSortIndex      = errors.New("Invalid Sort Index")
+	ErrInvalidTTL            = errors.New("Invalid TTL")
 
 	ErrInvalidLimit  = errors.New("Invalid LIMIT")
 	ErrInvalidOffset = errors.New("Invalid OFFSET")
 	ErrInvalidNewer  = errors.New("Invalid NEWER than")
+
+	ErrPayloadTooBig = errors.New("BSO payload too big")
 )
 
 // dbTx allows passing of sql.DB or sql.Tx
@@ -98,6 +101,22 @@ func (g *GetResults) String() string {
 	}
 
 	return s
+}
+
+type DBPageStats struct {
+	Size  int
+	Total int
+	Free  int
+}
+
+// FreePercent calculates how much of total space is used up by
+// free pages (empty of data)
+func (s *DBPageStats) FreePercent() int {
+	if s.Total == 0 {
+		return 0
+	}
+
+	return int(float32(s.Free) / float32(s.Total) * 100)
 }
 
 type DB struct {
@@ -172,6 +191,12 @@ func NewDB(path string) (*DB, error) {
 func (d *DB) GetCollectionId(name string) (id int, err error) {
 	d.Lock()
 	defer d.Unlock()
+
+	if !CollectionNameOk(name) {
+		err = ErrInvalidCollectionName
+		return
+	}
+
 	err = d.db.QueryRow("SELECT Id FROM Collections where Name=?", name).Scan(&id)
 
 	if err == sql.ErrNoRows {
@@ -192,6 +217,11 @@ func (d *DB) GetCollectionModified(cId int) (modified int, err error) {
 func (d *DB) CreateCollection(name string) (cId int, err error) {
 	d.Lock()
 	defer d.Unlock()
+
+	if !CollectionNameOk(name) {
+		err = ErrInvalidCollectionName
+		return
+	}
 
 	tx, err := d.db.Begin()
 	if err != nil {
@@ -240,6 +270,24 @@ func (d *DB) DeleteCollection(cId int) (err error) {
 	}
 
 	tx.Commit()
+	return
+}
+
+// DeleteEverything will delete all data from the users database
+// it will also purge free pages to recover disk space
+func (d *DB) DeleteEverything() (err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	// opt to delete all the data and vacuum up free
+	// pages instead of dropping the database/file
+	// since we only care about freeing up disk blocks
+	dml := `
+	DELETE FROM BSO;
+	DELETE FROM Collections;
+	VACUUM;
+	`
+	_, err = d.db.Exec(dml)
 	return
 }
 
@@ -335,18 +383,20 @@ func (d *DB) InfoCollectionCounts() (map[string]int, error) {
 	return results, nil
 }
 
-type PostBSOInput map[string]*PutBSOInput
+type PostBSOInput []*PutBSOInput
 type PutBSOInput struct {
-	TTL, SortIndex *int
-	Payload        *string
+	Id        string  `json:"id"`
+	Payload   *string `json:"payload"`
+	TTL       *int    `json:"ttl"`
+	SortIndex *int    `json:"sortindex"`
 }
 
-func NewPutBSOInput(payload *string, sortIndex, ttl *int) *PutBSOInput {
+func NewPutBSOInput(id string, payload *string, sortIndex, ttl *int) *PutBSOInput {
 	if ttl == nil {
 		t := DEFAULT_BSO_TTL
 		ttl = &t
 	}
-	return &PutBSOInput{TTL: ttl, SortIndex: sortIndex, Payload: payload}
+	return &PutBSOInput{Id: id, TTL: ttl, SortIndex: sortIndex, Payload: payload}
 }
 
 func (d *DB) PostBSOs(cId int, input PostBSOInput) (*PostResults, error) {
@@ -361,13 +411,13 @@ func (d *DB) PostBSOs(cId int, input PostBSOInput) (*PostResults, error) {
 	modified := Now()
 	results := NewPostResults(modified)
 
-	for bId, data := range input {
-		err = d.putBSO(tx, cId, bId, modified, data.Payload, data.SortIndex, data.TTL)
+	for _, data := range input {
+		err = d.putBSO(tx, cId, data.Id, modified, data.Payload, data.SortIndex, data.TTL)
 		if err != nil {
-			results.AddFailure(bId, err.Error())
+			results.AddFailure(data.Id, err.Error())
 			continue
 		} else {
-			results.AddSuccess(bId)
+			results.AddSuccess(data.Id)
 		}
 	}
 
@@ -572,6 +622,10 @@ func (d *DB) putBSO(tx dbTx,
 		return ErrInvalidTTL
 	}
 
+	if payload != nil && len(*payload) >= (256*1024) {
+		return ErrPayloadTooBig
+	}
+
 	exists, err := d.bsoExists(tx, cId, bId)
 	if err != nil {
 		return err
@@ -729,6 +783,10 @@ func (d *DB) getBSOs(
 // getBSO is a simpler interface to getBSOs that returns a single BSO
 func (d *DB) getBSO(tx dbTx, cId int, bId string) (*BSO, error) {
 
+	if !BSOIdOk(bId) {
+		return nil, ErrInvalidBSOId
+	}
+
 	b := &BSO{Id: bId}
 
 	query := "SELECT SortIndex, Payload, Modified, TTL FROM BSO WHERE CollectionId=? and Id=?"
@@ -824,20 +882,4 @@ func (d *DB) updateBSO(
 	_, err = tx.Exec(dml, values[0:i]...)
 
 	return
-}
-
-type DBPageStats struct {
-	Size  int
-	Total int
-	Free  int
-}
-
-// FreePercent calculates how much of total space is used up by
-// free pages (empty of data)
-func (s *DBPageStats) FreePercent() int {
-	if s.Total == 0 {
-		return 0
-	}
-
-	return int(float32(s.Free) / float32(s.Total) * 100)
 }
