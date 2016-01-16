@@ -90,6 +90,7 @@ func TestHawkHeaderFromToken(t *testing.T) {
 
 // TestHawkAuthentication makes sure we can make a request all the way through
 func TestHawkAuthentication(t *testing.T) {
+	t.Parallel()
 
 	assert := assert.New(t)
 
