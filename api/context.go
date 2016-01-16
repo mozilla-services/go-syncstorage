@@ -11,13 +11,16 @@ import (
 	"github.com/gorilla/mux"
 	. "github.com/mostlygeek/go-debug"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
+	"github.com/mostlygeek/gohawk/hawk"
 )
 
 var apiDebug = Debug("syncapi")
 
 var (
-	ErrMissingBSOId    = errors.New("Missing BSO Id")
-	ErrInvalidPostJSON = errors.New("Malformed POST JSON")
+	ErrMissingBSOId      = errors.New("Missing BSO Id")
+	ErrInvalidPostJSON   = errors.New("Malformed POST JSON")
+	ErrRequireSecretList = errors.New("Require secrets list")
+	ErrRequireDispatch   = errors.New("Require Dispatch")
 )
 
 const (
@@ -34,32 +37,32 @@ func NewRouterFromContext(c *Context) *mux.Router {
 	r := mux.NewRouter()
 
 	r.HandleFunc("/__heartbeat__", c.handleHeartbeat)
-	r.HandleFunc("/1.5/{uid:[0-9]+}", c.hawk(c.uid(c.hDeleteEverything))).Methods("DELETE")
-	r.HandleFunc("/1.5/{uid:[0-9]+}/storage", c.hawk(c.uid(c.hDeleteEverything))).Methods("DELETE")
+	r.HandleFunc("/1.5/{uid:[0-9]+}", c.hawk(c.hDeleteEverything)).Methods("DELETE")
+	r.HandleFunc("/1.5/{uid:[0-9]+}/storage", c.hawk(c.hDeleteEverything)).Methods("DELETE")
 
 	// support sync api version 1.5
 	// https://docs.services.mozilla.com/storage/apis-1.5.html
 	v := r.PathPrefix("/1.5/{uid:[0-9]+}/").Subrouter()
 
 	// not part of the API, used to make sure uid matching works
-	v.HandleFunc("/echo-uid", c.hawk(c.uid(c.handleEchoUID))).Methods("GET")
+	v.HandleFunc("/echo-uid", c.hawk(c.handleEchoUID)).Methods("GET")
 
 	info := v.PathPrefix("/info/").Subrouter()
-	info.HandleFunc("/collections", c.hawk(c.uid(c.hInfoCollections))).Methods("GET")
-	info.HandleFunc("/collection_usage", c.hawk(c.uid(c.hInfoCollectionUsage))).Methods("GET")
-	info.HandleFunc("/collection_counts", c.hawk(c.uid(c.hInfoCollectionCounts))).Methods("GET")
+	info.HandleFunc("/collections", c.hawk(c.hInfoCollections)).Methods("GET")
+	info.HandleFunc("/collection_usage", c.hawk(c.hInfoCollectionUsage)).Methods("GET")
+	info.HandleFunc("/collection_counts", c.hawk(c.hInfoCollectionCounts)).Methods("GET")
 
 	info.HandleFunc("/quota", handleTODO).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", handleTODO).Methods("DELETE")
 
-	storage.HandleFunc("/{collection}", c.hawk(c.uid(c.hCollectionGET))).Methods("GET")
-	storage.HandleFunc("/{collection}", c.hawk(c.uid(c.hCollectionPOST))).Methods("POST")
-	storage.HandleFunc("/{collection}", c.hawk(c.uid(c.hCollectionDELETE))).Methods("DELETE")
-	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.uid(c.hBsoGET))).Methods("GET")
-	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.uid(c.hBsoPUT))).Methods("PUT")
-	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.uid(c.hBsoDELETE))).Methods("DELETE")
+	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionGET)).Methods("GET")
+	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionPOST)).Methods("POST")
+	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionDELETE)).Methods("DELETE")
+	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoGET)).Methods("GET")
+	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoPUT)).Methods("PUT")
+	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoDELETE)).Methods("DELETE")
 
 	return r
 }
@@ -68,8 +71,33 @@ func handleTODO(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Not implemented", http.StatusNotImplemented)
 }
 
+type syncApiHandler func(http.ResponseWriter, *http.Request, string)
+
+func NewContext(secrets []string, dispatch *syncstorage.Dispatch) (*Context, error) {
+
+	if len(secrets) == 0 {
+		return nil, ErrRequireSecretList
+	}
+
+	if dispatch == nil {
+		return nil, ErrRequireDispatch
+	}
+
+	creds := &CredentialsStore{secrets: secrets}
+
+	return &Context{
+		Dispatch: dispatch,
+		Hawk:     hawk.NewAuthenticator(creds, hawk.NewMemoryBackedReplayChecker()),
+	}, nil
+}
+
 type Context struct {
 	Dispatch *syncstorage.Dispatch
+
+	Hawk *hawk.Authenticator
+
+	// for testing
+	DisableHawk bool
 
 	// tweaks
 
@@ -77,14 +105,35 @@ type Context struct {
 	MaxBSOGetLimit int
 }
 
-type syncApiHandler func(http.ResponseWriter, *http.Request, string)
-
 // hawk checks HAWK authentication headers and returns an unauthorized response
 // if they are invalid
-func (c *Context) hawk(h http.HandlerFunc) http.HandlerFunc {
+func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// TODO actually implement HAWK here
-		h(w, r)
+
+		// have the ability to disable hawk auth for testing purposes
+		// when hawk is disabled we need to pull the uid from the
+		// url params... when hawk is enabled the uid comes from the Token sent
+		// by the tokenserver
+		if c.DisableHawk {
+			vars := mux.Vars(r)
+			if uid, ok := vars["uid"]; !ok {
+				http.Error(w, "do not have a uid to work with", http.StatusBadRequest)
+			} else {
+				h(w, r, uid)
+			}
+
+			return
+		}
+
+		// uhoh!
+		if c.Hawk == nil {
+			http.Error(w, "HAWK not initialized", http.StatusInternalServerError)
+			return
+		}
+
+		if creds, ok := c.Hawk.Authenticate(w, r); ok {
+			h(w, r, strconv.FormatUint(creds.(*Credentials).uid, 10))
+		}
 	})
 }
 

@@ -54,9 +54,12 @@ func makeTestContext() *Context {
 		panic(err)
 	}
 
-	return &Context{
-		Dispatch: dispatch,
+	context, err := NewContext([]string{"sekret"}, dispatch)
+	if err != nil {
+		panic(err)
 	}
+	context.DisableHawk = true
+	return context
 }
 
 func request(method, urlStr string, body io.Reader, c *Context) *httptest.ResponseRecorder {
