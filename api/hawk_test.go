@@ -139,7 +139,8 @@ func TestHawkAuthPOST(t *testing.T) {
 	assert.Len(results.Success, 3)
 	assert.Len(results.Failed, 0)
 
-	// make sure it made it there
+	// look in the DB directly to make sure
+	// data was written correctly
 	uidstr := strconv.FormatUint(uid, 10)
 	cId, _ := context.Dispatch.GetCollectionId(uidstr, "bookmarks")
 	for _, bId := range []string{"bso1", "bso2", "bso3"} {
