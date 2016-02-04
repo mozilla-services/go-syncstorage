@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,16 +14,22 @@ import (
 	"github.com/gorilla/mux"
 	. "github.com/mostlygeek/go-debug"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
-	"github.com/mostlygeek/gohawk/hawk"
+	"github.com/mostlygeek/go-syncstorage/token"
+	"github.com/mozilla-services/hawk-go"
 )
 
 var apiDebug = Debug("syncapi")
+var authDebug = Debug("syncapi:auth")
 
 var (
 	ErrMissingBSOId      = errors.New("Missing BSO Id")
 	ErrInvalidPostJSON   = errors.New("Malformed POST JSON")
 	ErrRequireSecretList = errors.New("Require secrets list")
 	ErrRequireDispatch   = errors.New("Require Dispatch")
+	ErrNoSecretsDefined  = errors.New("No secrets defined")
+
+	ErrTokenInvalid = errors.New("Token is invalid")
+	ErrTokenExpired = errors.New("Token is expired")
 )
 
 const (
@@ -83,18 +92,19 @@ func NewContext(secrets []string, dispatch *syncstorage.Dispatch) (*Context, err
 		return nil, ErrRequireDispatch
 	}
 
-	creds := &CredentialsStore{secrets: secrets}
-
 	return &Context{
 		Dispatch: dispatch,
-		Hawk:     hawk.NewAuthenticator(creds, hawk.NewMemoryBackedReplayChecker()),
+		Secrets:  secrets,
 	}, nil
 }
 
 type Context struct {
 	Dispatch *syncstorage.Dispatch
 
-	Hawk *hawk.Authenticator
+	// preshared secrets with the token server
+	// support a list of them as clients may send
+	// a non-expired valid token created with a rotated secret
+	Secrets []string
 
 	// for testing
 	DisableHawk bool
@@ -106,7 +116,7 @@ type Context struct {
 }
 
 // hawk checks HAWK authentication headers and returns an unauthorized response
-// if they are invalid
+// if they are invalid otherwise passes call to syncApiHandler
 func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -119,21 +129,83 @@ func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
 			if uid, ok := vars["uid"]; !ok {
 				http.Error(w, "do not have a uid to work with", http.StatusBadRequest)
 			} else {
+				authDebug("Hawk disabled. Using uid: %s", uid)
 				h(w, r, uid)
 			}
 
 			return
 		}
 
-		// uhoh!
-		if c.Hawk == nil {
-			http.Error(w, "HAWK not initialized", http.StatusInternalServerError)
+		// Step 1: Ensure the Hawk header is OK. Use ParseRequestHeader
+		// so the token does not have to be parsed twice to extract
+		// the UID from it
+		auth, err := hawk.NewAuthFromRequest(r, nil, nil)
+		if err != nil {
+			if e, ok := err.(hawk.AuthFormatError); ok {
+				http.Error(w,
+					fmt.Sprintf("Malformed hawk header, field: %s, err: %s", e.Field, e.Err),
+					http.StatusBadRequest)
+			} else {
+				w.Header().Set("WWW-Authenticate", "Hawk")
+				http.Error(w, err.Error(), http.StatusUnauthorized)
+			}
 			return
 		}
 
-		if creds, ok := c.Hawk.Authenticate(w, r); ok {
-			h(w, r, strconv.FormatUint(creds.(*Credentials).uid, 10))
+		// Step 2: Extract the Token
+		var (
+			parsedToken token.Token
+			tokenError  error = ErrTokenInvalid
+		)
+
+		for _, secret := range c.Secrets {
+			parsedToken, tokenError = token.ParseToken([]byte(secret), auth.Credentials.ID)
+			if err != nil { // wrong secret..
+				continue
+			}
 		}
+
+		if tokenError != nil {
+			http.Error(w,
+				fmt.Sprintf("Invalid token: %s", err.Error()),
+				http.StatusBadRequest)
+			return
+		} else {
+			// required to these manually so the auth.Valid()
+			// check has all the information it needs later
+			auth.Credentials.Key = parsedToken.DerivedSecret
+			auth.Credentials.Hash = sha256.New
+		}
+
+		// Step 3: Make sure it's valid...
+		if err := auth.Valid(); err != nil {
+			w.Header().Set("WWW-Authenticate", "Hawk")
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		// Step 4: Validate the payload hash if it exists
+		if auth.Hash != nil {
+			// read and replace io.Reader
+			content, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "Could not read request body", http.StatusInternalServerError)
+				return
+			}
+
+			r.Body = ioutil.NopCloser(bytes.NewReader(content))
+
+			pHash := auth.PayloadHash(r.Header.Get("Content-Type"))
+			pHash.Sum(content)
+			if !auth.ValidHash(pHash) {
+				w.Header().Set("WWW-Authenticate", "Hawk")
+				http.Error(w, "Hawk error, payload hash invalid", http.StatusUnauthorized)
+				return
+			}
+		}
+
+		// Step 5: *woot*
+		h(w, r, strconv.FormatUint(parsedToken.Payload.Uid, 10))
 	})
 }
 
