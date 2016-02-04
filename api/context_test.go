@@ -62,6 +62,25 @@ func makeTestContext() *Context {
 	return context
 }
 
+// at some point in life it gets tiring to keep typing the same
+// string concatination over and over...
+func syncurl(uid interface{}, path string) string {
+	var u string
+
+	switch uid.(type) {
+	case string:
+		u = uid.(string)
+	case uint64:
+		u = strconv.FormatUint(uid.(uint64), 10)
+	case int:
+		u = strconv.Itoa(uid.(int))
+	default:
+		panic("Unknown uid type")
+	}
+
+	return "http://synchost/1.5/" + u + "/" + path
+}
+
 func request(method, urlStr string, body io.Reader, c *Context) *httptest.ResponseRecorder {
 	req, err := http.NewRequest(method, urlStr, body)
 	if err != nil {

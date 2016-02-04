@@ -3,10 +3,10 @@ package api
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"testing"
 
@@ -22,10 +22,18 @@ func hawkrequest(
 	urlStr string,
 	token token.Token,
 ) (*http.Request, *hawk.Auth) {
-	return hawkrequestwithbody(method, urlStr, token, "", nil)
+	return hawkrequestbody(method, urlStr, token, "", nil)
 }
 
-func hawkrequestwithbody(
+func hawkcontext() *Context {
+	// context_test.go
+	c := makeTestContext()
+	c.DisableHawk = false
+
+	return c
+}
+
+func hawkrequestbody(
 	method,
 	urlStr string,
 	token token.Token,
@@ -62,20 +70,17 @@ func hawkrequestwithbody(
 
 	// add in the payload hash
 	if len(content) > 0 {
-		auth.Hash = auth.PayloadHash(contentType).Sum(content)
+		h := auth.PayloadHash(contentType)
+		h.Sum(content)
+		auth.SetHash(h)
+		req.Header.Set("Content-Type", contentType)
 	}
 
 	req.Header.Add("Authorization", auth.RequestHeader())
 	return req, auth
 }
 
-func TestHawkAuthHeader(t *testing.T) {
-	assert := assert.New(t)
-
-	c := makeTestContext()
-	c.DisableHawk = false
-
-	var uid uint64 = 12345
+func testtoken(c *Context, uid uint64) token.Token {
 	node := "https://syncnode-12345.services.mozilla.com"
 	payload := token.TokenPayload{
 		Uid:     uid,
@@ -84,17 +89,64 @@ func TestHawkAuthHeader(t *testing.T) {
 		Salt:    "pacific",
 	}
 
-	token, err := token.NewToken([]byte(c.Secrets[0]), payload)
-	if !assert.NoError(err) {
+	tok, err := token.NewToken([]byte(c.Secrets[0]), payload)
+	if err != nil {
+		panic(err)
+	}
+
+	return tok
+}
+
+func TestHawkAuthGET(t *testing.T) {
+	t.Parallel()
+	context := hawkcontext()
+
+	var uid uint64 = 12345
+	tok := testtoken(context, uid)
+
+	req, _ := hawkrequest("GET", syncurl(uid, "info/collections"), tok)
+	resp := sendrequest(req, context)
+	assert.Equal(t, http.StatusOK, resp.Code)
+}
+
+func TestHawkAuthPOST(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := hawkcontext()
+
+	var uid uint64 = 12345
+
+	tok := testtoken(context, uid)
+
+	body := bytes.NewBufferString(`[
+		{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+		{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+		{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+	]`)
+
+	req, _ := hawkrequestbody("POST", syncurl(uid, "storage/bookmarks"), tok, "application/json", body)
+	resp := sendrequest(req, context)
+	if !assert.Equal(http.StatusOK, resp.Code, resp.Body.String()) {
 		return
 	}
 
-	url := "http://t/1.5/" + strconv.FormatUint(uid, 10) + "/info/collections"
-	req, _ := hawkrequest("GET", url, token)
+	var results syncstorage.PostResults
+	jsbody := resp.Body.Bytes()
+	err := json.Unmarshal(jsbody, &results)
+	if !assert.NoError(err) {
+		return
+	}
+	assert.Len(results.Success, 3)
+	assert.Len(results.Failed, 0)
 
-	resp := httptest.NewRecorder()
-
-	router := NewRouterFromContext(c)
-	router.ServeHTTP(resp, req)
-	assert.Equal(http.StatusOK, resp.Code)
+	// make sure it made it there
+	uidstr := strconv.FormatUint(uid, 10)
+	cId, _ := context.Dispatch.GetCollectionId(uidstr, "bookmarks")
+	for _, bId := range []string{"bso1", "bso2", "bso3"} {
+		bso, _ := context.Dispatch.GetBSO(uidstr, cId, bId)
+		assert.Equal("initial payload", bso.Payload)
+		assert.Equal(1, bso.SortIndex)
+	}
 }
+
+// TODO test Hawk auth failures

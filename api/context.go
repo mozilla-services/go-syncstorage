@@ -186,6 +186,11 @@ func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
 
 		// Step 4: Validate the payload hash if it exists
 		if auth.Hash != nil {
+			if r.Header.Get("Content-Type") == "" {
+				http.Error(w, "Content-Type missing", http.StatusBadRequest)
+				return
+			}
+
 			// read and replace io.Reader
 			content, err := ioutil.ReadAll(r.Body)
 			if err != nil {
@@ -194,7 +199,6 @@ func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
 			}
 
 			r.Body = ioutil.NopCloser(bytes.NewReader(content))
-
 			pHash := auth.PayloadHash(r.Header.Get("Content-Type"))
 			pHash.Sum(content)
 			if !auth.ValidHash(pHash) {
