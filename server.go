@@ -1,44 +1,66 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"net/http"
 	"os"
+	"strconv"
 
-	"github.com/vrischmann/envconfig"
+	"github.com/mostlygeek/go-syncstorage/api"
+	"github.com/mostlygeek/go-syncstorage/config"
+	"github.com/mostlygeek/go-syncstorage/syncstorage"
+	"github.com/mozilla-services/go-mozlog"
 )
 
-var Conf struct {
-	Port    int
-	Secrets []string
+func init() {
+	mozlog.Logger.LoggerName = "go-syncstorage"
 
-	// Where to save data
-	DataDir string `envconfig:"default=/var/lib/sync"`
-
-	// POOL_COUNT * POOL_OPEN_FILES = total number of sqlite
-	// open file handlers are used at a time. Help keeps
-	// a lid file handler usage.
-	Pool struct {
-		Count     int `envconfig:"default=8"`
-		OpenFiles int `envconfig:"default=32,optional,POOL_OPEN_FILES"`
+	// log messages will
+	if config.Log.Mozlog && config.Log.LineNumber == false {
+		log.SetFlags(0)
 	}
 
-	// TLS is optiona. If these are empty listens on HTTP
-	Tls struct {
-		Cert string `envconfig:"default=none"`
-		Key  string `envconfig:"default=none"`
+	// disable mozlog ... library changes logger by default herm..
+	if !config.Log.Mozlog {
+		log.SetOutput(os.Stdout)
 	}
 }
 
 func main() {
 
-	if err := envconfig.Init(&Conf); err != nil {
-		fmt.Printf("err=%s\n", err)
-		os.Exit(1)
+	// for now we will use a fixed number of pools
+	// and spread config.MaxOpenFiles evenly among them
+	numPools := uint16(8)
+	cacheSize := int(uint16(config.MaxOpenFiles) / numPools)
+
+	dispatch, err := syncstorage.NewDispatch(
+		numPools, config.DataDir, syncstorage.TwoLevelPath, cacheSize)
+
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	// validate configuration values
+	context, err := api.NewContext(config.Secrets, dispatch)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// initialize dispatcher
-	// initialize the HTTP context
-	// Listen
+	router := api.NewRouterFromContext(context)
+
+	listenOn := ":" + strconv.Itoa(config.Port)
+	if config.Tls.Cert != "" {
+		log.Printf("Listening for TLS+HTTP on port %s", listenOn)
+		err := http.ListenAndServeTLS(
+			listenOn, config.Tls.Cert, config.Tls.Key, router)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		log.Printf("Listening for HTTP on port %s", listenOn)
+		err := http.ListenAndServe(listenOn, router)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 }
