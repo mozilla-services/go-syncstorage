@@ -54,7 +54,7 @@ func main() {
 	}
 
 	router := api.NewRouterFromContext(context)
-	router = api.LogHandler(router)
+	loggedRouter := api.LogHandler(router)
 
 	// set up additional handlers
 
@@ -62,13 +62,13 @@ func main() {
 	if config.Tls.Cert != "" {
 		log.WithFields(log.Fields{"addr": listenOn, "tls": true}).Info("HTTP Listening at " + listenOn)
 		err := http.ListenAndServeTLS(
-			listenOn, config.Tls.Cert, config.Tls.Key, router)
+			listenOn, config.Tls.Cert, config.Tls.Key, loggedRouter)
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
 		log.WithFields(log.Fields{"addr": listenOn, "tls": false}).Info("HTTP Listening at " + listenOn)
-		err := http.ListenAndServe(listenOn, router)
+		err := http.ListenAndServe(listenOn, loggedRouter)
 		if err != nil {
 			log.Fatal(err)
 		}
