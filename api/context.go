@@ -166,8 +166,9 @@ func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
 		}
 
 		if tokenError != nil {
+			authDebug("tokenError: %s", tokenError.Error())
 			http.Error(w,
-				fmt.Sprintf("Invalid token: %s", err.Error()),
+				fmt.Sprintf("Invalid token: %s", tokenError.Error()),
 				http.StatusBadRequest)
 			return
 		} else {
