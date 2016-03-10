@@ -26,6 +26,14 @@ func init() {
 	}
 }
 
+type logHandler struct {
+	handler http.Handler
+}
+
+func (h logHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+}
+
 func main() {
 
 	// for now we will use a fixed number of pools
@@ -46,6 +54,9 @@ func main() {
 	}
 
 	router := api.NewRouterFromContext(context)
+	router = api.LogHandler(router)
+
+	// set up additional handlers
 
 	listenOn := ":" + strconv.Itoa(config.Port)
 	if config.Tls.Cert != "" {
