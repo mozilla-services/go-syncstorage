@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	log "github.com/Sirupsen/logrus"
+
 	_ "github.com/mattn/go-sqlite3"
 	. "github.com/mostlygeek/go-debug"
 )
@@ -154,7 +156,9 @@ func (d *DB) Open() (err error) {
 				return err
 			}
 		} else {
-			dbDebug("Initialized new database at at %s", d.Path)
+			log.WithFields(log.Fields{
+				"path": d.Path,
+			}).Debug("db initialized")
 			if err := tx.Commit(); err != nil {
 				return err
 			}
@@ -878,7 +882,11 @@ func (d *DB) updateBSO(
 	i += 1
 
 	dml := "UPDATE BSO SET " + set + " WHERE CollectionId=? and Id=?"
-	dbDebug("updateBSO(): %s, vals: %v", dml, values)
+	log.WithFields(log.Fields{
+		"func":   "updateBSO",
+		"query":  dml,
+		"values": values,
+	}).Debug("db")
 	_, err = tx.Exec(dml, values[0:i]...)
 
 	return

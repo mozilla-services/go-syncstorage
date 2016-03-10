@@ -12,6 +12,18 @@ import (
 )
 
 func init() {
+	switch config.Log.Level {
+	case "fatal":
+		log.SetLevel(log.FatalLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	default:
+		log.SetLevel(log.InfoLevel)
+	}
 }
 
 func main() {
@@ -37,14 +49,14 @@ func main() {
 
 	listenOn := ":" + strconv.Itoa(config.Port)
 	if config.Tls.Cert != "" {
-		log.Printf("Listening for TLS+HTTP on port %s", listenOn)
+		log.WithFields(log.Fields{"addr": listenOn, "tls": true}).Info("HTTP Listening at " + listenOn)
 		err := http.ListenAndServeTLS(
 			listenOn, config.Tls.Cert, config.Tls.Key, router)
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
-		log.Printf("Listening for HTTP on port %s", listenOn)
+		log.WithFields(log.Fields{"addr": listenOn, "tls": false}).Info("HTTP Listening at " + listenOn)
 		err := http.ListenAndServe(listenOn, router)
 		if err != nil {
 			log.Fatal(err)

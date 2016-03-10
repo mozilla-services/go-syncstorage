@@ -1,9 +1,10 @@
 package config
 
 import (
-	"log"
 	"os"
 	"path/filepath"
+
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/vrischmann/envconfig"
 )
@@ -15,11 +16,11 @@ type TlsConfig struct {
 
 type LogConfig struct {
 
+	// logging level, panic, fatal, error, warn, info, debug
+	Level string `envconfig:"default=info"`
+
 	// use mozlog format
 	Mozlog bool `envconfig:"default=false"`
-
-	// if using Mozlog, also output filename + line numbers
-	LineNumber bool `envconfig:"default=false"`
 }
 
 var Config struct {
@@ -95,6 +96,12 @@ func init() {
 		if _, err := os.Stat(Config.Tls.Key); os.IsNotExist(err) {
 			log.Fatalf("Config Error: TLS_KEY not found at %s", Config.Tls.Key)
 		}
+	}
+
+	switch Config.Log.Level {
+	case "panic", "fatal", "error", "warn", "info", "debug":
+	default:
+		log.Fatalf("Config Error: LOG_LEVEL must be [panic, fatal, error, warn, info, debug]")
 	}
 
 	Log = Config.Log
