@@ -1,29 +1,17 @@
 package main
 
 import (
-	"log"
 	"net/http"
-	"os"
 	"strconv"
+
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/mostlygeek/go-syncstorage/api"
 	"github.com/mostlygeek/go-syncstorage/config"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
-	"github.com/mozilla-services/go-mozlog"
 )
 
 func init() {
-	mozlog.Logger.LoggerName = "go-syncstorage"
-
-	// log messages will
-	if config.Log.Mozlog && config.Log.LineNumber == false {
-		log.SetFlags(0)
-	}
-
-	// disable mozlog ... library changes logger by default herm..
-	if !config.Log.Mozlog {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 func main() {
