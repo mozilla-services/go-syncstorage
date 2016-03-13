@@ -83,6 +83,8 @@ func syncurl(uid interface{}, path string) string {
 
 func request(method, urlStr string, body io.Reader, c *Context) *httptest.ResponseRecorder {
 	req, err := http.NewRequest(method, urlStr, body)
+	req.Header.Set("Accept", "application/json")
+
 	if err != nil {
 		panic(err)
 	}
@@ -99,6 +101,110 @@ func sendrequest(req *http.Request, c *Context) *httptest.ResponseRecorder {
 	router := NewRouterFromContext(c)
 	router.ServeHTTP(w, req)
 	return w
+}
+
+func TestContextJSON(t *testing.T) {
+	assert := assert.New(t)
+	c := makeTestContext()
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept", "application/json")
+
+	js := []byte(`[{"A":"one", "B":1}, {"A":"two", "B":2}]`)
+
+	var val []struct {
+		A string
+		B int
+	}
+
+	err := json.Unmarshal(js, &val)
+	if assert.NoError(err) {
+		c.JSON(w, req, val)
+		assert.Equal("application/json", w.HeaderMap.Get("Content-Type"))
+		assert.Equal(`[{"A":"one","B":1},{"A":"two","B":2}]`, w.Body.String())
+	}
+
+}
+
+func TestContextNewLine(t *testing.T) {
+	assert := assert.New(t)
+	c := makeTestContext()
+
+	// some test data
+	var val []struct {
+		A string
+		B int
+	}
+	js := []byte(`[{"A":"one", "B":1}, {"A":"two", "B":2}, {"A":"three", "B":3}]`)
+	err := json.Unmarshal(js, &val)
+	if !assert.NoError(err) {
+		return
+	}
+
+	// single object
+	{
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept", "application/newlines")
+		c.NewLine(w, req, val[0])
+		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
+		expected := `{"A":"one","B":1}` + "\n"
+		assert.Equal(expected, w.Body.String())
+	}
+
+	// multi-newline
+	{
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept", "application/newlines")
+		c.NewLine(w, req, val)
+		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
+		expected := `{"A":"one","B":1}
+{"A":"two","B":2}
+{"A":"three","B":3}
+`
+		assert.Equal(expected, w.Body.String())
+	}
+}
+
+func TestContextJsonNewline(t *testing.T) {
+	assert := assert.New(t)
+	c := makeTestContext()
+
+	// some test data
+	var val []struct {
+		A string
+		B int
+	}
+	js := []byte(`[{"A":"one", "B":1}, {"A":"two", "B":2}, {"A":"three", "B":3}]`)
+	err := json.Unmarshal(js, &val)
+	if !assert.NoError(err) {
+		return
+	}
+
+	// JSON response ok?
+	{
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept", "application/json")
+		c.JsonNewline(w, req, val)
+		assert.Equal("application/json", w.HeaderMap.Get("Content-Type"))
+		assert.Equal(`[{"A":"one","B":1},{"A":"two","B":2},{"A":"three","B":3}]`, w.Body.String())
+	}
+
+	// Newline ok?
+	{
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept", "application/newlines")
+		c.JsonNewline(w, req, val)
+		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
+		expected := `{"A":"one","B":1}
+{"A":"two","B":2}
+{"A":"three","B":3}
+`
+		assert.Equal(expected, w.Body.String())
+	}
 }
 
 func TestContextHeartbeat(t *testing.T) {
@@ -519,6 +625,70 @@ func TestContextCollectionPOST(t *testing.T) {
 	req2.Header.Add("Content-Type", "application/json")
 	resp = sendrequest(req2, context)
 	assert.Equal(http.StatusOK, resp.Code)
+
+	bso, _ := context.Dispatch.GetBSO(uid, cId, "bso1")
+	assert.Equal(bso.Payload, "initial payload") // stayed the same
+	assert.Equal(bso.SortIndex, 2)               // it updated
+
+	bso, _ = context.Dispatch.GetBSO(uid, cId, "bso2")
+	assert.Equal(bso.Payload, "updated payload") // updated
+	assert.Equal(bso.SortIndex, 1)               // same
+
+	bso, _ = context.Dispatch.GetBSO(uid, cId, "bso3")
+	assert.Equal(bso.Payload, "updated payload") // updated
+	assert.Equal(bso.SortIndex, 3)               // updated
+}
+
+func TestContextCollectionPOSTNewLines(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := makeTestContext()
+
+	uid := "123456"
+
+	// Make sure INSERT works first
+	body := bytes.NewBufferString(`{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+	`)
+
+	req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/bookmarks", body)
+	req.Header.Add("Content-Type", "application/newlines")
+
+	resp := sendrequest(req, context)
+	if !assert.Equal(http.StatusOK, resp.Code) {
+		return
+	}
+
+	var results syncstorage.PostResults
+	jsbody := resp.Body.Bytes()
+	err := json.Unmarshal(jsbody, &results)
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Len(results.Success, 3)
+	assert.Len(results.Failed, 0)
+
+	cId, _ := context.Dispatch.GetCollectionId(uid, "bookmarks")
+	for _, bId := range []string{"bso1", "bso2", "bso3"} {
+		bso, _ := context.Dispatch.GetBSO(uid, cId, bId)
+		assert.Equal("initial payload", bso.Payload)
+		assert.Equal(1, bso.SortIndex)
+	}
+
+	// Test that updates work
+	body = bytes.NewBufferString(`{"Id":"bso1", "SortIndex": 2}
+{"Id":"bso2", "Payload": "updated payload"}
+{"Id":"bso3", "Payload": "updated payload", "SortIndex":3}
+	`)
+
+	req2, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/bookmarks", body)
+	req2.Header.Add("Content-Type", "application/newlines")
+	resp = sendrequest(req2, context)
+	if !assert.Equal(http.StatusOK, resp.Code) {
+		return
+	}
 
 	bso, _ := context.Dispatch.GetBSO(uid, cId, "bso1")
 	assert.Equal(bso.Payload, "initial payload") // stayed the same
