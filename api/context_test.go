@@ -143,9 +143,9 @@ func TestContextNewLine(t *testing.T) {
 	{
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/", nil)
-		req.Header.Set("Accept", "application/newline")
+		req.Header.Set("Accept", "application/newlines")
 		c.NewLine(w, req, val[0])
-		assert.Equal("application/newline", w.HeaderMap.Get("Content-Type"))
+		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
 		expected := `{"A":"one","B":1}`
 		assert.Equal(expected, w.Body.String())
 	}
@@ -154,9 +154,9 @@ func TestContextNewLine(t *testing.T) {
 	{
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/", nil)
-		req.Header.Set("Accept", "application/newline")
+		req.Header.Set("Accept", "application/newlines")
 		c.NewLine(w, req, val)
-		assert.Equal("application/newline", w.HeaderMap.Get("Content-Type"))
+		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
 		expected := `{"A":"one","B":1}
 {"A":"two","B":2}
 {"A":"three","B":3}`
@@ -193,9 +193,9 @@ func TestContextJsonNewline(t *testing.T) {
 	{
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/", nil)
-		req.Header.Set("Accept", "application/newline")
+		req.Header.Set("Accept", "application/newlines")
 		c.JsonNewline(w, req, val)
-		assert.Equal("application/newline", w.HeaderMap.Get("Content-Type"))
+		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
 		expected := `{"A":"one","B":1}
 {"A":"two","B":2}
 {"A":"three","B":3}`

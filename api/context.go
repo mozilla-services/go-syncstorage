@@ -243,7 +243,7 @@ func (c *Context) Error(w http.ResponseWriter, r *http.Request, err error) {
 // json array
 func (c *Context) JsonNewline(w http.ResponseWriter, r *http.Request, val interface{}) {
 
-	if r.Header.Get("Accept") == "application/newline" {
+	if r.Header.Get("Accept") == "application/newlines" {
 		c.NewLine(w, r, val)
 	} else {
 		c.JSON(w, r, val)
@@ -263,7 +263,7 @@ func (c *Context) NewLine(w http.ResponseWriter, r *http.Request, val interface{
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/newline")
+	w.Header().Set("Content-Type", "application/newlines")
 
 	// array of objects?
 	newlineChar := []byte("\n")
