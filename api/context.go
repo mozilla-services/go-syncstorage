@@ -239,6 +239,48 @@ func (c *Context) Error(w http.ResponseWriter, r *http.Request, err error) {
 		http.StatusInternalServerError)
 }
 
+// JsonNewline returns data as newline separated or as a single
+// json array
+func (c *Context) JsonNewline(w http.ResponseWriter, r *http.Request, val interface{}) {
+
+	if r.Header.Get("Accept") == "application/newline" {
+		c.NewLine(w, r, val)
+	} else {
+		c.JSON(w, r, val)
+	}
+}
+
+// NewLine prints out new line \n separated JSON objects instead of a
+// single JSON array of objects
+func (c *Context) NewLine(w http.ResponseWriter, r *http.Request, val interface{}) {
+
+	var vals []json.RawMessage
+	// make sure we can convert all of it to JSON before
+	// trying to make it all newline JSON
+	js, err := json.Marshal(val)
+	if err != nil {
+		c.Error(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/newline")
+
+	// array of objects?
+	newlineChar := []byte("\n")
+	err = json.Unmarshal(js, &vals)
+	if err != nil { // not an array
+		w.Write(js)
+	} else {
+		for k, raw := range vals {
+			w.Write(raw)
+			if k != len(vals)-1 {
+				w.Write(newlineChar)
+			}
+		}
+
+	}
+}
+
 func (c *Context) JSON(w http.ResponseWriter, r *http.Request, val interface{}) {
 	js, err := json.Marshal(val)
 	if err != nil {
@@ -296,7 +338,7 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
-		c.JSON(w, r, info)
+		c.JsonNewline(w, r, info)
 	}
 }
 
@@ -305,7 +347,7 @@ func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, u
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
-		c.JSON(w, r, results)
+		c.JsonNewline(w, r, results)
 	}
 }
 
@@ -314,7 +356,7 @@ func (c *Context) hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
-		c.JSON(w, r, results)
+		c.JsonNewline(w, r, results)
 	}
 }
 
@@ -450,13 +492,13 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	}
 
 	if full {
-		c.JSON(w, r, results.BSOs)
+		c.JsonNewline(w, r, results.BSOs)
 	} else {
 		bsoIds := make([]string, len(results.BSOs))
 		for i, b := range results.BSOs {
 			bsoIds[i] = b.Id
 		}
-		c.JSON(w, r, bsoIds)
+		c.JsonNewline(w, r, bsoIds)
 	}
 }
 
@@ -512,7 +554,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
-		c.JSON(w, r, results)
+		c.JsonNewline(w, r, results)
 	}
 }
 
@@ -560,7 +602,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 	if err == nil {
 		bso, err = c.Dispatch.GetBSO(uid, cId, bId)
 		if err == nil {
-			c.JSON(w, r, bso)
+			c.JsonNewline(w, r, bso)
 			return
 		}
 	}

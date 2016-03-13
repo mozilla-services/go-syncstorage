@@ -101,6 +101,108 @@ func sendrequest(req *http.Request, c *Context) *httptest.ResponseRecorder {
 	return w
 }
 
+func TestContextJSON(t *testing.T) {
+	assert := assert.New(t)
+	c := makeTestContext()
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept", "application/json")
+
+	js := []byte(`[{"A":"one", "B":1}, {"A":"two", "B":2}]`)
+
+	var val []struct {
+		A string
+		B int
+	}
+
+	err := json.Unmarshal(js, &val)
+	if assert.NoError(err) {
+		c.JSON(w, req, val)
+		assert.Equal("application/json", w.HeaderMap.Get("Content-Type"))
+		assert.Equal(`[{"A":"one","B":1},{"A":"two","B":2}]`, w.Body.String())
+	}
+
+}
+
+func TestContextNewLine(t *testing.T) {
+	assert := assert.New(t)
+	c := makeTestContext()
+
+	// some test data
+	var val []struct {
+		A string
+		B int
+	}
+	js := []byte(`[{"A":"one", "B":1}, {"A":"two", "B":2}, {"A":"three", "B":3}]`)
+	err := json.Unmarshal(js, &val)
+	if !assert.NoError(err) {
+		return
+	}
+
+	// single object
+	{
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept", "application/newline")
+		c.NewLine(w, req, val[0])
+		assert.Equal("application/newline", w.HeaderMap.Get("Content-Type"))
+		expected := `{"A":"one","B":1}`
+		assert.Equal(expected, w.Body.String())
+	}
+
+	// multi-newline
+	{
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept", "application/newline")
+		c.NewLine(w, req, val)
+		assert.Equal("application/newline", w.HeaderMap.Get("Content-Type"))
+		expected := `{"A":"one","B":1}
+{"A":"two","B":2}
+{"A":"three","B":3}`
+		assert.Equal(expected, w.Body.String())
+	}
+}
+
+func TestContextJsonNewline(t *testing.T) {
+	assert := assert.New(t)
+	c := makeTestContext()
+
+	// some test data
+	var val []struct {
+		A string
+		B int
+	}
+	js := []byte(`[{"A":"one", "B":1}, {"A":"two", "B":2}, {"A":"three", "B":3}]`)
+	err := json.Unmarshal(js, &val)
+	if !assert.NoError(err) {
+		return
+	}
+
+	// JSON response ok?
+	{
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept", "application/json")
+		c.JsonNewline(w, req, val)
+		assert.Equal("application/json", w.HeaderMap.Get("Content-Type"))
+		assert.Equal(`[{"A":"one","B":1},{"A":"two","B":2},{"A":"three","B":3}]`, w.Body.String())
+	}
+
+	// Newline ok?
+	{
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept", "application/newline")
+		c.JsonNewline(w, req, val)
+		assert.Equal("application/newline", w.HeaderMap.Get("Content-Type"))
+		expected := `{"A":"one","B":1}
+{"A":"two","B":2}
+{"A":"three","B":3}`
+		assert.Equal(expected, w.Body.String())
+	}
+}
+
 func TestContextHeartbeat(t *testing.T) {
 	resp := request("GET", "/__heartbeat__", nil, nil)
 	assert.Equal(t, http.StatusOK, resp.Code)
