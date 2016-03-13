@@ -639,6 +639,70 @@ func TestContextCollectionPOST(t *testing.T) {
 	assert.Equal(bso.SortIndex, 3)               // updated
 }
 
+func TestContextCollectionPOSTNewLines(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := makeTestContext()
+
+	uid := "123456"
+
+	// Make sure INSERT works first
+	body := bytes.NewBufferString(`{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+	`)
+
+	req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/bookmarks", body)
+	req.Header.Add("Content-Type", "application/newlines")
+
+	resp := sendrequest(req, context)
+	if !assert.Equal(http.StatusOK, resp.Code) {
+		return
+	}
+
+	var results syncstorage.PostResults
+	jsbody := resp.Body.Bytes()
+	err := json.Unmarshal(jsbody, &results)
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Len(results.Success, 3)
+	assert.Len(results.Failed, 0)
+
+	cId, _ := context.Dispatch.GetCollectionId(uid, "bookmarks")
+	for _, bId := range []string{"bso1", "bso2", "bso3"} {
+		bso, _ := context.Dispatch.GetBSO(uid, cId, bId)
+		assert.Equal("initial payload", bso.Payload)
+		assert.Equal(1, bso.SortIndex)
+	}
+
+	// Test that updates work
+	body = bytes.NewBufferString(`{"Id":"bso1", "SortIndex": 2}
+{"Id":"bso2", "Payload": "updated payload"}
+{"Id":"bso3", "Payload": "updated payload", "SortIndex":3}
+	`)
+
+	req2, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/bookmarks", body)
+	req2.Header.Add("Content-Type", "application/newlines")
+	resp = sendrequest(req2, context)
+	if !assert.Equal(http.StatusOK, resp.Code) {
+		return
+	}
+
+	bso, _ := context.Dispatch.GetBSO(uid, cId, "bso1")
+	assert.Equal(bso.Payload, "initial payload") // stayed the same
+	assert.Equal(bso.SortIndex, 2)               // it updated
+
+	bso, _ = context.Dispatch.GetBSO(uid, cId, "bso2")
+	assert.Equal(bso.Payload, "updated payload") // updated
+	assert.Equal(bso.SortIndex, 1)               // same
+
+	bso, _ = context.Dispatch.GetBSO(uid, cId, "bso3")
+	assert.Equal(bso.Payload, "updated payload") // updated
+	assert.Equal(bso.SortIndex, 3)               // updated
+}
+
 func TestContextCollectionPOSTCreatesCollection(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)

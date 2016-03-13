@@ -525,7 +525,9 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 
 func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid string) {
 	// accept text/plain from old (broken) clients
-	if ct := r.Header.Get("Content-Type"); ct != "application/json" && ct != "text/plain" {
+	ct := r.Header.Get("Content-Type")
+
+	if ct != "application/json" && ct != "text/plain" && ct != "application/newlines" {
 		http.Error(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
 		return
 	}
@@ -534,11 +536,40 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 	// if they are not to be submitted
 	var posted syncstorage.PostBSOInput
 
-	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&posted)
-	if err != nil {
-		http.Error(w, "Invalid JSON posted", http.StatusBadRequest)
-		return
+	if ct == "application/json" || ct == "text/plain" {
+		decoder := json.NewDecoder(r.Body)
+		err := decoder.Decode(&posted)
+		if err != nil {
+			http.Error(w, "Invalid JSON posted", http.StatusBadRequest)
+			return
+		}
+	} else { // decode application/newlines
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Could not read Body", http.StatusInternalServerError)
+			return
+		}
+
+		splitData := bytes.Split(body, []byte("\n"))
+		posted = syncstorage.PostBSOInput{}
+		for i, data := range splitData {
+			var bso syncstorage.PutBSOInput
+
+			// skip empty lines
+			if strings.TrimSpace(string(data)) == "" {
+				continue
+			}
+
+			if err := json.Unmarshal(data, &bso); err == nil {
+				posted = append(posted, &bso)
+			} else {
+				http.Error(w,
+					fmt.Sprintf("Invalid JSON posted for item: %d, %v, %s",
+						i, err, string(data)),
+					http.StatusBadRequest)
+				return
+			}
+		}
 	}
 
 	if len(posted) > MAX_BSO_PER_POST_REQUEST {
