@@ -83,6 +83,8 @@ func syncurl(uid interface{}, path string) string {
 
 func request(method, urlStr string, body io.Reader, c *Context) *httptest.ResponseRecorder {
 	req, err := http.NewRequest(method, urlStr, body)
+	req.Header.Set("Accept", "application/json")
+
 	if err != nil {
 		panic(err)
 	}
@@ -146,7 +148,7 @@ func TestContextNewLine(t *testing.T) {
 		req.Header.Set("Accept", "application/newlines")
 		c.NewLine(w, req, val[0])
 		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
-		expected := `{"A":"one","B":1}`
+		expected := `{"A":"one","B":1}` + "\n"
 		assert.Equal(expected, w.Body.String())
 	}
 
@@ -159,7 +161,8 @@ func TestContextNewLine(t *testing.T) {
 		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
 		expected := `{"A":"one","B":1}
 {"A":"two","B":2}
-{"A":"three","B":3}`
+{"A":"three","B":3}
+`
 		assert.Equal(expected, w.Body.String())
 	}
 }
@@ -198,7 +201,8 @@ func TestContextJsonNewline(t *testing.T) {
 		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
 		expected := `{"A":"one","B":1}
 {"A":"two","B":2}
-{"A":"three","B":3}`
+{"A":"three","B":3}
+`
 		assert.Equal(expected, w.Body.String())
 	}
 }

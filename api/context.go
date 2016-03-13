@@ -54,23 +54,23 @@ func NewRouterFromContext(c *Context) *mux.Router {
 	v := r.PathPrefix("/1.5/{uid:[0-9]+}/").Subrouter()
 
 	// not part of the API, used to make sure uid matching works
-	v.HandleFunc("/echo-uid", c.hawk(c.handleEchoUID)).Methods("GET")
+	v.HandleFunc("/echo-uid", c.acceptOK(c.hawk(c.handleEchoUID))).Methods("GET")
 
 	info := v.PathPrefix("/info/").Subrouter()
-	info.HandleFunc("/collections", c.hawk(c.hInfoCollections)).Methods("GET")
-	info.HandleFunc("/collection_usage", c.hawk(c.hInfoCollectionUsage)).Methods("GET")
-	info.HandleFunc("/collection_counts", c.hawk(c.hInfoCollectionCounts)).Methods("GET")
+	info.HandleFunc("/collections", c.acceptOK(c.hawk(c.hInfoCollections))).Methods("GET")
+	info.HandleFunc("/collection_usage", c.acceptOK(c.hawk(c.hInfoCollectionUsage))).Methods("GET")
+	info.HandleFunc("/collection_counts", c.acceptOK(c.hawk(c.hInfoCollectionCounts))).Methods("GET")
 
 	info.HandleFunc("/quota", handleTODO).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", handleTODO).Methods("DELETE")
 
-	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionGET)).Methods("GET")
+	storage.HandleFunc("/{collection}", c.acceptOK(c.hawk(c.hCollectionGET))).Methods("GET")
 	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionPOST)).Methods("POST")
 	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionDELETE)).Methods("DELETE")
-	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoGET)).Methods("GET")
-	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoPUT)).Methods("PUT")
+	storage.HandleFunc("/{collection}/{bsoId}", c.acceptOK(c.hawk(c.hBsoGET))).Methods("GET")
+	storage.HandleFunc("/{collection}/{bsoId}", c.acceptOK(c.hawk(c.hBsoPUT))).Methods("PUT")
 	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoDELETE)).Methods("DELETE")
 
 	return r
@@ -113,6 +113,28 @@ type Context struct {
 
 	// Settings that tweak web behaviour
 	MaxBSOGetLimit int
+}
+
+// acceptOK checks that the request has an Accept header that is either
+// application/json or application/newlines
+func (c *Context) acceptOK(h http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accept := r.Header.Get("Accept")
+		apiDebug("acceptOK: accept=%s", accept)
+
+		// no Accept defaults to JSON
+		if accept == "" {
+			r.Header.Set("Accept", "application/json")
+			h(w, r)
+			return
+		}
+
+		if accept != "application/json" && accept != "application/newlines" {
+			http.Error(w, http.StatusText(http.StatusNotAcceptable), http.StatusNotAcceptable)
+		} else {
+			h(w, r)
+		}
+	})
 }
 
 // hawk checks HAWK authentication headers and returns an unauthorized response
@@ -270,12 +292,11 @@ func (c *Context) NewLine(w http.ResponseWriter, r *http.Request, val interface{
 	err = json.Unmarshal(js, &vals)
 	if err != nil { // not an array
 		w.Write(js)
+		w.Write(newlineChar)
 	} else {
-		for k, raw := range vals {
+		for _, raw := range vals {
 			w.Write(raw)
-			if k != len(vals)-1 {
-				w.Write(newlineChar)
-			}
+			w.Write(newlineChar)
 		}
 
 	}

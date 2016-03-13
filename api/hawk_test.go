@@ -77,6 +77,7 @@ func hawkrequestbody(
 	}
 
 	req.Header.Add("Authorization", auth.RequestHeader())
+	req.Header.Add("Accept", "application/json")
 	return req, auth
 }
 
