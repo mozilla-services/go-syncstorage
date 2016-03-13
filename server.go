@@ -12,6 +12,26 @@ import (
 )
 
 func init() {
+	switch config.Log.Level {
+	case "fatal":
+		log.SetLevel(log.FatalLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	default:
+		log.SetLevel(log.InfoLevel)
+	}
+}
+
+type logHandler struct {
+	handler http.Handler
+}
+
+func (h logHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
 }
 
 func main() {
@@ -34,18 +54,21 @@ func main() {
 	}
 
 	router := api.NewRouterFromContext(context)
+	loggedRouter := api.LogHandler(router)
+
+	// set up additional handlers
 
 	listenOn := ":" + strconv.Itoa(config.Port)
 	if config.Tls.Cert != "" {
-		log.Printf("Listening for TLS+HTTP on port %s", listenOn)
+		log.WithFields(log.Fields{"addr": listenOn, "tls": true}).Info("HTTP Listening at " + listenOn)
 		err := http.ListenAndServeTLS(
-			listenOn, config.Tls.Cert, config.Tls.Key, router)
+			listenOn, config.Tls.Cert, config.Tls.Key, loggedRouter)
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
-		log.Printf("Listening for HTTP on port %s", listenOn)
-		err := http.ListenAndServe(listenOn, router)
+		log.WithFields(log.Fields{"addr": listenOn, "tls": false}).Info("HTTP Listening at " + listenOn)
+		err := http.ListenAndServe(listenOn, loggedRouter)
 		if err != nil {
 			log.Fatal(err)
 		}
