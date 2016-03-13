@@ -687,9 +687,8 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 		TTL       *int    `json:"ttl"`
 	}
 
-	cId, err = c.getcid(r, uid, false)
+	cId, err = c.getcid(r, uid, true)
 	if err == syncstorage.ErrNotFound {
-		http.NotFound(w, r)
 		return
 	}
 
