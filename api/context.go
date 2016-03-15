@@ -639,20 +639,35 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 }
 
 func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid string) {
-
 	cId, err := c.getcid(r, uid, false)
-	if err == nil {
-		err = c.Dispatch.DeleteCollection(uid, cId)
-	}
 
 	if err != nil {
 		if err != syncstorage.ErrNotFound {
+			// nothing to delete... return a successful response
+			c.JsonNewline(w, r, map[string]int{"modified": syncstorage.Now()})
+		} else {
 			c.Error(w, r, err)
 		}
-	} else {
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("ok"))
+		return
 	}
+
+	modified := syncstorage.Now()
+	bids, idExists := r.URL.Query()["ids"]
+	if idExists {
+		modified, err = c.Dispatch.DeleteBSOs(uid, cId, strings.Split(bids[0], ",")...)
+		if err != nil {
+			c.Error(w, r, err)
+			return
+		}
+	} else {
+		err = c.Dispatch.DeleteCollection(uid, cId)
+		if err != nil {
+			c.Error(w, r, err)
+			return
+		}
+	}
+
+	c.JsonNewline(w, r, map[string]int{"modified": modified})
 }
 
 func (c *Context) getbso(w http.ResponseWriter, r *http.Request) (bId string, ok bool) {

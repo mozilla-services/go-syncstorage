@@ -762,36 +762,86 @@ func TestContextCollectionDELETE(t *testing.T) {
 
 	uid := "123456"
 
-	// Make sure INSERT works first
-	body := bytes.NewBufferString(`[
-		{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-		{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-		{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
-	]`)
+	var respData map[string]int
 
-	req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/my_collection", body)
-	req.Header.Add("Content-Type", "application/json")
-	resp := sendrequest(req, context)
-	if !assert.Equal(http.StatusOK, resp.Code) {
-		return
-	}
+	// delete entire collection
+	{
+		body := bytes.NewBufferString(`[
+			{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+			{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+			{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000} ]`)
 
-	cId, err := context.Dispatch.GetCollectionId(uid, "my_collection")
-	if !assert.NoError(err) {
-		return
-	}
+		req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/my_collection", body)
+		req.Header.Add("Content-Type", "application/json")
+		resp := sendrequest(req, context)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
 
-	resp = request("DELETE", "http://test/1.5/"+uid+"/storage/my_collection", nil, context)
-	assert.Equal(http.StatusOK, resp.Code)
-	assert.Equal("ok", resp.Body.String())
+		cId, err := context.Dispatch.GetCollectionId(uid, "my_collection")
+		if !assert.NoError(err) {
+			return
+		}
 
-	_, err = context.Dispatch.GetCollectionId(uid, "my_collection")
-	assert.Exactly(syncstorage.ErrNotFound, err)
+		resp = request("DELETE", "http://test/1.5/"+uid+"/storage/my_collection", nil, context)
+		assert.Equal(http.StatusOK, resp.Code)
+		err = json.Unmarshal(resp.Body.Bytes(), &respData)
+		if !assert.NoError(err) {
+			return
+		}
 
-	for _, bId := range []string{"bso1", "bso2", "bso3"} {
-		b, err := context.Dispatch.GetBSO(uid, cId, bId)
-		assert.Nil(b)
+		_, err = context.Dispatch.GetCollectionId(uid, "my_collection")
 		assert.Exactly(syncstorage.ErrNotFound, err)
+
+		for _, bId := range []string{"bso1", "bso2", "bso3"} {
+			b, err := context.Dispatch.GetBSO(uid, cId, bId)
+			assert.Nil(b)
+			assert.Exactly(syncstorage.ErrNotFound, err)
+		}
+	}
+
+	// delete only specific ids
+	{
+		body := bytes.NewBufferString(`[
+			{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+			{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
+			{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000} ]`)
+
+		req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/my_collection", body)
+		req.Header.Add("Content-Type", "application/json")
+		resp := sendrequest(req, context)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			fmt.Println(resp.Body.String())
+			return
+		}
+
+		cId, err := context.Dispatch.GetCollectionId(uid, "my_collection")
+		if !assert.NoError(err) {
+			return
+		}
+
+		resp = request("DELETE", "http://test/1.5/"+uid+"/storage/my_collection?ids=bso1,bso3", nil, context)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+
+		err = json.Unmarshal(resp.Body.Bytes(), &respData)
+		if !assert.NoError(err) {
+			return
+		}
+
+		for _, bId := range []string{"bso1", "bso3"} {
+			b, err := context.Dispatch.GetBSO(uid, cId, bId)
+			assert.Nil(b)
+			assert.Exactly(syncstorage.ErrNotFound, err)
+		}
+
+		// make sure bso2 is still there
+		{
+			b, err := context.Dispatch.GetBSO(uid, cId, "bso2")
+			assert.NotNil(b)
+			assert.NoError(err)
+		}
 	}
 }
 
