@@ -299,19 +299,19 @@ func TestContextInfoCollectionUsage(t *testing.T) {
 	resp := request("GET", "http://test/1.5/"+uid+"/info/collection_usage", nil, context)
 	data := resp.Body.Bytes()
 
-	var collections map[string]int
+	var collections map[string]float64
 	err := json.Unmarshal(data, &collections)
 	if !assert.NoError(err) {
 		return
 	}
 
-	var total int
+	var expectedKB float64
 	for _, s := range sizes {
-		total += s
+		expectedKB += float64(s) / 1024
 	}
 
 	for _, cName := range collectionNames {
-		assert.Equal(total, collections[cName])
+		assert.Equal(expectedKB, collections[cName])
 	}
 }
 

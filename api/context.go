@@ -368,7 +368,12 @@ func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, u
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
-		c.JsonNewline(w, r, results)
+		// the sync 1.5 api says data should be in KB
+		resultsKB := make(map[string]float64)
+		for name, bytes := range results {
+			resultsKB[name] = float64(bytes) / 1024
+		}
+		c.JsonNewline(w, r, resultsKB)
 	}
 }
 
