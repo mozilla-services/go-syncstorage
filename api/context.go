@@ -359,6 +359,15 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
+		modified := 0
+		for _, modtime := range info {
+			if modtime > modified {
+				modified = modtime
+			}
+		}
+
+		m := syncstorage.ModifiedToString(modified)
+		w.Header().Set("X-Last-Modified", m)
 		c.JsonNewline(w, r, info)
 	}
 }
@@ -516,6 +525,16 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	if results.More {
 		w.Header().Set("X-Weave-Next-Offset", strconv.Itoa(results.Offset))
 	}
+
+	// get the collection modified time
+	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
+	if err != nil {
+		c.Error(w, r, err)
+		return
+	}
+
+	m := syncstorage.ModifiedToString(cmodified)
+	w.Header().Set("X-Last-Modified", m)
 
 	if full {
 		c.JsonNewline(w, r, results.BSOs)
@@ -784,6 +803,18 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 	cId, err = c.getcid(r, uid, false)
 	if err == syncstorage.ErrNotFound {
 		http.NotFound(w, r)
+		return
+	}
+
+	// Trying to delete a BSO that is not there
+	// should 404
+	_, err = c.Dispatch.GetBSO(uid, cId, bId)
+	if err != nil {
+		if err == syncstorage.ErrNotFound {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		} else {
+			c.Error(w, r, err)
+		}
 		return
 	}
 
