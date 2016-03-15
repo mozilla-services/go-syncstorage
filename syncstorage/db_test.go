@@ -76,9 +76,8 @@ func TestUpdateBSOReturnsExpectedError(t *testing.T) {
 
 	cId := 1
 	bId := "testBSO"
-	modified := Now()
 
-	err := db.updateBSO(tx, cId, bId, modified, nil, nil, nil)
+	_, err := db.updateBSO(tx, cId, bId, nil, nil, nil)
 	assert.Equal(t, ErrNothingToDo, err)
 }
 
@@ -92,7 +91,7 @@ func TestPrivateUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	cId := 1
 	bId := "testBSO"
-	modified := Now()
+	modified := 0
 	payload := "initial value"
 	sortIndex := 1
 	ttl := 3600 * 1000
@@ -101,60 +100,74 @@ func TestPrivateUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	assert.NoError(db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl))
 
-	// remember this for later tests
-	expectedTTL := modified + ttl
-
-	modified = Now()
 	payload = "Updated payload"
-	assert.NoError(db.updateBSO(tx, cId, bId, modified, &payload, nil, nil))
+	modified, err = db.updateBSO(tx, cId, bId, &payload, nil, nil)
+	if !assert.NoError(err) {
+		return
+	}
+
 	bso, err := db.getBSO(tx, cId, bId)
-	assert.NoError(err)
+	if !assert.NoError(err) {
+		return
+	}
 
-	assert.True((bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == expectedTTL))
+	assert.True((bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == modified+ttl))
 
-	modified = Now()
 	sortIndex = 2
-	assert.NoError(db.updateBSO(tx, cId, bId, modified, nil, &sortIndex, nil))
+	modified, err = db.updateBSO(tx, cId, bId, nil, &sortIndex, nil)
 
 	bso, err = db.getBSO(tx, cId, bId)
-	assert.NoError(err)
-	assert.NotNil(bso)
+	if !assert.NoError(err) || !assert.NotNil(bso) {
+		return
+	}
 
-	assert.True(bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == expectedTTL)
+	assert.True(bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == modified+ttl)
 
-	modified = Now()
-	assert.NoError(db.updateBSO(tx, cId, bId, modified, nil, nil, &ttl))
+	modified, err = db.updateBSO(tx, cId, bId, nil, nil, &ttl)
+	if !assert.NoError(err) {
+		return
+	}
+
 	bso, err = db.getBSO(tx, cId, bId)
-	assert.NoError(err)
-	assert.NotNil(bso)
+	if !assert.NoError(err) || !assert.NotNil(bso) {
+		return
+	}
 
 	assert.True(bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == ttl+modified)
 }
 
-func TestPrivatePutBSOInsertsWithMissingValues(t *testing.T) {
+func TestPrivateUpdateBSOModifiedNotChangedOnTTLTouch(t *testing.T) {
 	assert := assert.New(t)
 
 	db, _ := getTestDB()
 	defer removeTestDB(db)
 
 	tx, _ := db.db.Begin()
-	defer tx.Rollback()
 
 	cId := 1
+	bId := "testBSO"
+	payload := "hello"
+	sortIndex := 1
+	ttl := 10
+	modified := Now()
 
-	// make sure no data doesn't actually make a row
-	err := db.putBSO(tx, cId, "obj-1", Now(), nil, nil, nil)
-	assert.Equal(ErrNothingToDo, err, "Unspected error: %s", err)
+	assert.NoError(db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl))
 
-	assert.NoError(db.putBSO(tx, cId, "obj-2", Now(), String("1"), nil, nil))
-	assert.NoError(db.putBSO(tx, cId, "obj-3", Now(), nil, Int(1), nil))
-	assert.NoError(db.putBSO(tx, cId, "obj-4", Now(), nil, nil, Int(1)))
-
-	var numRows int
-	err = tx.QueryRow("SELECT count(1) FROM BSO").Scan(&numRows)
-	if assert.NoError(err) {
-		assert.Equal(3, numRows)
+	ttl = 15
+	updateModified, err := db.updateBSO(tx, cId, bId, nil, nil, &ttl)
+	if !assert.NoError(err) {
+		return
 	}
+
+	assert.Equal(updateModified, modified)
+	bso, err := db.getBSO(tx, cId, bId)
+	if !assert.NoError(err) || !assert.NotNil(bso) {
+		return
+	}
+	assert.Equal(modified+ttl, bso.TTL)
+}
+
+func TestPrivatePutBSOInsertsWithMissingValues(t *testing.T) {
 }
 
 func TestPrivatePutBSOUpdates(t *testing.T) {
@@ -166,14 +179,16 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 	tx, _ := db.db.Begin()
 	defer tx.Rollback()
 
-	if err := db.putBSO(tx, 1, "1", Now(), String("initial"), nil, nil); err != nil {
+	if _, err := db.putBSO(tx, 1, "1", String("initial"), nil, nil); err != nil {
 		t.Error(err)
 	}
 
-	modified := Now()
 	payload := String("Updated")
 	sortIndex := Int(100)
-	assert.NoError(db.putBSO(tx, 1, "1", modified, payload, sortIndex, nil))
+	modified, err := db.putBSO(tx, 1, "1", payload, sortIndex, nil)
+	if !assert.NoError(err) {
+		return
+	}
 	bso, err := db.getBSO(tx, 1, "1")
 
 	assert.NoError(err)

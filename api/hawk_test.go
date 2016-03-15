@@ -131,7 +131,7 @@ func TestHawkAuthPOST(t *testing.T) {
 		return
 	}
 
-	var results syncstorage.PostResults
+	var results PostResults
 	jsbody := resp.Body.Bytes()
 	err := json.Unmarshal(jsbody, &results)
 	if !assert.NoError(err) {

@@ -597,7 +597,7 @@ func TestContextCollectionPOST(t *testing.T) {
 	resp := sendrequest(req, context)
 	assert.Equal(http.StatusOK, resp.Code)
 
-	var results syncstorage.PostResults
+	var results PostResults
 	jsbody := resp.Body.Bytes()
 	err := json.Unmarshal(jsbody, &results)
 	if !assert.NoError(err) {
@@ -660,7 +660,7 @@ func TestContextCollectionPOSTNewLines(t *testing.T) {
 		return
 	}
 
-	var results syncstorage.PostResults
+	var results PostResults
 	jsbody := resp.Body.Bytes()
 	err := json.Unmarshal(jsbody, &results)
 	if !assert.NoError(err) {

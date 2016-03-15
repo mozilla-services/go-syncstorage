@@ -523,6 +523,14 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	}
 }
 
+// used to massage post results into JSON
+// the client expects
+type PostResults struct {
+	Modified string              `json:"modified"`
+	Success  []string            `json:"success"`
+	Failed   map[string][]string `json:"failed"`
+}
+
 func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid string) {
 	// accept text/plain from old (broken) clients
 	ct := r.Header.Get("Content-Type")
@@ -602,11 +610,26 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		return
 	}
 
+	// change posted[].TTL from seconds (what clients send)
+	// to milliseconds (what the DB uses)
+	for _, p := range posted {
+		if p.TTL != nil {
+			tmp := *p.TTL * 1000
+			p.TTL = &tmp
+		}
+	}
+
 	results, err := c.Dispatch.PostBSOs(uid, cId, posted)
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
-		c.JsonNewline(w, r, results)
+		m := syncstorage.ModifiedToString(results.Modified)
+		w.Header().Set("X-Last-Modified", m)
+		c.JsonNewline(w, r, &PostResults{
+			Modified: m,
+			Success:  results.Success,
+			Failed:   results.Failed,
+		})
 	}
 }
 
@@ -698,6 +721,13 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 	if err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
+	}
+
+	// change bso.TTL to milliseconds (what the db uses)
+	// from seconds (what client's send)
+	if bso.TTL != nil {
+		tmp := *bso.TTL * 1000
+		bso.TTL = &tmp
 	}
 
 	modified, err = c.Dispatch.PutBSO(uid, cId, bId, bso.Payload, bso.SortIndex, bso.TTL)

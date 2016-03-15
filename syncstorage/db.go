@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -52,7 +53,7 @@ const (
 	// absolute maximum records getBSOs can return
 	LIMIT_MAX = 1000
 
-	// keep BSO for 1 year
+	// Keep BSO for 1 year
 	DEFAULT_BSO_TTL = 365 * 24 * 60 * 60 * 1000
 )
 
@@ -158,7 +159,7 @@ func (d *DB) Open() (err error) {
 		} else {
 			log.WithFields(log.Fields{
 				"path": d.Path,
-			}).Debug("db initialized")
+			}).Debug("DB initialized")
 			if err := tx.Commit(); err != nil {
 				return err
 			}
@@ -416,7 +417,7 @@ func (d *DB) PostBSOs(cId int, input PostBSOInput) (*PostResults, error) {
 	results := NewPostResults(modified)
 
 	for _, data := range input {
-		err = d.putBSO(tx, cId, data.Id, modified, data.Payload, data.SortIndex, data.TTL)
+		_, err = d.putBSO(tx, cId, data.Id, data.Payload, data.SortIndex, data.TTL)
 		if err != nil {
 			results.AddFailure(data.Id, err.Error())
 			continue
@@ -447,8 +448,7 @@ func (d *DB) PutBSO(cId int, bId string, payload *string, sortIndex *int, ttl *i
 		return
 	}
 
-	modified = Now()
-	err = d.putBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
+	modified, err = d.putBSO(tx, cId, bId, payload, sortIndex, ttl)
 
 	if err != nil {
 		tx.Rollback()
@@ -606,38 +606,47 @@ func (d *DB) touchCollection(tx dbTx, cId, modified int) (err error) {
 func (d *DB) putBSO(tx dbTx,
 	cId int,
 	bId string,
-	modified int,
 	payload *string,
 	sortIndex *int,
 	ttl *int,
-) error {
+) (modified int, err error) {
 	if payload == nil && sortIndex == nil && ttl == nil {
-		return ErrNothingToDo
+		err = ErrNothingToDo
+		return
 	}
 
 	if !BSOIdOk(bId) {
-		return ErrInvalidBSOId
+		err = ErrInvalidBSOId
+		return
 	}
 	if sortIndex != nil && !SortIndexOk(*sortIndex) {
-		return ErrInvalidSortIndex
+		err = ErrInvalidSortIndex
+		return
 	}
 
 	if ttl != nil && !TTLOk(*ttl) {
-		return ErrInvalidTTL
+		err = ErrInvalidTTL
+		return
 	}
 
 	if payload != nil && len(*payload) >= (256*1024) {
-		return ErrPayloadTooBig
+		err = ErrPayloadTooBig
+		return
 	}
 
 	exists, err := d.bsoExists(tx, cId, bId)
 	if err != nil {
-		return err
+		return
 	}
 
-	// do an update
+	// Do an UPDATE or an INSERT
 	if exists == true {
-		return d.updateBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
+		var t *int
+		if ttl != nil {
+			tmp := *ttl
+			t = &tmp
+		}
+		return d.updateBSO(tx, cId, bId, payload, sortIndex, t)
 	} else {
 		var p string
 		var s, t int
@@ -660,7 +669,8 @@ func (d *DB) putBSO(tx dbTx,
 			t = *ttl
 		}
 
-		return d.insertBSO(tx, cId, bId, modified, p, s, t)
+		modified := Now()
+		return modified, d.insertBSO(tx, cId, bId, modified, p, s, t)
 	}
 }
 
@@ -703,10 +713,10 @@ func (d *DB) getBSOs(
 		return nil, ErrInvalidNewer
 	}
 
+	cutOffTTL := Now()
 	query := "SELECT Id, SortIndex, Payload, Modified, TTL FROM BSO "
-
 	where := "WHERE CollectionId=? AND Modified > ? AND TTL>=?"
-	values := []interface{}{cId, newer, Now()}
+	values := []interface{}{cId, newer, cutOffTTL}
 
 	if len(ids) > 0 {
 		// spec says only 100 ids at a time
@@ -750,6 +760,13 @@ func (d *DB) getBSOs(
 
 	resultQuery := fmt.Sprintf("%s %s %s %s", query, where, orderBy, limitStmt)
 	rows, err := tx.Query(resultQuery, values...)
+
+	if log.GetLevel() == log.DebugLevel {
+		log.WithFields(log.Fields{
+			"query":  resultQuery,
+			"values": values,
+		}).Debug("db getBSOs")
+	}
 
 	if err != nil {
 		return nil, err
@@ -829,6 +846,18 @@ func (d *DB) insertBSO(
 		payload, len(payload),
 		modified, modified+ttl)
 
+	if log.GetLevel() == log.DebugLevel {
+		log.WithFields(log.Fields{
+			"cId":       cId,
+			"bId":       bId,
+			"sortIndex": sortIndex,
+			"payload":   payload,
+			"modified":  modified,
+			"ttl_db":    modified + ttl,
+			"ttl":       ttl,
+		}).Debug("db insertBSO")
+	}
+
 	return
 }
 
@@ -838,25 +867,35 @@ func (d *DB) updateBSO(
 	tx dbTx,
 	cId int,
 	bId string,
-	modified int,
 	payload *string,
 	sortIndex *int,
 	ttl *int,
-) (err error) {
-
+) (modified int, err error) {
 	if payload == nil && sortIndex == nil && ttl == nil {
-		return ErrNothingToDo
+		err = ErrNothingToDo
+		return
 	}
 
 	var values = make([]interface{}, 7)
 	i := 0
+	set := ""
 
-	set := "modified=?"
-	values[i] = modified
-	i += 1
+	now := Now()
+
+	// The modified time is *ONLY* changed if the
+	// payload or the sortIndex changes.
+	if payload != nil || sortIndex != nil {
+		modified = now
+		set = "modified=?"
+		values[i] = modified
+		i += 1
+	}
 
 	if payload != nil {
-		set = set + ", Payload=?, PayloadSize=?"
+		if i != 0 {
+			set = set + ","
+		}
+		set = set + "Payload=?, PayloadSize=?"
 		values[i] = *payload
 		i += 1
 		values[i] = len(*payload)
@@ -864,14 +903,21 @@ func (d *DB) updateBSO(
 	}
 
 	if sortIndex != nil {
-		set = set + ", SortIndex=?"
+		if i != 0 {
+			set = set + ","
+		}
+		set = set + "SortIndex=?"
 		values[i] = *sortIndex
 		i += 1
 	}
 
 	if ttl != nil {
-		set = set + ", TTL=?"
-		values[i] = *ttl + modified
+		if i != 0 {
+			set = set + ","
+		}
+		set = set + "TTL=?"
+		// convert ttl from seconds to milliseconds
+		values[i] = *ttl + now
 		i += 1
 	}
 
@@ -882,12 +928,50 @@ func (d *DB) updateBSO(
 	i += 1
 
 	dml := "UPDATE BSO SET " + set + " WHERE CollectionId=? and Id=?"
-	log.WithFields(log.Fields{
-		"func":   "updateBSO",
-		"query":  dml,
-		"values": values,
-	}).Debug("db")
+	if log.GetLevel() == log.DebugLevel {
+		dPayload := "<nil>"
+		if payload != nil {
+			dPayload = *payload
+		}
+
+		dSortIndex := "<nil>"
+		if sortIndex != nil {
+			dSortIndex = strconv.Itoa(*sortIndex)
+		}
+
+		dTTL := "<nil>"
+		if ttl != nil {
+			dTTL = strconv.Itoa(*ttl)
+		}
+
+		log.WithFields(log.Fields{
+			"cId":       cId,
+			"bId":       bId,
+			"sortIndex": dSortIndex,
+			"payload":   dPayload,
+			"modified":  modified,
+			"ttl":       dTTL,
+			"zz_set":    set,
+		}).Debug("db updateBSO")
+	}
+
 	_, err = tx.Exec(dml, values[0:i]...)
+
+	if err != nil {
+		return
+	}
+
+	// only updating the TTL does not change
+	// modified so it needs to be read from the DB
+	// again
+	if payload == nil && sortIndex == nil {
+		bso, err := d.getBSO(tx, cId, bId)
+		if err != nil {
+			return 0, err
+		}
+
+		modified = bso.Modified
+	}
 
 	return
 }
