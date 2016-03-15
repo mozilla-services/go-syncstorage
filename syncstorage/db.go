@@ -503,7 +503,12 @@ func (d *DB) DeleteBSOs(cId int, bIds ...string) (modified int, err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	modified = Now()
+	if log.GetLevel() == log.DebugLevel {
+		log.WithFields(log.Fields{
+			"cid":  cId,
+			"bIds": bIds,
+		}).Debug("db DeleteBSOs")
+	}
 
 	tx, err := d.db.Begin()
 	if err != nil {
@@ -524,6 +529,8 @@ func (d *DB) DeleteBSOs(cId int, bIds ...string) (modified int, err error) {
 		tx.Rollback()
 		return
 	}
+
+	modified = Now()
 
 	// update the collection
 	err = d.touchCollection(tx, cId, modified)
