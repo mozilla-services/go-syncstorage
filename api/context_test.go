@@ -992,6 +992,11 @@ func TestContextBsoDELETE(t *testing.T) {
 
 	cId, _ := context.Dispatch.GetCollectionId(uid, collection)
 
+	resp404 := request("DELETE", "/1.5/"+uid+"/storage/"+collection+"/"+"NOT_EXISTS", nil, context)
+	if !assert.Equal(http.StatusNotFound, resp404.Code) {
+		return
+	}
+
 	if _, err := context.Dispatch.PutBSO(uid, cId, bId, syncstorage.String("hi"), nil, nil); !assert.NoError(err) {
 		return
 	}
