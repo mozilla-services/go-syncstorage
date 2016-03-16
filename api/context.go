@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	log "github.com/Sirupsen/logrus"
+
 	"github.com/gorilla/mux"
 	. "github.com/mostlygeek/go-debug"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
@@ -253,9 +255,13 @@ func (c *Context) uid(h syncApiHandler) http.HandlerFunc {
 	})
 }
 
+// Error produces an HTTP 500 error, basically means a bug in the system
 func (c *Context) Error(w http.ResponseWriter, r *http.Request, err error) {
-	// TODO someting with err and d...logging ? sentry? etc.
-	apiDebug("errorResponse: err=%s", err.Error())
+	log.WithFields(log.Fields{
+		"err":    err.Error(),
+		"method": r.Method,
+		"path":   r.URL.Path,
+	}).Errorf("HTTP Error: %s", err.Error())
 	http.Error(w,
 		http.StatusText(http.StatusInternalServerError),
 		http.StatusInternalServerError)
@@ -661,7 +667,7 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 	cId, err := c.getcid(r, uid, false)
 
 	if err != nil {
-		if err != syncstorage.ErrNotFound {
+		if err == syncstorage.ErrNotFound {
 			// nothing to delete... return a successful response
 			c.JsonNewline(w, r, map[string]int{"modified": syncstorage.Now()})
 		} else {
