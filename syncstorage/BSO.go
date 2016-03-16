@@ -37,7 +37,7 @@ func (b BSO) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 
-	j := fmt.Sprintf(`{"id":%s,"modified":%.02f,"payload":%s,"sortindex":%d}`, id, modified, payload, b.SortIndex)
+	j := fmt.Sprintf(`{"id":%s,"modified":%.02f,"payload":%s}`, id, modified, payload)
 	return []byte(j), nil
 
 }

@@ -21,13 +21,13 @@ var (
 func TestBSOtoJson(t *testing.T) {
 	j, err := json.Marshal(bso)
 	if assert.NoError(t, err) {
-		assert.Equal(t, `{"id":"Testing","modified":1000000000000.10,"payload":"Put in a quote: \"to make it interesting\"\n\t\t\tand some new lines\n\t\t\t","sortindex":11}`, string(j))
+		assert.Equal(t, `{"id":"Testing","modified":1000000000000.10,"payload":"Put in a quote: \"to make it interesting\"\n\t\t\tand some new lines\n\t\t\t"}`, string(j))
 	}
 
 	// make sure refs work too
 	j, err = json.Marshal(&bso)
 	if assert.NoError(t, err) {
-		assert.Equal(t, `{"id":"Testing","modified":1000000000000.10,"payload":"Put in a quote: \"to make it interesting\"\n\t\t\tand some new lines\n\t\t\t","sortindex":11}`, string(j))
+		assert.Equal(t, `{"id":"Testing","modified":1000000000000.10,"payload":"Put in a quote: \"to make it interesting\"\n\t\t\tand some new lines\n\t\t\t"}`, string(j))
 	}
 }
 

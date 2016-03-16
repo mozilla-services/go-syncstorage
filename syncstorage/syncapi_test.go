@@ -255,7 +255,10 @@ func testApiPostBSOs(db SyncApi, t *testing.T) {
 
 	create := PostBSOInput{
 		NewPutBSOInput("b0", String("payload 0"), Int(10), nil),
-		NewPutBSOInput("b1", String("payload 1"), Int(-1), nil),
+
+		// 10 digit sort index is invalid according to API
+		NewPutBSOInput("b1", String("payload 1"), Int(1000000000), nil),
+
 		NewPutBSOInput("b2", String("payload 2"), Int(100), nil),
 	}
 
@@ -337,8 +340,17 @@ func testApiGetBSOs(db SyncApi, t *testing.T) {
 	cId := 1
 
 	// mucks with sorting order so we can test
-	// it easier
-	sortIndexes := []int{1, 3, 4, 2, 0}
+	// using a slice instead of a map so we can guarantee
+	// insert order
+	sortIndexes := []int{
+		1, // bso0
+		3,
+		4,
+		2,
+		0, // bso4
+	}
+
+	// Create in reverse order
 	for i := 4; i >= 0; i-- {
 		// make custom modified/sortOrder to test sorting
 		bId := "b" + strconv.Itoa(i)
@@ -355,13 +367,14 @@ func testApiGetBSOs(db SyncApi, t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
+	// get these 3 and sort them in order of newest
 	results, err := db.GetBSOs(cId, []string{"b0", "b2", "b4"}, 0, SORT_NEWEST, 10, 0)
 	assert.NoError(err)
 	if assert.NotNil(results) {
 		assert.Equal(3, results.Total)
-		assert.Equal("b0", results.BSOs[0].Id)
+		assert.Equal("b0", results.BSOs[0].Id) // created last
 		assert.Equal("b2", results.BSOs[1].Id)
-		assert.Equal("b4", results.BSOs[2].Id)
+		assert.Equal("b4", results.BSOs[2].Id) // created first
 	}
 
 	results, err = db.GetBSOs(cId, nil, 0, SORT_INDEX, 2, 0)
@@ -371,8 +384,8 @@ func testApiGetBSOs(db SyncApi, t *testing.T) {
 		assert.Equal(2, len(results.BSOs))
 		assert.Equal(2, results.Offset)
 		assert.True(results.More)
-		assert.Equal("b4", results.BSOs[0].Id)
-		assert.Equal("b0", results.BSOs[1].Id)
+		assert.Equal("b2", results.BSOs[0].Id)
+		assert.Equal("b1", results.BSOs[1].Id)
 	}
 }
 

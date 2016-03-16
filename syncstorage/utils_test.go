@@ -2,6 +2,7 @@ package syncstorage
 
 import (
 	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -98,4 +99,17 @@ func TestValidateCollectionNames(t *testing.T) {
 	for _, test := range expectFalse {
 		assert.False(t, CollectionNameOk(test))
 	}
+}
+
+func TestValidateSortIndex(t *testing.T) {
+	assert := assert.New(t)
+
+	for _, i := range []int{-1, 1, 32, 0, 99999999, -999999999} {
+		assert.True(SortIndexOk(i), "Expected "+strconv.Itoa(i)+" to be ok")
+	}
+
+	for _, i := range []int{-1000000000, 1000000000} {
+		assert.False(SortIndexOk(i), "Expected "+strconv.Itoa(i)+" to fail")
+	}
+
 }

@@ -61,9 +61,10 @@ func BSOIdOk(bId string) bool {
 	return bsoIdCheck.MatchString(bId)
 }
 
-// SortIndexOK validates a sortIndex int
+// SortIndexOK validates a sortIndex int, the only rule is that
+// it is 9 digits ... :\
 func SortIndexOk(sortIndex int) bool {
-	return (sortIndex >= 0 && sortIndex < 1000000000)
+	return (sortIndex >= -999999999 && sortIndex <= 99999999)
 }
 
 func TTLOk(ttl int) bool {
