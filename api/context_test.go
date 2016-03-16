@@ -423,9 +423,6 @@ func TestContextCollectionGET(t *testing.T) {
 
 			assert.Equal(payload, results[0].Payload)
 			assert.Equal(payload, results[1].Payload)
-
-			assert.Equal(0, results[0].SortIndex)
-			assert.Equal(1, results[1].SortIndex)
 		}
 	}
 
@@ -468,8 +465,6 @@ func TestContextCollectionGET(t *testing.T) {
 			// make sure sort=oldest works
 			assert.Equal("bid_4", results[0].Id)
 			assert.Equal(payload, results[0].Payload)
-			assert.Equal(4, results[0].SortIndex)
-
 			assert.Equal("4", resp.Header().Get("X-Weave-Next-Offset"))
 		}
 	}
@@ -878,7 +873,6 @@ func TestContextBsoGET(t *testing.T) {
 	if err = json.Unmarshal(resp.Body.Bytes(), &bso); assert.NoError(err) {
 		assert.Equal(bsoId, bso.Id)
 		assert.Equal(*payload, bso.Payload)
-		assert.Equal(*sortIndex, bso.SortIndex)
 	}
 
 	// test that we get a 404 from a bso that doesn't exist
