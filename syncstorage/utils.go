@@ -68,7 +68,7 @@ func SortIndexOk(sortIndex int) bool {
 }
 
 func TTLOk(ttl int) bool {
-	return (ttl > 0)
+	return (ttl >= 0)
 }
 
 func LimitOk(limit int) bool {
