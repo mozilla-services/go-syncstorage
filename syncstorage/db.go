@@ -626,6 +626,7 @@ func (d *DB) putBSO(tx dbTx,
 		err = ErrInvalidBSOId
 		return
 	}
+
 	if sortIndex != nil && !SortIndexOk(*sortIndex) {
 		err = ErrInvalidSortIndex
 		return
@@ -739,7 +740,7 @@ func (d *DB) getBSOs(
 
 	orderBy := ""
 	if sort == SORT_INDEX {
-		orderBy = "ORDER BY SortIndex ASC "
+		orderBy = "ORDER BY SortIndex DESC "
 	} else if sort == SORT_NEWEST {
 		orderBy = "ORDER BY Modified DESC "
 	} else if sort == SORT_OLDEST {

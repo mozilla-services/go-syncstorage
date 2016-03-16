@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -211,31 +212,30 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 
 	cId := 1
 
-	modified := Now()
-
 	// put in enough records to test offset
 	totalRecords := 12
 	for i := 0; i < totalRecords; i++ {
 		id := strconv.Itoa(i)
 		payload := "payload-" + id
 		sortIndex := i
+		modified := Now()
 		if err := db.insertBSO(tx, cId, id, modified, payload, sortIndex, DEFAULT_BSO_TTL); err != nil {
 			t.Fatal("Error inserting BSO #", i, ":", err)
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	newer := 0
-	sort := SORT_INDEX
 	limit := 5
 	offset := 0
 
 	// make sure invalid values don't work for limit and offset
-	_, err := db.getBSOs(tx, cId, nil, newer, sort, -1, offset)
+	_, err := db.getBSOs(tx, cId, nil, newer, SORT_INDEX, -1, offset)
 	assert.Equal(ErrInvalidLimit, err)
-	_, err = db.getBSOs(tx, cId, nil, newer, sort, limit, -1)
+	_, err = db.getBSOs(tx, cId, nil, newer, SORT_INDEX, limit, -1)
 	assert.Equal(ErrInvalidOffset, err)
 
-	results, err := db.getBSOs(tx, cId, nil, newer, sort, limit, offset)
+	results, err := db.getBSOs(tx, cId, nil, newer, SORT_NEWEST, limit, offset)
 	assert.NoError(err)
 
 	if assert.NotNil(results) {
@@ -245,11 +245,11 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 		assert.Equal(5, results.Offset, "Expected next offset to be 5")
 
 		// make sure we get the right BSOs
-		assert.Equal("0", results.BSOs[0].Id, "Expected BSO w/ Id = 0")
-		assert.Equal("4", results.BSOs[4].Id, "Expected BSO w/ Id = 4")
+		assert.Equal("11", results.BSOs[0].Id, "Expected BSO w/ Id = 11")
+		assert.Equal("7", results.BSOs[4].Id, "Expected BSO w/ Id = 7")
 	}
 
-	results2, err := db.getBSOs(tx, cId, nil, newer, sort, limit, results.Offset)
+	results2, err := db.getBSOs(tx, cId, nil, newer, SORT_INDEX, limit, results.Offset)
 	assert.NoError(err)
 	if assert.NotNil(results2) {
 		assert.Equal(5, len(results2.BSOs), "Expected 5 results")
@@ -258,11 +258,11 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 		assert.Equal(10, results2.Offset, "Expected next offset to be 10")
 
 		// make sure we get the right BSOs
-		assert.Equal("5", results2.BSOs[0].Id, "Expected BSO w/ Id = 5")
-		assert.Equal("9", results2.BSOs[4].Id, "Expected BSO w/ Id = 9")
+		assert.Equal("6", results2.BSOs[0].Id, "Expected BSO w/ Id = 5")
+		assert.Equal("2", results2.BSOs[4].Id, "Expected BSO w/ Id = 9")
 	}
 
-	results3, err := db.getBSOs(tx, cId, nil, newer, sort, limit, results2.Offset)
+	results3, err := db.getBSOs(tx, cId, nil, newer, SORT_INDEX, limit, results2.Offset)
 	assert.NoError(err)
 	if assert.NotNil(results3) {
 		assert.Equal(2, len(results3.BSOs), "Expected 2 results")
@@ -270,8 +270,8 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 		assert.False(results3.More)
 
 		// make sure we get the right BSOs
-		assert.Equal("10", results3.BSOs[0].Id, "Expected BSO w/ Id = 10")
-		assert.Equal("11", results3.BSOs[1].Id, "Expected BSO w/ Id = 11")
+		assert.Equal("1", results3.BSOs[0].Id, "Expected BSO w/ Id = 1")
+		assert.Equal("0", results3.BSOs[1].Id, "Expected BSO w/ Id = 0")
 	}
 
 }
@@ -375,9 +375,9 @@ func TestPrivateGetBSOsSort(t *testing.T) {
 	assert.NoError(err)
 	if assert.NotNil(results) {
 		assert.Equal(3, len(results.BSOs))
-		assert.Equal("b1", results.BSOs[0].Id)
+		assert.Equal("b2", results.BSOs[0].Id)
 		assert.Equal("b0", results.BSOs[1].Id)
-		assert.Equal("b2", results.BSOs[2].Id)
+		assert.Equal("b1", results.BSOs[2].Id)
 	}
 }
 
