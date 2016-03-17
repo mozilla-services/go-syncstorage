@@ -579,6 +579,54 @@ func TestContextCollectionGETValidatesData(t *testing.T) {
 	}
 }
 
+func TestParseIntoBSO(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	{
+		var b syncstorage.PutBSOInput
+		j := []byte(`{"id":"bso1", "payload": "payload", "sortIndex": 1, "ttl": 2100000}`)
+		assert.Nil(parseIntoBSO(j, &b))
+	}
+
+	{
+		var b syncstorage.PutBSOInput
+		j := []byte(`{"payload": "payload", "sortIndex": 1, "ttl": 2100000}`)
+		e := parseIntoBSO(j, &b)
+		if assert.NotNil(e) {
+			assert.Equal("", e.bId)
+			assert.Equal("id", e.field)
+		}
+	}
+
+	{
+		var b syncstorage.PutBSOInput
+		j := []byte(`{"id":"bso1", "payload": 1234, "sortIndex": 1, "ttl": 2100000}`)
+		e := parseIntoBSO(j, &b)
+		if assert.NotNil(e) {
+			assert.Equal("payload", e.field)
+		}
+	}
+
+	{
+		var b syncstorage.PutBSOInput
+		j := []byte(`{"id":"bso1", "payload": "payload", "sortIndex": "meh", "ttl": 2100000}`)
+		e := parseIntoBSO(j, &b)
+		if assert.NotNil(e) {
+			assert.Equal("sortindex", e.field)
+		}
+	}
+
+	{
+		var b syncstorage.PutBSOInput
+		j := []byte(`{"id":"bso1", "payload": "payload", "sortIndex": "1", "ttl": "eh"}`)
+		e := parseIntoBSO(j, &b)
+		if assert.NotNil(e) {
+			assert.Equal("ttl", e.field)
+		}
+	}
+}
+
 func TestContextCollectionPOST(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
@@ -648,10 +696,14 @@ func TestContextCollectionPOSTNewLines(t *testing.T) {
 
 	uid := "123456"
 
-	// Make sure INSERT works first
-	body := bytes.NewBufferString(`{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+	// Make sure INSERT works first, with lots of random whitespace
+	body := bytes.NewBufferString(`
+
+	{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
 {"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
-{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+   {"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+
+
 	`)
 
 	req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/bookmarks", body)
@@ -747,14 +799,23 @@ func TestContextCollectionPOSTTooLargePayload(t *testing.T) {
 
 	uid := "123456"
 	template := `[{"id":"%s", "payload": "%s", "sortindex": 1, "ttl": 2100000}]`
-	bodydata := fmt.Sprintf(template, "test", strings.Repeat("x", MAX_BSO_PAYLOAD_SIZE+1))
+	bodydata := fmt.Sprintf(template, "test", strings.Repeat("x", syncstorage.MAX_BSO_PAYLOAD_SIZE+1))
 
 	body := bytes.NewBufferString(bodydata)
 	req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/bookmarks", body)
 	req.Header.Add("Content-Type", "application/json")
 
 	res := sendrequest(req, context)
-	assert.Equal(http.StatusBadRequest, res.Code)
+	assert.Equal(http.StatusOK, res.Code)
+
+	var results PostResults
+	err := json.Unmarshal(res.Body.Bytes(), &results)
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Equal(0, len(results.Success))
+	assert.Equal(1, len(results.Failed["test"]))
 }
 
 func TestContextCollectionDELETE(t *testing.T) {

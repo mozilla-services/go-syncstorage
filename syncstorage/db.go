@@ -55,6 +55,9 @@ const (
 
 	// Keep BSO for 1 year
 	DEFAULT_BSO_TTL = 365 * 24 * 60 * 60 * 1000
+
+	// max BSO size
+	MAX_BSO_PAYLOAD_SIZE = 1024 * 256
 )
 
 type CollectionInfo struct {
@@ -653,7 +656,7 @@ func (d *DB) putBSO(tx dbTx,
 		return
 	}
 
-	if payload != nil && len(*payload) >= (256*1024) {
+	if payload != nil && len(*payload) >= (MAX_BSO_PAYLOAD_SIZE) {
 		err = ErrPayloadTooBig
 		return
 	}
