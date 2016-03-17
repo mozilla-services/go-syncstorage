@@ -585,13 +585,13 @@ func TestParseIntoBSO(t *testing.T) {
 
 	{
 		var b syncstorage.PutBSOInput
-		j := []byte(`{"id":"bso1", "payload": "payload", "sortIndex": 1, "ttl": 2100000}`)
+		j := []byte(`{"id":"bso1", "payload": "payload", "sortindex": 1, "ttl": 2100000}`)
 		assert.Nil(parseIntoBSO(j, &b))
 	}
 
 	{
 		var b syncstorage.PutBSOInput
-		j := []byte(`{"payload": "payload", "sortIndex": 1, "ttl": 2100000}`)
+		j := []byte(`{"payload": "payload", "sortindex": 1, "ttl": 2100000}`)
 		e := parseIntoBSO(j, &b)
 		if assert.NotNil(e) {
 			assert.Equal("", e.bId)
@@ -601,7 +601,7 @@ func TestParseIntoBSO(t *testing.T) {
 
 	{
 		var b syncstorage.PutBSOInput
-		j := []byte(`{"id":"bso1", "payload": 1234, "sortIndex": 1, "ttl": 2100000}`)
+		j := []byte(`{"id":"bso1", "payload": 1234, "sortindex": 1, "ttl": 2100000}`)
 		e := parseIntoBSO(j, &b)
 		if assert.NotNil(e) {
 			assert.Equal("payload", e.field)
@@ -610,7 +610,7 @@ func TestParseIntoBSO(t *testing.T) {
 
 	{
 		var b syncstorage.PutBSOInput
-		j := []byte(`{"id":"bso1", "payload": "payload", "sortIndex": "meh", "ttl": 2100000}`)
+		j := []byte(`{"id":"bso1", "payload": "payload", "sortindex": "meh", "ttl": 2100000}`)
 		e := parseIntoBSO(j, &b)
 		if assert.NotNil(e) {
 			assert.Equal("sortindex", e.field)
@@ -619,7 +619,7 @@ func TestParseIntoBSO(t *testing.T) {
 
 	{
 		var b syncstorage.PutBSOInput
-		j := []byte(`{"id":"bso1", "payload": "payload", "sortIndex": "1", "ttl": "eh"}`)
+		j := []byte(`{"id":"bso1", "payload": "payload", "sortindex": "1", "ttl": "eh"}`)
 		e := parseIntoBSO(j, &b)
 		if assert.NotNil(e) {
 			assert.Equal("ttl", e.field)
@@ -636,9 +636,9 @@ func TestContextCollectionPOST(t *testing.T) {
 
 	// Make sure INSERT works first
 	body := bytes.NewBufferString(`[
-		{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-		{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-		{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+		{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
 	]`)
 
 	req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/bookmarks", body)
@@ -666,9 +666,9 @@ func TestContextCollectionPOST(t *testing.T) {
 
 	// Test that updates work
 	body = bytes.NewBufferString(`[
-		{"Id":"bso1", "SortIndex": 2},
-		{"Id":"bso2", "Payload": "updated payload"},
-		{"Id":"bso3", "Payload": "updated payload", "SortIndex":3}
+		{"id":"bso1", "sortindex": 2},
+		{"id":"bso2", "payload": "updated payload"},
+		{"id":"bso3", "payload": "updated payload", "sortindex":3}
 	]`)
 
 	req2, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/bookmarks", body)
@@ -699,9 +699,9 @@ func TestContextCollectionPOSTNewLines(t *testing.T) {
 	// Make sure INSERT works first, with lots of random whitespace
 	body := bytes.NewBufferString(`
 
-	{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
-{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
-   {"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+	{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
+{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
+   {"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
 
 
 	`)
@@ -732,9 +732,9 @@ func TestContextCollectionPOSTNewLines(t *testing.T) {
 	}
 
 	// Test that updates work
-	body = bytes.NewBufferString(`{"Id":"bso1", "SortIndex": 2}
-{"Id":"bso2", "Payload": "updated payload"}
-{"Id":"bso3", "Payload": "updated payload", "SortIndex":3}
+	body = bytes.NewBufferString(`{"id":"bso1", "sortindex": 2}
+{"id":"bso2", "payload": "updated payload"}
+{"id":"bso3", "payload": "updated payload", "sortindex":3}
 	`)
 
 	req2, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/bookmarks", body)
@@ -766,9 +766,9 @@ func TestContextCollectionPOSTCreatesCollection(t *testing.T) {
 
 	// Make sure INSERT works first
 	body := bytes.NewBufferString(`[
-		{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-		{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-		{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+		{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
 	]`)
 
 	cName := "my_new_collection"
@@ -830,9 +830,10 @@ func TestContextCollectionDELETE(t *testing.T) {
 	// delete entire collection
 	{
 		body := bytes.NewBufferString(`[
-			{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-			{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-			{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000} ]`)
+			{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+			{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+			{"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
+		]`)
 
 		req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/my_collection", body)
 		req.Header.Add("Content-Type", "application/json")
@@ -866,9 +867,10 @@ func TestContextCollectionDELETE(t *testing.T) {
 	// delete only specific ids
 	{
 		body := bytes.NewBufferString(`[
-			{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-			{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-			{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000} ]`)
+			{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+			{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+			{"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
+		]`)
 
 		req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/my_collection", body)
 		req.Header.Add("Content-Type", "application/json")

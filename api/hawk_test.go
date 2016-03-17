@@ -120,9 +120,9 @@ func TestHawkAuthPOST(t *testing.T) {
 	tok := testtoken(context, uid)
 
 	body := bytes.NewBufferString(`[
-		{"Id":"bso1", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-		{"Id":"bso2", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000},
-		{"Id":"bso3", "Payload": "initial payload", "SortIndex": 1, "TTL": 2100000}
+		{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
 	]`)
 
 	req, _ := hawkrequestbody("POST", syncurl(uid, "storage/bookmarks"), tok, "application/json", body)

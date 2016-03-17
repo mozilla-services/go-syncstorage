@@ -578,8 +578,28 @@ func (e parseError) Error() string {
 }
 
 func parseIntoBSO(jsonData json.RawMessage, bso *syncstorage.PutBSOInput) *parseError {
-	err := json.Unmarshal(jsonData, bso)
 
+	// make sure JSON BSO data *only* has the keys that are allowed
+	var bkeys map[string]json.RawMessage
+	err := json.Unmarshal(jsonData, &bkeys)
+
+	if err != nil {
+		return &parseError{msg: "Could not parse into object"}
+	} else {
+		for k, _ := range bkeys {
+			switch k {
+			case "id", "payload", "ttl", "sortindex":
+				// its ok
+			default:
+				return &parseError{field: k, msg: "invalid field"}
+			}
+		}
+	}
+
+	// try parsing it into the actual bso, if this
+	// succeeds, just continue, otherwise try to figure
+	// out which field is borked
+	err = json.Unmarshal(jsonData, bso)
 	if err == nil {
 		if bso.Id == "" {
 			return &parseError{field: "id", msg: "Could not parse id"}
@@ -663,9 +683,8 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		if err := parseIntoBSO(rawJSON, &b); err == nil {
 			bsoToBeProcessed = append(bsoToBeProcessed, &b)
 		} else {
-			// error in the id field, just skip it...nothing
-			// can be done about it
-			if err.field == "id" {
+			// ignore empty whitespace lines from application/newlines
+			if len(strings.TrimSpace(string(rawJSON))) == 0 {
 				continue
 			}
 
@@ -853,23 +872,23 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 		return
 	}
 
-	var bso struct {
-		Payload   *string `json:"payload"`
-		SortIndex *int    `json:"sortindex"`
-		TTL       *int    `json:"ttl"`
-	}
-
 	cId, err = c.getcid(r, uid, true)
 	if err != nil {
 		c.Error(w, r, err)
 		return
 	}
 
-	decoder := json.NewDecoder(r.Body)
-	err = decoder.Decode(&bso)
-
+	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		c.Error(w, r, errors.New("PUT could not read JSON body"))
+		return
+	}
+
+	var bso syncstorage.PutBSOInput
+	if err := parseIntoBSO(body, &bso); err != nil && err.field != "id" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("8"))
 		return
 	}
 
@@ -893,7 +912,7 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 	}
 
 	m := syncstorage.ModifiedToString(modified)
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Last-Modified", m)
 	w.Write([]byte(m))
 }
