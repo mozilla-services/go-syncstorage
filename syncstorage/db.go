@@ -495,6 +495,15 @@ func (d *DB) GetBSOModified(cId int, bId string) (modified int, err error) {
 	d.Lock()
 	defer d.Unlock()
 	err = d.db.QueryRow("SELECT modified FROM BSO where CollectionId=? and Id=?", cId, bId).Scan(&modified)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, ErrNotFound
+		}
+
+		return 0, err
+	}
+
 	return
 }
 

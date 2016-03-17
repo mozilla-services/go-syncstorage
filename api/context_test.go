@@ -82,8 +82,15 @@ func syncurl(uid interface{}, path string) string {
 }
 
 func request(method, urlStr string, body io.Reader, c *Context) *httptest.ResponseRecorder {
+	header := make(http.Header)
+	header.Set("Accept", "application/json")
+	return requestheaders(method, urlStr, body, header, c)
+}
+
+func requestheaders(method, urlStr string, body io.Reader, header http.Header, c *Context) *httptest.ResponseRecorder {
+
 	req, err := http.NewRequest(method, urlStr, body)
-	req.Header.Set("Accept", "application/json")
+	req.Header = header
 
 	if err != nil {
 		panic(err)
@@ -873,6 +880,53 @@ func TestContextBsoGET(t *testing.T) {
 	if err = json.Unmarshal(resp.Body.Bytes(), &bso); assert.NoError(err) {
 		assert.Equal(bsoId, bso.Id)
 		assert.Equal(*payload, bso.Payload)
+	}
+
+	// test that X-If-Modified-Since and X-If-Unmodified-Since return a 400
+	{
+
+		header := make(http.Header)
+		header.Add("X-If-Modified-Since", fmt.Sprintf("%.2f", bso.Modified))
+		header.Add("X-If-Unmodified-Since", fmt.Sprintf("%.2f", bso.Modified))
+		header.Add("Accept", "application/json")
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId,
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusBadRequest, resp.Code)
+	}
+
+	// test that api returns a 304 when sending a X-If-Modified-Since header
+	{
+
+		header := make(http.Header)
+		header.Add("X-If-Modified-Since", fmt.Sprintf("%.2f", bso.Modified))
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId,
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusNotModified, resp.Code)
+	}
+
+	// test that api returns a 412 Precondition failed
+	{
+
+		header := make(http.Header)
+		header.Add("X-If-Unmodified-Since", fmt.Sprintf("%.2f", bso.Modified))
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId,
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusPreconditionFailed, resp.Code)
 	}
 
 	// test that we get a 404 from a bso that doesn't exist
