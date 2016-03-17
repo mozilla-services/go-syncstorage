@@ -118,6 +118,11 @@ func TestDispatchSyncApiPublicGetBSOs(t *testing.T) {
 	testApiGetBSOs(newDispatchwrap(), t)
 }
 
+func TestDispatchSyncApiPublicGetBSOModified(t *testing.T) {
+	t.Parallel()
+	testApiGetBSOModified(newDispatchwrap(), t)
+}
+
 func TestDispatchSyncApiDeleteBSO(t *testing.T) {
 	t.Parallel()
 	testApiDeleteBSO(newDispatchwrap(), t)

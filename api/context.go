@@ -267,6 +267,12 @@ func (c *Context) Error(w http.ResponseWriter, r *http.Request, err error) {
 		http.StatusInternalServerError)
 }
 
+func (c *Context) NotModified(w http.ResponseWriter, r *http.Request, body string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf8")
+	w.WriteHeader(http.StatusNotModified)
+	fmt.Fprintln(w, body)
+}
+
 // JsonNewline returns data as newline separated or as a single
 // json array
 func (c *Context) JsonNewline(w http.ResponseWriter, r *http.Request, val interface{}) {
@@ -719,17 +725,67 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 	}
 
 	cId, err = c.getcid(r, uid, false)
-	if err == nil {
-		bso, err = c.Dispatch.GetBSO(uid, cId, bId)
-		if err == nil {
-			c.JsonNewline(w, r, bso)
+
+	if err != nil {
+		if err == syncstorage.ErrNotFound {
+			http.NotFound(w, r)
+		} else {
+			c.Error(w, r, err)
+		}
+		return
+	}
+
+	modified, err := c.Dispatch.GetBSOModified(uid, cId, bId)
+	if err != nil {
+		if err == syncstorage.ErrNotFound {
+			http.NotFound(w, r)
+		} else {
+			c.Error(w, r, err)
+		}
+		return
+	}
+
+	modSince := r.Header.Get("X-If-Modified-Since")
+	unmodSince := r.Header.Get("X-If-Unmodified-Since")
+
+	if modSince != "" && unmodSince != "" {
+		http.Error(w, "X-If-Modified-Since and X-If-Unmodified-Since both provided", http.StatusBadRequest)
+		return
+	}
+
+	if modSince != "" {
+		ts, err := ConvertTimestamp(modSince)
+		if err != nil {
+			http.Error(w, "Invalid X-If-Modified-Since value", http.StatusBadRequest)
+			return
+		}
+		apiDebug("hBsoGet X-If-Modified-Since: %s, converted: %d, modified: %d", modSince, ts, modified)
+
+		if modified <= ts {
+			c.NotModified(w, r, http.StatusText(http.StatusNotModified))
 			return
 		}
 	}
 
-	if err == syncstorage.ErrNotFound {
-		http.NotFound(w, r)
-		return
+	if unmodSince != "" {
+		ts, err := ConvertTimestamp(unmodSince)
+		if err != nil {
+			http.Error(w, "Invalid X-If-Unmodified-Since value", http.StatusBadRequest)
+			return
+		}
+
+		apiDebug("hBsoGet X-If-Unmodified-Since: %s, converted: %d, modified: %d", unmodSince, ts, modified)
+
+		if modified >= ts {
+			w.Header().Set("Content-Type", "text/plain; charset=utf8")
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+	}
+
+	bso, err = c.Dispatch.GetBSO(uid, cId, bId)
+	if err == nil {
+		c.JsonNewline(w, r, bso)
 	} else {
 		c.Error(w, r, err)
 	}

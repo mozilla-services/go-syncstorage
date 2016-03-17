@@ -70,6 +70,10 @@ func (d *dispatchwrap) GetBSOs(
 	return d.dispatch.GetBSOs(d.uid, cId, ids, newer, sort, limit, offset)
 }
 
+func (d *dispatchwrap) GetBSOModified(cId int, bId string) (int, error) {
+	return d.dispatch.GetBSOModified(d.uid, cId, bId)
+}
+
 func (d *dispatchwrap) DeleteBSO(cId int, bId string) (modified int, err error) {
 	return d.dispatch.DeleteBSO(d.uid, cId, bId)
 }

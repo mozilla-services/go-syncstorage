@@ -70,6 +70,10 @@ func (p *poolwrap) GetBSOs(
 	return p.pool.GetBSOs(p.uid, cId, ids, newer, sort, limit, offset)
 }
 
+func (p *poolwrap) GetBSOModified(cId int, bId string) (int, error) {
+	return p.pool.GetBSOModified(p.uid, cId, bId)
+}
+
 func (p *poolwrap) DeleteBSO(cId int, bId string) (modified int, err error) {
 	return p.pool.DeleteBSO(p.uid, cId, bId)
 }

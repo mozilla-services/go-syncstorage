@@ -389,6 +389,27 @@ func testApiGetBSOs(db SyncApi, t *testing.T) {
 	}
 }
 
+func testApiGetBSOModified(db SyncApi, t *testing.T) {
+	assert := assert.New(t)
+
+	cId := 1
+	bId := "b0"
+	payload := "a"
+
+	expected, err := db.PutBSO(cId, bId, String(payload), nil, nil)
+	if !assert.NoError(err) {
+		return
+	}
+
+	// Make sure it returns the right BSO
+	modified, err := db.GetBSOModified(cId, bId)
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Equal(expected, modified)
+}
+
 func testApiDeleteBSO(db SyncApi, t *testing.T) {
 	assert := assert.New(t)
 

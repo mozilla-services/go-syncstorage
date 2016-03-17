@@ -122,6 +122,12 @@ func (d *Dispatch) GetBSOs(
 	return pool.GetBSOs(uid, cId, ids, newer, sort, limit, offset)
 }
 
+func (d *Dispatch) GetBSOModified(uid string, cId int, bId string) (modified int, err error) {
+
+	pool := d.pools[d.Index(uid)]
+	return pool.GetBSOModified(uid, cId, bId)
+}
+
 func (d *Dispatch) DeleteBSO(uid string, cId int, bId string) (modified int, err error) {
 	pool := d.pools[d.Index(uid)]
 	return pool.DeleteBSO(uid, cId, bId)

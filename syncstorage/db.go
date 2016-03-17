@@ -491,6 +491,22 @@ func (d *DB) GetBSOs(
 	return
 }
 
+func (d *DB) GetBSOModified(cId int, bId string) (modified int, err error) {
+	d.Lock()
+	defer d.Unlock()
+	err = d.db.QueryRow("SELECT modified FROM BSO where CollectionId=? and Id=?", cId, bId).Scan(&modified)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, ErrNotFound
+		}
+
+		return 0, err
+	}
+
+	return
+}
+
 // DeleteBSO deletes a single BSO and returns the
 // modified timestamp for the collection
 func (d *DB) DeleteBSO(cId int, bId string) (int, error) {
