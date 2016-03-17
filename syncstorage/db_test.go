@@ -472,6 +472,12 @@ func TestPublicGetBSOs(t *testing.T) {
 	defer removeTestDB(db)
 	testApiGetBSOs(db, t)
 }
+func TestPublicGetBSOModified(t *testing.T) {
+	t.Parallel()
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+	testApiGetBSOModified(db, t)
+}
 
 func TestDeleteBSO(t *testing.T) {
 	t.Parallel()

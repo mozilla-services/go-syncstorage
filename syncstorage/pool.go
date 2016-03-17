@@ -309,6 +309,16 @@ func (p *Pool) GetBSOs(
 
 	return db.GetBSOs(cId, ids, newer, sort, limit, offset)
 }
+func (p *Pool) GetBSOModified(uid string, cId int, bId string) (modified int, err error) {
+
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+
+	return db.GetBSOModified(cId, bId)
+}
 
 func (p *Pool) DeleteBSO(uid string, cId int, bId string) (modified int, err error) {
 	db, err := p.borrowdb(uid)

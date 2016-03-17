@@ -36,6 +36,8 @@ type SyncApi interface {
 		limit int,
 		offset int) (r *GetResults, err error)
 
+	GetBSOModified(cId int, bId string) (modified int, err error)
+
 	DeleteBSO(cId int, bId string) (int, error)
 	DeleteBSOs(cId int, bIds ...string) (modified int, err error)
 

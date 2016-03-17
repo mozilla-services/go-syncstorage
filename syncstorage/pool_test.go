@@ -233,6 +233,11 @@ func TestPoolSyncApiPublicGetBSOs(t *testing.T) {
 	testApiGetBSOs(newPoolwrap(), t)
 }
 
+func TestPoolSyncApiPublicGetBSOModified(t *testing.T) {
+	t.Parallel()
+	testApiGetBSOModified(newPoolwrap(), t)
+}
+
 func TestPoolSyncApiDeleteBSO(t *testing.T) {
 	t.Parallel()
 	testApiDeleteBSO(newPoolwrap(), t)
