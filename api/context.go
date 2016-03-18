@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
@@ -36,10 +37,18 @@ var (
 
 const (
 	MAX_BSO_PER_POST_REQUEST = 100
-	MAX_BSO_PAYLOAD_SIZE     = 256 * 1024
 
 	// maximum number of BSOs per GET request
 	MAX_BSO_GET_LIMIT = 2500
+
+	// old legacy stuff, used to keep compatibility with python/old clients
+	// https://github.com/mozilla-services/server-syncstorage/blob/fd3c8b90278cb9944cb224964af6e6dae19c9263/syncstorage/tweens.py#L17-L21
+
+	WEAVE_UNKNOWN_ERROR  = "0"
+	WEAVE_ILLEGAL_METH   = "1"  // Illegal method/protocol
+	WEAVE_MALFORMED_JSON = "6"  // Json parse failure
+	WEAVE_INVALID_WBO    = "8"  // Invalid Weave Basic Object
+	WEAVE_OVER_QUOTA     = "14" // User over quota
 )
 
 // NewRouterFromContext creates a mux.Router and registers handlers from
@@ -567,6 +576,85 @@ type PostResults struct {
 	Failed   map[string][]string `json:"failed"`
 }
 
+type parseError struct {
+	bId   string
+	field string
+	msg   string
+}
+
+func (e parseError) Error() string {
+	return fmt.Sprintf("Could not parse field %s: %s", e.field, e.msg)
+}
+
+func parseIntoBSO(jsonData json.RawMessage, bso *syncstorage.PutBSOInput) *parseError {
+
+	// make sure JSON BSO data *only* has the keys that are allowed
+	var bkeys map[string]json.RawMessage
+	err := json.Unmarshal(jsonData, &bkeys)
+
+	if err != nil {
+		return &parseError{msg: "Could not parse into object"}
+	} else {
+		for k, _ := range bkeys {
+			switch k {
+			case "id", "payload", "ttl", "sortindex":
+				// its ok
+			default:
+				return &parseError{field: k, msg: "invalid field"}
+			}
+		}
+	}
+
+	// try parsing it into the actual bso, if this
+	// succeeds, just continue, otherwise try to figure
+	// out which field is borked
+	err = json.Unmarshal(jsonData, bso)
+	if err == nil {
+		if bso.Id == "" {
+			return &parseError{field: "id", msg: "Could not parse id"}
+		}
+		return nil
+	}
+
+	// try to isolate the json error to the field
+	var (
+		bid struct {
+			Id string `json:"id"`
+		}
+		payload struct {
+			Payload string `json:"payload"`
+		}
+		ttl struct {
+			TTL int `json:"ttl"`
+		}
+		sort struct {
+			SortIndex int `json:"sortindex"`
+		}
+	)
+
+	// figure out what went wrong and return a parseError
+	if err := json.Unmarshal(jsonData, &bid); err != nil {
+		return &parseError{field: "id", msg: err.Error()}
+	} else if bid.Id == "" {
+		return &parseError{field: "id", msg: "Missing id field"}
+	}
+
+	if err := json.Unmarshal(jsonData, &payload); err != nil {
+		return &parseError{bId: bid.Id, field: "payload", msg: err.Error()}
+	}
+
+	if err := json.Unmarshal(jsonData, &ttl); err != nil {
+		return &parseError{bId: bid.Id, field: "ttl", msg: err.Error()}
+	}
+
+	if err := json.Unmarshal(jsonData, &sort); err != nil {
+		return &parseError{bId: bid.Id, field: "sortindex", msg: err.Error()}
+	}
+
+	// this should never happen..
+	return &parseError{msg: "Unknown JSON parse error"}
+}
+
 func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid string) {
 	// accept text/plain from old (broken) clients
 	ct := r.Header.Get("Content-Type")
@@ -576,64 +664,47 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		return
 	}
 
-	// parsing the results is sort of ugly since fields can be left out
-	// if they are not to be submitted
-	var posted syncstorage.PostBSOInput
+	// a list of all the raw json encoded BSOs
+	var raw []json.RawMessage
 
 	if ct == "application/json" || ct == "text/plain" {
 		decoder := json.NewDecoder(r.Body)
-		err := decoder.Decode(&posted)
+		err := decoder.Decode(&raw)
 		if err != nil {
 			http.Error(w, "Invalid JSON posted", http.StatusBadRequest)
 			return
 		}
-	} else { // decode application/newlines
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Could not read Body", http.StatusInternalServerError)
-			return
+	} else { // deal with application/newlines
+		raw = []json.RawMessage{}
+		scanner := bufio.NewScanner(r.Body)
+		for scanner.Scan() {
+			bsoBytes := scanner.Bytes()
+			raw = append(raw, bsoBytes)
 		}
+	}
 
-		splitData := bytes.Split(body, []byte("\n"))
-		posted = syncstorage.PostBSOInput{}
-		for i, data := range splitData {
-			var bso syncstorage.PutBSOInput
+	// bsoToBeProcessed will actually get sent to the DB
+	bsoToBeProcessed := syncstorage.PostBSOInput{}
+	results := syncstorage.NewPostResults(syncstorage.Now())
 
-			// skip empty lines
-			if strings.TrimSpace(string(data)) == "" {
+	for _, rawJSON := range raw {
+		var b syncstorage.PutBSOInput
+		if err := parseIntoBSO(rawJSON, &b); err == nil {
+			bsoToBeProcessed = append(bsoToBeProcessed, &b)
+		} else {
+			// ignore empty whitespace lines from application/newlines
+			if len(strings.TrimSpace(string(rawJSON))) == 0 {
 				continue
 			}
 
-			if err := json.Unmarshal(data, &bso); err == nil {
-				posted = append(posted, &bso)
-			} else {
-				http.Error(w,
-					fmt.Sprintf("Invalid JSON posted for item: %d, %v, %s",
-						i, err, string(data)),
-					http.StatusBadRequest)
-				return
-			}
+			results.AddFailure(err.bId, fmt.Sprintf("invalid %s", err.field))
 		}
 	}
 
-	if len(posted) > MAX_BSO_PER_POST_REQUEST {
+	if len(bsoToBeProcessed) > MAX_BSO_PER_POST_REQUEST {
 		http.Error(w, fmt.Sprintf("Exceeded %d BSO per request", MAX_BSO_PER_POST_REQUEST),
 			http.StatusRequestEntityTooLarge)
 		return
-	}
-
-	// validate basic bso data
-	for _, b := range posted {
-		if !syncstorage.BSOIdOk(b.Id) {
-			http.Error(w, "Invalid or missing Id in data", http.StatusBadRequest)
-			return
-		}
-
-		if b.Payload != nil && len(*b.Payload) > MAX_BSO_PAYLOAD_SIZE {
-			http.Error(w, fmt.Sprintf("%s payload greater than max of %d bytes",
-				b.Id, MAX_BSO_PAYLOAD_SIZE), http.StatusBadRequest)
-			return
-		}
 	}
 
 	cId, err := c.getcid(r, uid, true) // automake the collection if it doesn't exit
@@ -648,22 +719,27 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 
 	// change posted[].TTL from seconds (what clients send)
 	// to milliseconds (what the DB uses)
-	for _, p := range posted {
+	for _, p := range bsoToBeProcessed {
 		if p.TTL != nil {
 			tmp := *p.TTL * 1000
 			p.TTL = &tmp
 		}
 	}
 
-	results, err := c.Dispatch.PostBSOs(uid, cId, posted)
+	postResults, err := c.Dispatch.PostBSOs(uid, cId, bsoToBeProcessed)
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
 		m := syncstorage.ModifiedToString(results.Modified)
+
+		for bsoId, failMessage := range postResults.Failed {
+			results.Failed[bsoId] = failMessage
+		}
+
 		w.Header().Set("X-Last-Modified", m)
 		c.JsonNewline(w, r, &PostResults{
 			Modified: m,
-			Success:  results.Success,
+			Success:  postResults.Success,
 			Failed:   results.Failed,
 		})
 	}
@@ -704,7 +780,7 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 func (c *Context) getbso(w http.ResponseWriter, r *http.Request) (bId string, ok bool) {
 	bId, ok = mux.Vars(r)["bsoId"]
 	if !ok || !syncstorage.BSOIdOk(bId) {
-		http.Error(w, "Invalid bso ID", http.StatusBadRequest)
+		http.Error(w, "Invalid bso ID", http.StatusNotFound)
 	}
 
 	return
@@ -774,7 +850,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 			return
 		}
 
-		apiDebug("hBsoGet X-If-Unmodified-Since: %s, converted: %d, modified: %d", unmodSince, ts, modified)
+		//apiDebug("hBsoGet X-If-Unmodified-Since: %s, converted: %d, modified: %d", unmodSince, ts, modified)
 
 		if modified >= ts {
 			w.Header().Set("Content-Type", "text/plain; charset=utf8")
@@ -805,22 +881,23 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 		return
 	}
 
-	var bso struct {
-		Payload   *string `json:"payload"`
-		SortIndex *int    `json:"sortindex"`
-		TTL       *int    `json:"ttl"`
-	}
-
 	cId, err = c.getcid(r, uid, true)
-	if err == syncstorage.ErrNotFound {
+	if err != nil {
+		c.Error(w, r, err)
 		return
 	}
 
-	decoder := json.NewDecoder(r.Body)
-	err = decoder.Decode(&bso)
-
+	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		c.Error(w, r, errors.New("PUT could not read JSON body"))
+		return
+	}
+
+	var bso syncstorage.PutBSOInput
+	if err := parseIntoBSO(body, &bso); err != nil && err.field != "id" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(WEAVE_INVALID_WBO))
 		return
 	}
 
@@ -844,7 +921,7 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 	}
 
 	m := syncstorage.ModifiedToString(modified)
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Last-Modified", m)
 	w.Write([]byte(m))
 }
