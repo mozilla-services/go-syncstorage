@@ -591,6 +591,15 @@ func TestParseIntoBSO(t *testing.T) {
 
 	{
 		var b syncstorage.PutBSOInput
+		j := []byte(`{invalid json}`)
+		e := parseIntoBSO(j, &b)
+		if assert.NotNil(e) {
+			assert.Equal("-", e.field)
+		}
+	}
+
+	{
+		var b syncstorage.PutBSOInput
 		j := []byte(`{"id": 123, "payload": "payload", "sortindex": 1, "ttl": 2100000}`)
 		e := parseIntoBSO(j, &b)
 		if assert.NotNil(e) {
@@ -789,6 +798,34 @@ func TestContextCollectionPOSTCreatesCollection(t *testing.T) {
 		b, err := context.Dispatch.GetBSO(uid, cId, bId)
 		assert.NotNil(b)
 		assert.NoError(err)
+	}
+}
+
+func TestContextCollectionPOSTWeaveInvalidWSOError(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := makeTestContext()
+
+	uid := "123456"
+
+	send := func(body string) *httptest.ResponseRecorder {
+		buf := bytes.NewBufferString(body)
+		req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/col2", buf)
+		req.Header.Add("Content-Type", "application/json")
+		return sendrequest(req, context)
+	}
+
+	{
+		resp := send(`[
+			{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+			"BOOM"
+		]`)
+		assert.Equal(WEAVE_INVALID_WBO, resp.Body.String())
+	}
+
+	{
+		resp := send("42")
+		assert.Equal(WEAVE_INVALID_WBO, resp.Body.String())
 	}
 }
 
@@ -1090,7 +1127,33 @@ func TestContextBsoPUT(t *testing.T) {
 		assert.Equal("updated", b.Payload)
 		assert.Equal(2, b.SortIndex)
 	}
+}
 
+func TestContextBsoPUTWeaveInvalidWSOError(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := makeTestContext()
+	uid := "123456"
+	collection := "bookmarks"
+	bId := "test"
+
+	{
+		data := `{"id": [1,2,3], "payload":"hello", "sortindex":1}`
+		body := bytes.NewBufferString(data)
+		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bId, body, context)
+		if assert.Equal(http.StatusBadRequest, resp.Code) {
+			assert.Equal(WEAVE_INVALID_WBO, resp.Body.String())
+		}
+	}
+
+	{
+		data := "42"
+		body := bytes.NewBufferString(data)
+		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bId, body, context)
+		if assert.Equal(http.StatusBadRequest, resp.Code) {
+			assert.Equal(WEAVE_INVALID_WBO, resp.Body.String())
+		}
+	}
 }
 
 func TestContextBsoDELETE(t *testing.T) {

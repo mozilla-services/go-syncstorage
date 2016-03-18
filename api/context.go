@@ -276,6 +276,12 @@ func (c *Context) Error(w http.ResponseWriter, r *http.Request, err error) {
 		http.StatusInternalServerError)
 }
 
+func (c *Context) WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte(WEAVE_INVALID_WBO))
+}
+
 func (c *Context) NotModified(w http.ResponseWriter, r *http.Request, body string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf8")
 	w.WriteHeader(http.StatusNotModified)
@@ -593,7 +599,7 @@ func parseIntoBSO(jsonData json.RawMessage, bso *syncstorage.PutBSOInput) *parse
 	err := json.Unmarshal(jsonData, &bkeys)
 
 	if err != nil {
-		return &parseError{msg: "Could not parse into object"}
+		return &parseError{field: "-", msg: "Could not parse into object"}
 	} else {
 		for k, _ := range bkeys {
 			switch k {
@@ -666,7 +672,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		decoder := json.NewDecoder(r.Body)
 		err := decoder.Decode(&raw)
 		if err != nil {
-			http.Error(w, "Invalid JSON posted", http.StatusBadRequest)
+			c.WeaveInvalidWBOError(w, r)
 			return
 		}
 	} else { // deal with application/newlines
@@ -690,6 +696,13 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 			// ignore empty whitespace lines from application/newlines
 			if len(strings.TrimSpace(string(rawJSON))) == 0 {
 				continue
+			}
+
+			// couldn't parse a BSO into something real
+			// abort immediately
+			if err.field == "-" { // json error, not an object
+				c.WeaveInvalidWBOError(w, r)
+				return
 			}
 
 			results.AddFailure(err.bId, fmt.Sprintf("invalid %s", err.field))
@@ -890,9 +903,7 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 
 	var bso syncstorage.PutBSOInput
 	if err := parseIntoBSO(body, &bso); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(WEAVE_INVALID_WBO))
+		c.WeaveInvalidWBOError(w, r)
 		return
 	}
 
