@@ -1018,7 +1018,7 @@ func TestContextBsoPUT(t *testing.T) {
 	{
 		testNum++
 		bsoId := "test" + strconv.Itoa(testNum)
-		data := `{"payload":"hello","sortindex":1, "ttl": 1000000}`
+		data := `{"id":"` + bsoId + `", "payload":"hello","sortindex":1, "ttl": 1000000}`
 		body := bytes.NewBufferString(data)
 		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {
@@ -1036,7 +1036,7 @@ func TestContextBsoPUT(t *testing.T) {
 	{ // test with fewer params
 		testNum++
 		bsoId := "test" + strconv.Itoa(testNum)
-		data := `{"payload":"hello","sortindex":1}`
+		data := `{"id":"` + bsoId + `", "payload":"hello","sortindex":1}`
 		body := bytes.NewBufferString(data)
 		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {
@@ -1051,7 +1051,7 @@ func TestContextBsoPUT(t *testing.T) {
 	{ // test with fewer params
 		testNum++
 		bsoId := "test" + strconv.Itoa(testNum)
-		data := `{"payload":"hello", "sortindex":1}`
+		data := `{"id":"` + bsoId + `", "payload":"hello", "sortindex":1}`
 		body := bytes.NewBufferString(data)
 		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {
@@ -1066,7 +1066,7 @@ func TestContextBsoPUT(t *testing.T) {
 	{ // Test Updates
 		testNum++
 		bsoId := "test" + strconv.Itoa(testNum)
-		data := `{"payload":"hello", "sortindex":1}`
+		data := `{"id":"` + bsoId + `", "payload":"hello", "sortindex":1}`
 		body := bytes.NewBufferString(data)
 		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {
@@ -1077,7 +1077,7 @@ func TestContextBsoPUT(t *testing.T) {
 		assert.NotNil(b)
 		assert.NoError(err)
 
-		data = `{"payload":"updated", "sortindex":2}`
+		data = `{"id":"` + bsoId + `", "payload":"updated", "sortindex":2}`
 		body = bytes.NewBufferString(data)
 		resp = request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {

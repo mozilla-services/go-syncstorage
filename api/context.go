@@ -610,7 +610,7 @@ func parseIntoBSO(jsonData json.RawMessage, bso *syncstorage.PutBSOInput) *parse
 	// out which field is borked
 	err = json.Unmarshal(jsonData, bso)
 	if err == nil {
-		if bso.Id == "" {
+		if bso.Id == "" { // id is required
 			return &parseError{field: "id", msg: "Could not parse id"}
 		}
 		return nil
@@ -894,7 +894,7 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 	}
 
 	var bso syncstorage.PutBSOInput
-	if err := parseIntoBSO(body, &bso); err != nil && err.field != "id" {
+	if err := parseIntoBSO(body, &bso); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(WEAVE_INVALID_WBO))
