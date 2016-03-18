@@ -598,61 +598,56 @@ func parseIntoBSO(jsonData json.RawMessage, bso *syncstorage.PutBSOInput) *parse
 		for k, _ := range bkeys {
 			switch k {
 			case "id", "payload", "ttl", "sortindex":
-				// its ok
+				// it's ok
 			default:
 				return &parseError{field: k, msg: "invalid field"}
 			}
 		}
 	}
 
-	// try parsing it into the actual bso, if this
-	// succeeds, just continue, otherwise try to figure
-	// out which field is borked
-	err = json.Unmarshal(jsonData, bso)
-	if err == nil {
-		if bso.Id == "" { // id is required
-			return &parseError{field: "id", msg: "Could not parse id"}
+	var bId string
+
+	// check to make sure values are appropriate
+	if r, ok := bkeys["id"]; ok {
+		err := json.Unmarshal(r, &bId)
+		if err != nil {
+			return &parseError{field: "id", msg: "Invalid format"}
+		} else {
+			bso.Id = bId
 		}
-		return nil
 	}
 
-	// try to isolate the json error to the field
-	var (
-		bid struct {
-			Id string `json:"id"`
+	if r, ok := bkeys["payload"]; ok {
+		var payload string
+		err := json.Unmarshal(r, &payload)
+		if err != nil {
+			return &parseError{bId: bId, field: "payload", msg: "Invalid format"}
+		} else {
+			bso.Payload = &payload
 		}
-		payload struct {
-			Payload string `json:"payload"`
-		}
-		ttl struct {
-			TTL int `json:"ttl"`
-		}
-		sort struct {
-			SortIndex int `json:"sortindex"`
-		}
-	)
-
-	// figure out what went wrong and return a parseError
-	if err := json.Unmarshal(jsonData, &bid); err != nil {
-		return &parseError{field: "id", msg: err.Error()}
-	} else if bid.Id == "" {
-		return &parseError{field: "id", msg: "Missing id field"}
 	}
 
-	if err := json.Unmarshal(jsonData, &payload); err != nil {
-		return &parseError{bId: bid.Id, field: "payload", msg: err.Error()}
+	if r, ok := bkeys["ttl"]; ok {
+		var ttl int
+		err := json.Unmarshal(r, &ttl)
+		if err != nil {
+			return &parseError{bId: bId, field: "ttl", msg: "Invalid format"}
+		} else {
+			bso.TTL = &ttl
+		}
 	}
 
-	if err := json.Unmarshal(jsonData, &ttl); err != nil {
-		return &parseError{bId: bid.Id, field: "ttl", msg: err.Error()}
+	if r, ok := bkeys["sortindex"]; ok {
+		var sortindex int
+		err := json.Unmarshal(r, &sortindex)
+		if err != nil {
+			return &parseError{bId: bId, field: "sortindex", msg: "Invalid format"}
+		} else {
+			bso.SortIndex = &sortindex
+		}
 	}
 
-	if err := json.Unmarshal(jsonData, &sort); err != nil {
-		return &parseError{bId: bid.Id, field: "sortindex", msg: err.Error()}
-	}
-
-	// this should never happen..
-	return &parseError{msg: "Unknown JSON parse error"}
+	return nil
 }
 
 func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid string) {

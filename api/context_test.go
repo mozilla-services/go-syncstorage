@@ -591,7 +591,7 @@ func TestParseIntoBSO(t *testing.T) {
 
 	{
 		var b syncstorage.PutBSOInput
-		j := []byte(`{"payload": "payload", "sortindex": 1, "ttl": 2100000}`)
+		j := []byte(`{"id": 123, "payload": "payload", "sortindex": 1, "ttl": 2100000}`)
 		e := parseIntoBSO(j, &b)
 		if assert.NotNil(e) {
 			assert.Equal("", e.bId)
