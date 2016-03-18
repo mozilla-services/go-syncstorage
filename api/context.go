@@ -276,6 +276,12 @@ func (c *Context) Error(w http.ResponseWriter, r *http.Request, err error) {
 		http.StatusInternalServerError)
 }
 
+func (c *Context) WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte(WEAVE_INVALID_WBO))
+}
+
 func (c *Context) NotModified(w http.ResponseWriter, r *http.Request, body string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf8")
 	w.WriteHeader(http.StatusNotModified)
@@ -593,66 +599,61 @@ func parseIntoBSO(jsonData json.RawMessage, bso *syncstorage.PutBSOInput) *parse
 	err := json.Unmarshal(jsonData, &bkeys)
 
 	if err != nil {
-		return &parseError{msg: "Could not parse into object"}
+		return &parseError{field: "-", msg: "Could not parse into object"}
 	} else {
 		for k, _ := range bkeys {
 			switch k {
 			case "id", "payload", "ttl", "sortindex":
-				// its ok
+				// it's ok
 			default:
 				return &parseError{field: k, msg: "invalid field"}
 			}
 		}
 	}
 
-	// try parsing it into the actual bso, if this
-	// succeeds, just continue, otherwise try to figure
-	// out which field is borked
-	err = json.Unmarshal(jsonData, bso)
-	if err == nil {
-		if bso.Id == "" {
-			return &parseError{field: "id", msg: "Could not parse id"}
+	var bId string
+
+	// check to make sure values are appropriate
+	if r, ok := bkeys["id"]; ok {
+		err := json.Unmarshal(r, &bId)
+		if err != nil {
+			return &parseError{field: "id", msg: "Invalid format"}
+		} else {
+			bso.Id = bId
 		}
-		return nil
 	}
 
-	// try to isolate the json error to the field
-	var (
-		bid struct {
-			Id string `json:"id"`
+	if r, ok := bkeys["payload"]; ok {
+		var payload string
+		err := json.Unmarshal(r, &payload)
+		if err != nil {
+			return &parseError{bId: bId, field: "payload", msg: "Invalid format"}
+		} else {
+			bso.Payload = &payload
 		}
-		payload struct {
-			Payload string `json:"payload"`
-		}
-		ttl struct {
-			TTL int `json:"ttl"`
-		}
-		sort struct {
-			SortIndex int `json:"sortindex"`
-		}
-	)
-
-	// figure out what went wrong and return a parseError
-	if err := json.Unmarshal(jsonData, &bid); err != nil {
-		return &parseError{field: "id", msg: err.Error()}
-	} else if bid.Id == "" {
-		return &parseError{field: "id", msg: "Missing id field"}
 	}
 
-	if err := json.Unmarshal(jsonData, &payload); err != nil {
-		return &parseError{bId: bid.Id, field: "payload", msg: err.Error()}
+	if r, ok := bkeys["ttl"]; ok {
+		var ttl int
+		err := json.Unmarshal(r, &ttl)
+		if err != nil {
+			return &parseError{bId: bId, field: "ttl", msg: "Invalid format"}
+		} else {
+			bso.TTL = &ttl
+		}
 	}
 
-	if err := json.Unmarshal(jsonData, &ttl); err != nil {
-		return &parseError{bId: bid.Id, field: "ttl", msg: err.Error()}
+	if r, ok := bkeys["sortindex"]; ok {
+		var sortindex int
+		err := json.Unmarshal(r, &sortindex)
+		if err != nil {
+			return &parseError{bId: bId, field: "sortindex", msg: "Invalid format"}
+		} else {
+			bso.SortIndex = &sortindex
+		}
 	}
 
-	if err := json.Unmarshal(jsonData, &sort); err != nil {
-		return &parseError{bId: bid.Id, field: "sortindex", msg: err.Error()}
-	}
-
-	// this should never happen..
-	return &parseError{msg: "Unknown JSON parse error"}
+	return nil
 }
 
 func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid string) {
@@ -671,7 +672,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		decoder := json.NewDecoder(r.Body)
 		err := decoder.Decode(&raw)
 		if err != nil {
-			http.Error(w, "Invalid JSON posted", http.StatusBadRequest)
+			c.WeaveInvalidWBOError(w, r)
 			return
 		}
 	} else { // deal with application/newlines
@@ -695,6 +696,13 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 			// ignore empty whitespace lines from application/newlines
 			if len(strings.TrimSpace(string(rawJSON))) == 0 {
 				continue
+			}
+
+			// couldn't parse a BSO into something real
+			// abort immediately
+			if err.field == "-" { // json error, not an object
+				c.WeaveInvalidWBOError(w, r)
+				return
 			}
 
 			results.AddFailure(err.bId, fmt.Sprintf("invalid %s", err.field))
@@ -894,10 +902,8 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 	}
 
 	var bso syncstorage.PutBSOInput
-	if err := parseIntoBSO(body, &bso); err != nil && err.field != "id" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(WEAVE_INVALID_WBO))
+	if err := parseIntoBSO(body, &bso); err != nil {
+		c.WeaveInvalidWBOError(w, r)
 		return
 	}
 
