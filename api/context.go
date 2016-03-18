@@ -40,6 +40,15 @@ const (
 
 	// maximum number of BSOs per GET request
 	MAX_BSO_GET_LIMIT = 2500
+
+	// old legacy stuff, used to keep compatibility with python/old clients
+	// https://github.com/mozilla-services/server-syncstorage/blob/fd3c8b90278cb9944cb224964af6e6dae19c9263/syncstorage/tweens.py#L17-L21
+
+	WEAVE_UNKNOWN_ERROR  = "0"
+	WEAVE_ILLEGAL_METH   = "1"  // Illegal method/protocol
+	WEAVE_MALFORMED_JSON = "6"  // Json parse failure
+	WEAVE_INVALID_WBO    = "8"  // Invalid Weave Basic Object
+	WEAVE_OVER_QUOTA     = "14" // User over quota
 )
 
 // NewRouterFromContext creates a mux.Router and registers handlers from
@@ -888,7 +897,7 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 	if err := parseIntoBSO(body, &bso); err != nil && err.field != "id" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("8"))
+		w.Write([]byte(WEAVE_INVALID_WBO))
 		return
 	}
 
