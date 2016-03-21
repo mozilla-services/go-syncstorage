@@ -71,8 +71,7 @@ func NewRouterFromContext(c *Context) *mux.Router {
 	info.HandleFunc("/collections", c.acceptOK(c.hawk(c.hInfoCollections))).Methods("GET")
 	info.HandleFunc("/collection_usage", c.acceptOK(c.hawk(c.hInfoCollectionUsage))).Methods("GET")
 	info.HandleFunc("/collection_counts", c.acceptOK(c.hawk(c.hInfoCollectionCounts))).Methods("GET")
-
-	info.HandleFunc("/quota", handleTODO).Methods("GET")
+	info.HandleFunc("/quota", c.hawk(c.hInfoQuota)).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", handleTODO).Methods("DELETE")
@@ -379,6 +378,21 @@ func (c *Context) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid string) {
 	okResponse(w, uid)
+}
+
+// hInfoQuota calculates the total disk space used by the user by calculating
+// it based on the number of DB pages used * size of each page.
+// TODO actually implement quotas in the system.
+func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string) {
+	pagestats, err := c.Dispatch.Usage(uid)
+	if err != nil {
+		c.Error(w, r, err)
+	} else {
+		tmp := pagestats.Total * pagestats.Size / 1024
+
+		// TODO implement quotas, see issue: #29
+		c.JsonNewline(w, r, []*int{&tmp, nil})
+	}
 }
 
 func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid string) {

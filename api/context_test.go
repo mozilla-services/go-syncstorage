@@ -226,6 +226,39 @@ func TestContextEchoUID(t *testing.T) {
 	assert.Equal(t, "123456", resp.Body.String())
 }
 
+func TestContextInfoQuota(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := makeTestContext()
+
+	uid := "123456"
+
+	{ // put some data in..
+		body := bytes.NewBufferString(`[
+		{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000} ]`)
+
+		req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/col2", body)
+		req.Header.Add("Content-Type", "application/json")
+
+		resp := sendrequest(req, context)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+	}
+
+	{
+		// the above data should use about 9KB of storage
+		// but this might change per system... depending on the page size sqlite
+		// determines for the platform. For most unix platforms (osx, linux, etc)
+		// the pagesize should be 1024 bytes
+		resp := request("GET", "http://test/1.5/"+uid+"/info/quota", nil, context)
+		assert.Equal(`[9,null]`, resp.Body.String())
+	}
+
+}
+
 func TestContextInfoCollections(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
