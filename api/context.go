@@ -843,42 +843,20 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 		return
 	}
 
-	modSince := r.Header.Get("X-If-Modified-Since")
-	unmodSince := r.Header.Get("X-If-Unmodified-Since")
-
-	if modSince != "" && unmodSince != "" {
-		http.Error(w, "X-If-Modified-Since and X-If-Unmodified-Since both provided", http.StatusBadRequest)
+	ts, mHeaderType, err := extractModifiedTimestamp(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if modSince != "" {
-		ts, err := ConvertTimestamp(modSince)
-		if err != nil {
-			http.Error(w, "Invalid X-If-Modified-Since value", http.StatusBadRequest)
-			return
-		}
-		apiDebug("hBsoGet X-If-Modified-Since: %s, converted: %d, modified: %d", modSince, ts, modified)
-
-		if modified <= ts {
-			c.NotModified(w, r, http.StatusText(http.StatusNotModified))
-			return
-		}
-	}
-
-	if unmodSince != "" {
-		ts, err := ConvertTimestamp(unmodSince)
-		if err != nil {
-			http.Error(w, "Invalid X-If-Unmodified-Since value", http.StatusBadRequest)
-			return
-		}
-
-		//apiDebug("hBsoGet X-If-Unmodified-Since: %s, converted: %d, modified: %d", unmodSince, ts, modified)
-
-		if modified >= ts {
-			w.Header().Set("Content-Type", "text/plain; charset=utf8")
-			w.WriteHeader(http.StatusPreconditionFailed)
-			return
-		}
+	switch {
+	case mHeaderType == X_IF_MODIFIED_SINCE && modified <= ts:
+		c.NotModified(w, r, http.StatusText(http.StatusNotModified))
+		return
+	case mHeaderType == X_IF_UNMODIFIED_SINCE && modified >= ts:
+		w.Header().Set("Content-Type", "text/plain; charset=utf8")
+		w.WriteHeader(http.StatusPreconditionFailed)
+		return
 	}
 
 	bso, err = c.Dispatch.GetBSO(uid, cId, bId)
