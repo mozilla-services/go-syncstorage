@@ -575,26 +575,28 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 		}
 	}
 
+	// this is here since IO is more expensive than parsing
+	// the GET parameters
+	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
+	if err != nil {
+		c.Error(w, r, err)
+		return
+	} else if sentNotModified(w, r, cmodified) {
+		return
+	}
+
 	results, err := c.Dispatch.GetBSOs(uid, cId, ids, newer, sort, limit, offset)
 	if err != nil {
 		c.Error(w, r, err)
 		return
 	}
+	m := syncstorage.ModifiedToString(cmodified)
+	w.Header().Set("X-Last-Modified", m)
 
 	w.Header().Set("X-Weave-Records", strconv.Itoa(results.Total))
 	if results.More {
 		w.Header().Set("X-Weave-Next-Offset", strconv.Itoa(results.Offset))
 	}
-
-	// get the collection modified time
-	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
-	if err != nil {
-		c.Error(w, r, err)
-		return
-	}
-
-	m := syncstorage.ModifiedToString(cmodified)
-	w.Header().Set("X-Last-Modified", m)
 
 	if full {
 		c.JsonNewline(w, r, results.BSOs)
@@ -758,6 +760,14 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		return
 	}
 
+	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
+	if err != nil {
+		c.Error(w, r, err)
+		return
+	} else if sentNotModified(w, r, cmodified) {
+		return
+	}
+
 	// change posted[].TTL from seconds (what clients send)
 	// to milliseconds (what the DB uses)
 	for _, p := range bsoToBeProcessed {
@@ -799,6 +809,14 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 		} else {
 			c.Error(w, r, err)
 		}
+		return
+	}
+
+	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
+	if err != nil {
+		c.Error(w, r, err)
+		return
+	} else if sentNotModified(w, r, cmodified) {
 		return
 	}
 
@@ -867,6 +885,9 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 
 	if sentNotModified(w, r, modified) {
 		return
+	} else {
+		m := syncstorage.ModifiedToString(modified)
+		w.Header().Set("X-Last-Modified", m)
 	}
 
 	bso, err = c.Dispatch.GetBSO(uid, cId, bId)
@@ -894,6 +915,14 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 	cId, err = c.getcid(r, uid, true)
 	if err != nil {
 		c.Error(w, r, err)
+		return
+	}
+
+	modified, err = c.Dispatch.GetBSOModified(uid, cId, bId)
+	if err != nil && err != syncstorage.ErrNotFound {
+		c.Error(w, r, err)
+		return
+	} else if sentNotModified(w, r, modified) {
 		return
 	}
 
@@ -955,13 +984,17 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 
 	// Trying to delete a BSO that is not there
 	// should 404
-	_, err = c.Dispatch.GetBSO(uid, cId, bId)
+	bso, err := c.Dispatch.GetBSO(uid, cId, bId)
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
 			c.Error(w, r, err)
 		}
+		return
+	}
+
+	if sentNotModified(w, r, bso.Modified) {
 		return
 	}
 
