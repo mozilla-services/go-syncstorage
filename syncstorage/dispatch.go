@@ -46,6 +46,10 @@ func (d *Dispatch) Index(uid string) uint16 {
 // the file path of the sqlite3 files.
 // =======================================================
 
+func (d *Dispatch) LastModified(uid string) (int, error) {
+	pool := d.pools[d.Index(uid)]
+	return pool.LastModified(uid)
+}
 func (d *Dispatch) GetCollectionId(uid string, name string) (id int, err error) {
 	pool := d.pools[d.Index(uid)]
 	return pool.GetCollectionId(uid, name)

@@ -179,6 +179,14 @@ func (p *Pool) returndb(uid string) {
 // method takes a `uid string`. This `uid` is used for
 // the file path of the sqlite3 files.
 // =======================================================
+func (p *Pool) LastModified(uid string) (modified int, err error) {
+	db, err := p.borrowdb(uid)
+	defer p.returndb(uid)
+	if err != nil {
+		return
+	}
+	return db.LastModified()
+}
 
 func (p *Pool) GetCollectionId(uid string, name string) (id int, err error) {
 	db, err := p.borrowdb(uid)

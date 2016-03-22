@@ -226,6 +226,39 @@ func TestContextEchoUID(t *testing.T) {
 	assert.Equal(t, "123456", resp.Body.String())
 }
 
+func TestContextInfoQuota(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := makeTestContext()
+
+	uid := "123456"
+
+	{ // put some data in..
+		body := bytes.NewBufferString(`[
+		{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000} ]`)
+
+		req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/col2", body)
+		req.Header.Add("Content-Type", "application/json")
+
+		resp := sendrequest(req, context)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+	}
+
+	{
+		// the above data should use about 9KB of storage
+		// but this might change per system... depending on the page size sqlite
+		// determines for the platform. For most unix platforms (osx, linux, etc)
+		// the pagesize should be 1024 bytes
+		resp := request("GET", "http://test/1.5/"+uid+"/info/quota", nil, context)
+		assert.Equal(`[9,null]`, resp.Body.String())
+	}
+
+}
+
 func TestContextInfoCollections(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
@@ -235,15 +268,15 @@ func TestContextInfoCollections(t *testing.T) {
 	modified := syncstorage.Now()
 	expected := map[string]int{
 		"bookmarks": modified,
-		"history":   modified + 1,
-		"forms":     modified + 2,
-		"prefs":     modified + 3,
-		"tabs":      modified + 4,
-		"passwords": modified + 5,
-		"crypto":    modified + 6,
-		"client":    modified + 7,
-		"keys":      modified + 8,
-		"meta":      modified + 9,
+		"history":   modified + 1000,
+		"forms":     modified + 2000,
+		"prefs":     modified + 3000,
+		"tabs":      modified + 4000,
+		"passwords": modified + 5000,
+		"crypto":    modified + 6000,
+		"client":    modified + 7000,
+		"keys":      modified + 8000,
+		"meta":      modified + 9000,
 	}
 
 	for cName, modified := range expected {
@@ -276,6 +309,69 @@ func TestContextInfoCollections(t *testing.T) {
 			assert.Equal(expectedTs, ts)
 		}
 	}
+
+	// Test X-If-Modified-Since
+	{
+		header := make(http.Header)
+
+		// use the oldest timestamp
+		header.Add("X-If-Modified-Since", syncstorage.ModifiedToString(expected["meta"]))
+		header.Add("Accept", "application/json")
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/info/collections",
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusNotModified, resp.Code)
+	}
+
+	// Test X-If-Unmodified-Since
+	{
+		header := make(http.Header)
+		header.Add("X-If-Unmodified-Since", syncstorage.ModifiedToString(expected["keys"]))
+		header.Add("Accept", "application/json")
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/info/collections",
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusPreconditionFailed, resp.Code)
+	}
+
+	// Test X-I-M-S with a bad value
+	{
+		header := make(http.Header)
+		header.Add("X-If-Modified-Since", "-1.0")
+		header.Add("Accept", "application/json")
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/info/collections",
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusBadRequest, resp.Code)
+	}
+
+	// Test X-I-U-S with a bad value
+	{
+		header := make(http.Header)
+		header.Add("X-If-Unmodified-Since", "-1.0")
+		header.Add("Accept", "application/json")
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/info/collections",
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusBadRequest, resp.Code)
+	}
+
 }
 
 func TestContextInfoCollectionUsage(t *testing.T) {

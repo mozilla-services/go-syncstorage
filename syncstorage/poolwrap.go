@@ -10,7 +10,9 @@ type poolwrap struct {
 // =======================================================
 // Implement SyncApi
 // =======================================================
-
+func (p *poolwrap) LastModified() (int, error) {
+	return p.pool.LastModified(p.uid)
+}
 func (p *poolwrap) GetCollectionId(name string) (id int, err error) {
 	return p.pool.GetCollectionId(p.uid, name)
 }

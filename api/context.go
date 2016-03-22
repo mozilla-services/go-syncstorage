@@ -71,8 +71,7 @@ func NewRouterFromContext(c *Context) *mux.Router {
 	info.HandleFunc("/collections", c.acceptOK(c.hawk(c.hInfoCollections))).Methods("GET")
 	info.HandleFunc("/collection_usage", c.acceptOK(c.hawk(c.hInfoCollectionUsage))).Methods("GET")
 	info.HandleFunc("/collection_counts", c.acceptOK(c.hawk(c.hInfoCollectionCounts))).Methods("GET")
-
-	info.HandleFunc("/quota", handleTODO).Methods("GET")
+	info.HandleFunc("/quota", c.hawk(c.hInfoQuota)).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", handleTODO).Methods("DELETE")
@@ -131,7 +130,6 @@ type Context struct {
 func (c *Context) acceptOK(h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		accept := r.Header.Get("Accept")
-		apiDebug("acceptOK: accept=%s", accept)
 
 		// no Accept defaults to JSON
 		if accept == "" {
@@ -282,12 +280,6 @@ func (c *Context) WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(WEAVE_INVALID_WBO))
 }
 
-func (c *Context) NotModified(w http.ResponseWriter, r *http.Request, body string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf8")
-	w.WriteHeader(http.StatusNotModified)
-	fmt.Fprintln(w, body)
-}
-
 // JsonNewline returns data as newline separated or as a single
 // json array
 func (c *Context) JsonNewline(w http.ResponseWriter, r *http.Request, val interface{}) {
@@ -381,6 +373,29 @@ func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid stri
 	okResponse(w, uid)
 }
 
+// hInfoQuota calculates the total disk space used by the user by calculating
+// it based on the number of DB pages used * size of each page.
+// TODO actually implement quotas in the system.
+func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string) {
+
+	modified, err := c.Dispatch.LastModified(uid)
+	if err != nil {
+		c.Error(w, r, err)
+	} else if sentNotModified(w, r, modified) {
+		return
+	}
+
+	pagestats, err := c.Dispatch.Usage(uid)
+	if err != nil {
+		c.Error(w, r, err)
+	} else {
+		tmp := pagestats.Total * pagestats.Size / 1024
+
+		// TODO implement quotas, see issue: #29
+		c.JsonNewline(w, r, []*int{&tmp, nil})
+	}
+}
+
 func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid string) {
 	info, err := c.Dispatch.InfoCollections(uid)
 	if err != nil {
@@ -393,6 +408,10 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 			}
 		}
 
+		if sentNotModified(w, r, modified) {
+			return
+		}
+
 		m := syncstorage.ModifiedToString(modified)
 		w.Header().Set("X-Last-Modified", m)
 		c.JsonNewline(w, r, info)
@@ -400,6 +419,13 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 }
 
 func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, uid string) {
+	modified, err := c.Dispatch.LastModified(uid)
+	if err != nil {
+		c.Error(w, r, err)
+	} else if sentNotModified(w, r, modified) {
+		return
+	}
+
 	results, err := c.Dispatch.InfoCollectionUsage(uid)
 	if err != nil {
 		c.Error(w, r, err)
@@ -414,6 +440,13 @@ func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, u
 }
 
 func (c *Context) hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, uid string) {
+	modified, err := c.Dispatch.LastModified(uid)
+	if err != nil {
+		c.Error(w, r, err)
+	} else if sentNotModified(w, r, modified) {
+		return
+	}
+
 	results, err := c.Dispatch.InfoCollectionCounts(uid)
 	if err != nil {
 		c.Error(w, r, err)
@@ -734,11 +767,14 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		}
 	}
 
+	// Send the changes to the database and merge
+	// with `results` above
 	postResults, err := c.Dispatch.PostBSOs(uid, cId, bsoToBeProcessed)
+
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
-		m := syncstorage.ModifiedToString(results.Modified)
+		m := syncstorage.ModifiedToString(postResults.Modified)
 
 		for bsoId, failMessage := range postResults.Failed {
 			results.Failed[bsoId] = failMessage
@@ -829,42 +865,8 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 		return
 	}
 
-	modSince := r.Header.Get("X-If-Modified-Since")
-	unmodSince := r.Header.Get("X-If-Unmodified-Since")
-
-	if modSince != "" && unmodSince != "" {
-		http.Error(w, "X-If-Modified-Since and X-If-Unmodified-Since both provided", http.StatusBadRequest)
+	if sentNotModified(w, r, modified) {
 		return
-	}
-
-	if modSince != "" {
-		ts, err := ConvertTimestamp(modSince)
-		if err != nil {
-			http.Error(w, "Invalid X-If-Modified-Since value", http.StatusBadRequest)
-			return
-		}
-		apiDebug("hBsoGet X-If-Modified-Since: %s, converted: %d, modified: %d", modSince, ts, modified)
-
-		if modified <= ts {
-			c.NotModified(w, r, http.StatusText(http.StatusNotModified))
-			return
-		}
-	}
-
-	if unmodSince != "" {
-		ts, err := ConvertTimestamp(unmodSince)
-		if err != nil {
-			http.Error(w, "Invalid X-If-Unmodified-Since value", http.StatusBadRequest)
-			return
-		}
-
-		//apiDebug("hBsoGet X-If-Unmodified-Since: %s, converted: %d, modified: %d", unmodSince, ts, modified)
-
-		if modified >= ts {
-			w.Header().Set("Content-Type", "text/plain; charset=utf8")
-			w.WriteHeader(http.StatusPreconditionFailed)
-			return
-		}
 	}
 
 	bso, err = c.Dispatch.GetBSO(uid, cId, bId)
