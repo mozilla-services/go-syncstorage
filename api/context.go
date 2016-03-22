@@ -401,6 +401,10 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 			}
 		}
 
+		if sentNotModified(w, r, modified) {
+			return
+		}
+
 		m := syncstorage.ModifiedToString(modified)
 		w.Header().Set("X-Last-Modified", m)
 		c.JsonNewline(w, r, info)

@@ -45,7 +45,7 @@ func extractModifiedTimestamp(r *http.Request) (ts int, headerType XModHeader, e
 
 	if modSince != "" {
 		ts, err := ConvertTimestamp(modSince)
-		if err != nil {
+		if err != nil || ts < 0 {
 			return 0, X_TS_HEADER_NONE, errors.New("Invalid X-If-Modified-Since")
 		}
 
@@ -54,7 +54,7 @@ func extractModifiedTimestamp(r *http.Request) (ts int, headerType XModHeader, e
 
 	if unmodSince != "" {
 		ts, err := ConvertTimestamp(unmodSince)
-		if err != nil {
+		if err != nil || ts < 0 {
 			return 0, X_TS_HEADER_NONE, errors.New("Invalid X-If-Unmodified-Since")
 		}
 

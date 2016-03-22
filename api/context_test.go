@@ -268,15 +268,15 @@ func TestContextInfoCollections(t *testing.T) {
 	modified := syncstorage.Now()
 	expected := map[string]int{
 		"bookmarks": modified,
-		"history":   modified + 1,
-		"forms":     modified + 2,
-		"prefs":     modified + 3,
-		"tabs":      modified + 4,
-		"passwords": modified + 5,
-		"crypto":    modified + 6,
-		"client":    modified + 7,
-		"keys":      modified + 8,
-		"meta":      modified + 9,
+		"history":   modified + 1000,
+		"forms":     modified + 2000,
+		"prefs":     modified + 3000,
+		"tabs":      modified + 4000,
+		"passwords": modified + 5000,
+		"crypto":    modified + 6000,
+		"client":    modified + 7000,
+		"keys":      modified + 8000,
+		"meta":      modified + 9000,
 	}
 
 	for cName, modified := range expected {
@@ -309,6 +309,69 @@ func TestContextInfoCollections(t *testing.T) {
 			assert.Equal(expectedTs, ts)
 		}
 	}
+
+	// Test X-If-Modified-Since
+	{
+		header := make(http.Header)
+
+		// use the oldest timestamp
+		header.Add("X-If-Modified-Since", syncstorage.ModifiedToString(expected["meta"]))
+		header.Add("Accept", "application/json")
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/info/collections",
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusNotModified, resp.Code)
+	}
+
+	// Test X-If-Unmodified-Since
+	{
+		header := make(http.Header)
+		header.Add("X-If-Unmodified-Since", syncstorage.ModifiedToString(expected["keys"]))
+		header.Add("Accept", "application/json")
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/info/collections",
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusPreconditionFailed, resp.Code)
+	}
+
+	// Test X-I-M-S with a bad value
+	{
+		header := make(http.Header)
+		header.Add("X-If-Modified-Since", "-1.0")
+		header.Add("Accept", "application/json")
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/info/collections",
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusBadRequest, resp.Code)
+	}
+
+	// Test X-I-U-S with a bad value
+	{
+		header := make(http.Header)
+		header.Add("X-If-Unmodified-Since", "-1.0")
+		header.Add("Accept", "application/json")
+		resp := requestheaders(
+			"GET",
+			"http://test/1.5/"+uid+"/info/collections",
+			nil,
+			header,
+			context)
+
+		assert.Equal(http.StatusBadRequest, resp.Code)
+	}
+
 }
 
 func TestContextInfoCollectionUsage(t *testing.T) {
