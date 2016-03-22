@@ -416,28 +416,28 @@ func (d *DB) PostBSOs(cId int, input PostBSOInput) (*PostResults, error) {
 		return nil, err
 	}
 
-	modified := Now()
-	results := NewPostResults(modified)
+	results := NewPostResults(Now())
 
+	// note, notice that modified is updated in the loop
 	for _, data := range input {
-		_, err = d.putBSO(tx, cId, data.Id, data.Payload, data.SortIndex, data.TTL)
+		m, err := d.putBSO(tx, cId, data.Id, data.Payload, data.SortIndex, data.TTL)
 		if err != nil {
 			results.AddFailure(data.Id, err.Error())
 			continue
 		} else {
 			results.AddSuccess(data.Id)
+			results.Modified = m
 		}
 	}
 
 	// update the collection
-	err = d.touchCollection(tx, cId, modified)
+	err = d.touchCollection(tx, cId, results.Modified)
 	if err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 
 	tx.Commit()
-
 	return results, nil
 }
 

@@ -130,7 +130,6 @@ type Context struct {
 func (c *Context) acceptOK(h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		accept := r.Header.Get("Accept")
-		apiDebug("acceptOK: accept=%s", accept)
 
 		// no Accept defaults to JSON
 		if accept == "" {
@@ -746,11 +745,14 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		}
 	}
 
+	// Send the changes to the database and merge
+	// with `results` above
 	postResults, err := c.Dispatch.PostBSOs(uid, cId, bsoToBeProcessed)
+
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
-		m := syncstorage.ModifiedToString(results.Modified)
+		m := syncstorage.ModifiedToString(postResults.Modified)
 
 		for bsoId, failMessage := range postResults.Failed {
 			results.Failed[bsoId] = failMessage
