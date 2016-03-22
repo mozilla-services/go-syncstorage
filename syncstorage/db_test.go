@@ -381,6 +381,13 @@ func TestPrivateGetBSOsSort(t *testing.T) {
 	}
 }
 
+func TestLastModified(t *testing.T) {
+	t.Parallel()
+	db, _ := getTestDB()
+	defer removeTestDB(db)
+	testApiLastModified(db, t)
+}
+
 func TestGetCollectionId(t *testing.T) {
 	t.Parallel()
 	db, _ := getTestDB()

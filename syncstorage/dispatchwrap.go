@@ -10,6 +10,9 @@ type dispatchwrap struct {
 // =======================================================
 // Implement SyncApi
 // =======================================================
+func (d *dispatchwrap) LastModified() (int, error) {
+	return d.dispatch.LastModified(d.uid)
+}
 
 func (d *dispatchwrap) GetCollectionId(name string) (id int, err error) {
 	return d.dispatch.GetCollectionId(d.uid, name)

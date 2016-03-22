@@ -377,6 +377,24 @@ func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid stri
 // it based on the number of DB pages used * size of each page.
 // TODO actually implement quotas in the system.
 func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string) {
+
+	// figure out if we need to send data
+	info, err := c.Dispatch.InfoCollections(uid)
+	if err != nil {
+		c.Error(w, r, err)
+	} else {
+		modified := 0
+		for _, modtime := range info {
+			if modtime > modified {
+				modified = modtime
+			}
+		}
+
+		if sentNotModified(w, r, modified) {
+			return
+		}
+	}
+
 	pagestats, err := c.Dispatch.Usage(uid)
 	if err != nil {
 		c.Error(w, r, err)

@@ -196,6 +196,15 @@ func NewDB(path string) (*DB, error) {
   work is handled by private functions.
 */
 
+// LastModified gets the database modified time
+func (d *DB) LastModified() (modified int, err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	err = d.db.QueryRow("SELECT max(modified) FROM Collections").Scan(&modified)
+	return
+}
+
 func (d *DB) GetCollectionId(name string) (id int, err error) {
 	d.Lock()
 	defer d.Unlock()

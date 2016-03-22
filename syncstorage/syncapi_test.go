@@ -10,6 +10,34 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func testApiLastModified(db SyncApi, t *testing.T) {
+	assert := assert.New(t)
+	_, err := db.CreateCollection("col1")
+	if !assert.NoError(err) {
+		return
+	}
+	col2, err := db.CreateCollection("col2")
+	if !assert.NoError(err) {
+		return
+	}
+	_, err = db.CreateCollection("col3")
+	if !assert.NoError(err) {
+		return
+	}
+
+	modified := Now() + 100000
+	if !assert.NoError(db.TouchCollection(col2, modified)) {
+		return
+	}
+
+	m, err := db.LastModified()
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Equal(modified, m)
+}
+
 func testApiGetCollectionId(db SyncApi, t *testing.T) {
 	_, err := db.GetCollectionId("bookmarks")
 	assert.NoError(t, err)

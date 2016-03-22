@@ -7,6 +7,7 @@ package syncstorage
 // This was created so we can test syncstorage.Pool and syncstorage.DB
 // using similar code
 type SyncApi interface {
+	LastModified() (int, error)
 	GetCollectionId(name string) (id int, err error)
 	GetCollectionModified(cId int) (modified int, err error)
 
