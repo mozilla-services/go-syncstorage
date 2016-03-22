@@ -63,3 +63,27 @@ func extractModifiedTimestamp(r *http.Request) (ts int, headerType XModHeader, e
 
 	return 0, X_TS_HEADER_NONE, nil
 }
+
+// checkModified will check the provided modified timestamp against
+// either the X-If-Modified-Since or X-If-Unmodified-Since and return
+// true if it wrote to w
+func sentNotModified(w http.ResponseWriter, r *http.Request, modified int) (sentResponse bool) {
+	ts, mHeaderType, err := extractModifiedTimestamp(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	switch {
+	case mHeaderType == X_IF_MODIFIED_SINCE && modified <= ts:
+		w.Header().Set("Content-Type", "text/plain; charset=utf8")
+		w.WriteHeader(http.StatusNotModified)
+		return true
+	case mHeaderType == X_IF_UNMODIFIED_SINCE && modified >= ts:
+		w.Header().Set("Content-Type", "text/plain; charset=utf8")
+		w.WriteHeader(http.StatusPreconditionFailed)
+		return true
+	}
+
+	return false
+}

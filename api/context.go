@@ -281,12 +281,6 @@ func (c *Context) WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(WEAVE_INVALID_WBO))
 }
 
-func (c *Context) NotModified(w http.ResponseWriter, r *http.Request, body string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf8")
-	w.WriteHeader(http.StatusNotModified)
-	fmt.Fprintln(w, body)
-}
-
 // JsonNewline returns data as newline separated or as a single
 // json array
 func (c *Context) JsonNewline(w http.ResponseWriter, r *http.Request, val interface{}) {
@@ -843,19 +837,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 		return
 	}
 
-	ts, mHeaderType, err := extractModifiedTimestamp(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	switch {
-	case mHeaderType == X_IF_MODIFIED_SINCE && modified <= ts:
-		c.NotModified(w, r, http.StatusText(http.StatusNotModified))
-		return
-	case mHeaderType == X_IF_UNMODIFIED_SINCE && modified >= ts:
-		w.Header().Set("Content-Type", "text/plain; charset=utf8")
-		w.WriteHeader(http.StatusPreconditionFailed)
+	if sentNotModified(w, r, modified) {
 		return
 	}
 
