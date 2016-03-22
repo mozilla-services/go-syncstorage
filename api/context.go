@@ -378,21 +378,11 @@ func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid stri
 // TODO actually implement quotas in the system.
 func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string) {
 
-	// figure out if we need to send data
-	info, err := c.Dispatch.InfoCollections(uid)
+	modified, err := c.Dispatch.LastModified(uid)
 	if err != nil {
 		c.Error(w, r, err)
-	} else {
-		modified := 0
-		for _, modtime := range info {
-			if modtime > modified {
-				modified = modtime
-			}
-		}
-
-		if sentNotModified(w, r, modified) {
-			return
-		}
+	} else if sentNotModified(w, r, modified) {
+		return
 	}
 
 	pagestats, err := c.Dispatch.Usage(uid)
@@ -429,6 +419,13 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 }
 
 func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, uid string) {
+	modified, err := c.Dispatch.LastModified(uid)
+	if err != nil {
+		c.Error(w, r, err)
+	} else if sentNotModified(w, r, modified) {
+		return
+	}
+
 	results, err := c.Dispatch.InfoCollectionUsage(uid)
 	if err != nil {
 		c.Error(w, r, err)
@@ -443,6 +440,13 @@ func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, u
 }
 
 func (c *Context) hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, uid string) {
+	modified, err := c.Dispatch.LastModified(uid)
+	if err != nil {
+		c.Error(w, r, err)
+	} else if sentNotModified(w, r, modified) {
+		return
+	}
+
 	results, err := c.Dispatch.InfoCollectionCounts(uid)
 	if err != nil {
 		c.Error(w, r, err)
