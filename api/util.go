@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+
+	"github.com/mostlygeek/go-syncstorage/syncstorage"
 )
 
 // ConvertTimestamp converts the sync decimal time in seconds to
@@ -77,10 +79,12 @@ func sentNotModified(w http.ResponseWriter, r *http.Request, modified int) (sent
 	switch {
 	case mHeaderType == X_IF_MODIFIED_SINCE && modified <= ts:
 		w.Header().Set("Content-Type", "text/plain; charset=utf8")
+		w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(modified))
 		w.WriteHeader(http.StatusNotModified)
 		return true
-	case mHeaderType == X_IF_UNMODIFIED_SINCE && modified >= ts:
+	case mHeaderType == X_IF_UNMODIFIED_SINCE && modified > ts:
 		w.Header().Set("Content-Type", "text/plain; charset=utf8")
+		w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(modified))
 		w.WriteHeader(http.StatusPreconditionFailed)
 		return true
 	}
