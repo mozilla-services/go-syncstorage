@@ -78,7 +78,7 @@ func TestUpdateBSOReturnsExpectedError(t *testing.T) {
 	cId := 1
 	bId := "testBSO"
 
-	_, err := db.updateBSO(tx, cId, bId, nil, nil, nil)
+	err := db.updateBSO(tx, cId, bId, Now(), nil, nil, nil)
 	assert.Equal(t, ErrNothingToDo, err)
 }
 
@@ -102,7 +102,8 @@ func TestPrivateUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 	assert.NoError(db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl))
 
 	payload = "Updated payload"
-	modified, err = db.updateBSO(tx, cId, bId, &payload, nil, nil)
+	modified = Now()
+	err = db.updateBSO(tx, cId, bId, modified, &payload, nil, nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -115,7 +116,8 @@ func TestPrivateUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 	assert.True((bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == modified+ttl))
 
 	sortIndex = 2
-	modified, err = db.updateBSO(tx, cId, bId, nil, &sortIndex, nil)
+	modified = Now()
+	err = db.updateBSO(tx, cId, bId, modified, nil, &sortIndex, nil)
 
 	bso, err = db.getBSO(tx, cId, bId)
 	if !assert.NoError(err) || !assert.NotNil(bso) {
@@ -124,7 +126,8 @@ func TestPrivateUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	assert.True(bso.Modified == modified || bso.Payload == payload || bso.SortIndex == sortIndex || bso.TTL == modified+ttl)
 
-	modified, err = db.updateBSO(tx, cId, bId, nil, nil, &ttl)
+	modified = Now()
+	err = db.updateBSO(tx, cId, bId, modified, nil, nil, &ttl)
 	if !assert.NoError(err) {
 		return
 	}
@@ -150,22 +153,26 @@ func TestPrivateUpdateBSOModifiedNotChangedOnTTLTouch(t *testing.T) {
 	payload := "hello"
 	sortIndex := 1
 	ttl := 10
-	modified := Now()
+	modified := 3
 
-	assert.NoError(db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl))
-
-	ttl = 15
-	updateModified, err := db.updateBSO(tx, cId, bId, nil, nil, &ttl)
+	err := db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
 	if !assert.NoError(err) {
 		return
 	}
 
-	assert.Equal(updateModified, modified)
+	ttl = 15
+	updateModified := 5
+	err = db.updateBSO(tx, cId, bId, updateModified, nil, nil, &ttl)
+	if !assert.NoError(err) {
+		return
+	}
+
 	bso, err := db.getBSO(tx, cId, bId)
 	if !assert.NoError(err) || !assert.NotNil(bso) {
 		return
 	}
-	assert.Equal(modified+ttl, bso.TTL)
+	assert.Equal(ttl+updateModified, bso.TTL)
+	assert.Equal(modified, bso.Modified)
 }
 
 func TestPrivatePutBSOInsertsWithMissingValues(t *testing.T) {
@@ -180,13 +187,15 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 	tx, _ := db.db.Begin()
 	defer tx.Rollback()
 
-	if _, err := db.putBSO(tx, 1, "1", String("initial"), nil, nil); err != nil {
+	modified := Now()
+	if err := db.putBSO(tx, 1, "1", modified, String("initial"), nil, nil); err != nil {
 		t.Error(err)
 	}
 
 	payload := String("Updated")
 	sortIndex := Int(100)
-	modified, err := db.putBSO(tx, 1, "1", payload, sortIndex, nil)
+	newModified := modified + 1000
+	err := db.putBSO(tx, 1, "1", newModified, payload, sortIndex, nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -197,7 +206,7 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 
 	assert.Equal(*payload, bso.Payload)
 	assert.Equal(*sortIndex, bso.SortIndex)
-	assert.Equal(modified, bso.Modified)
+	assert.Equal(newModified, bso.Modified)
 }
 
 func TestPrivateGetBSOsLimitOffset(t *testing.T) {
