@@ -425,22 +425,21 @@ func (d *DB) PostBSOs(cId int, input PostBSOInput) (*PostResults, error) {
 		return nil, err
 	}
 
-	results := NewPostResults(Now())
+	modified := Now() // same modified timestamp for all INSERT/UPDATES
+	results := NewPostResults(modified)
 
-	// note, notice that modified is updated in the loop
 	for _, data := range input {
-		m, err := d.putBSO(tx, cId, data.Id, data.Payload, data.SortIndex, data.TTL)
+		err := d.putBSO(tx, cId, data.Id, modified, data.Payload, data.SortIndex, data.TTL)
 		if err != nil {
 			results.AddFailure(data.Id, err.Error())
 			continue
 		} else {
 			results.AddSuccess(data.Id)
-			results.Modified = m
 		}
 	}
 
 	// update the collection
-	err = d.touchCollection(tx, cId, results.Modified)
+	err = d.touchCollection(tx, cId, modified)
 	if err != nil {
 		tx.Rollback()
 		return nil, err
@@ -460,7 +459,8 @@ func (d *DB) PutBSO(cId int, bId string, payload *string, sortIndex *int, ttl *i
 		return
 	}
 
-	modified, err = d.putBSO(tx, cId, bId, payload, sortIndex, ttl)
+	modified = Now()
+	err = d.putBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
 
 	if err != nil {
 		tx.Rollback()
@@ -641,10 +641,11 @@ func (d *DB) touchCollection(tx dbTx, cId, modified int) (err error) {
 func (d *DB) putBSO(tx dbTx,
 	cId int,
 	bId string,
+	modified int,
 	payload *string,
 	sortIndex *int,
 	ttl *int,
-) (modified int, err error) {
+) (err error) {
 	if payload == nil && sortIndex == nil && ttl == nil {
 		err = ErrNothingToDo
 		return
@@ -682,7 +683,7 @@ func (d *DB) putBSO(tx dbTx,
 			tmp := *ttl
 			t = &tmp
 		}
-		return d.updateBSO(tx, cId, bId, payload, sortIndex, t)
+		return d.updateBSO(tx, cId, bId, modified, payload, sortIndex, t)
 	} else {
 		var p string
 		var s, t int
@@ -705,8 +706,7 @@ func (d *DB) putBSO(tx dbTx,
 			t = *ttl
 		}
 
-		modified := Now()
-		return modified, d.insertBSO(tx, cId, bId, modified, p, s, t)
+		return d.insertBSO(tx, cId, bId, modified, p, s, t)
 	}
 }
 
@@ -903,10 +903,11 @@ func (d *DB) updateBSO(
 	tx dbTx,
 	cId int,
 	bId string,
+	modified int,
 	payload *string,
 	sortIndex *int,
 	ttl *int,
-) (modified int, err error) {
+) (err error) {
 	if payload == nil && sortIndex == nil && ttl == nil {
 		err = ErrNothingToDo
 		return
@@ -916,12 +917,9 @@ func (d *DB) updateBSO(
 	i := 0
 	set := ""
 
-	now := Now()
-
 	// The modified time is *ONLY* changed if the
 	// payload or the sortIndex changes.
 	if payload != nil || sortIndex != nil {
-		modified = now
 		set = "modified=?"
 		values[i] = modified
 		i += 1
@@ -952,8 +950,7 @@ func (d *DB) updateBSO(
 			set = set + ","
 		}
 		set = set + "TTL=?"
-		// convert ttl from seconds to milliseconds
-		values[i] = *ttl + now
+		values[i] = *ttl + modified
 		i += 1
 	}
 
@@ -963,7 +960,6 @@ func (d *DB) updateBSO(
 	values[i] = bId
 	i += 1
 
-	dml := "UPDATE BSO SET " + set + " WHERE CollectionId=? and Id=?"
 	if log.GetLevel() == log.DebugLevel {
 		dPayload := "<nil>"
 		if payload != nil {
@@ -991,22 +987,12 @@ func (d *DB) updateBSO(
 		}).Debug("db updateBSO")
 	}
 
+	dml := "UPDATE BSO SET " + set + " WHERE CollectionId=? and Id=?"
+
 	_, err = tx.Exec(dml, values[0:i]...)
 
 	if err != nil {
 		return
-	}
-
-	// only updating the TTL does not change
-	// modified so it needs to be read from the DB
-	// again
-	if payload == nil && sortIndex == nil {
-		bso, err := d.getBSO(tx, cId, bId)
-		if err != nil {
-			return 0, err
-		}
-
-		modified = bso.Modified
 	}
 
 	return
