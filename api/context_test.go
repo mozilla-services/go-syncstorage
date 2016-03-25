@@ -1327,3 +1327,25 @@ func TestContextDelete(t *testing.T) {
 	}
 
 }
+
+// Some DB functions use sql.Row.Scan() into a real type
+// and that caused sql errors, need to use the NullString, NullX
+// types to make sure the db returned something before actually
+// doing a type conversion
+func TestContextDeleteAndDBScanBug(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	context := makeTestContext()
+	uid := "144819"
+	resp := request("DELETE", "/1.5/"+uid, nil, context)
+	assert.Equal(http.StatusOK, resp.Code)
+
+	_, err := context.Dispatch.LastModified(uid)
+	assert.NoError(err)
+
+	_, err = context.Dispatch.GetCollectionModified(uid, 1)
+	assert.NoError(err)
+
+	_, err = context.Dispatch.GetCollectionId(uid, "bookmarks")
+	assert.Equal(syncstorage.ErrNotFound, err)
+}
