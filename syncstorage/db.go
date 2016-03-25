@@ -355,7 +355,31 @@ func (d *DB) InfoCollections() (map[string]int, error) {
 }
 
 func (d *DB) InfoQuota() (used, quota int, err error) {
-	return 0, 0, ErrNotImplemented
+	d.Lock()
+	defer d.Unlock()
+
+	var u sql.NullInt64
+
+	query := `SELECT sum(PayloadSize) used
+			  FROM BSO`
+
+	err = d.db.QueryRow(query).Scan(&u)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, 0, nil
+		}
+
+		return
+	}
+
+	if u.Valid {
+		used = int(u.Int64)
+		return
+	} else {
+		return 0, 0, nil
+	}
+
+	return
 }
 
 func (d *DB) InfoCollectionUsage() (map[string]int, error) {

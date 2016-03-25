@@ -378,7 +378,6 @@ func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid stri
 // it based on the number of DB pages used * size of each page.
 // TODO actually implement quotas in the system.
 func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string) {
-
 	modified, err := c.Dispatch.LastModified(uid)
 	if err != nil {
 		c.Error(w, r, err)
@@ -386,14 +385,13 @@ func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string)
 		return
 	}
 
-	pagestats, err := c.Dispatch.Usage(uid)
+	// TODO support quota
+	used, _, err := c.Dispatch.InfoQuota(uid)
 	if err != nil {
 		c.Error(w, r, err)
 	} else {
-		tmp := pagestats.Total * pagestats.Size / 1024
-
-		// TODO implement quotas, see issue: #29
-		c.JsonNewline(w, r, []*int{&tmp, nil})
+		tmp := float64(used) / 1024
+		c.JsonNewline(w, r, []*float64{&tmp, nil})
 	}
 }
 

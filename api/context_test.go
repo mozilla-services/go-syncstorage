@@ -255,12 +255,8 @@ func TestContextInfoQuota(t *testing.T) {
 	}
 
 	{
-		// the above data should use about 9KB of storage
-		// but this might change per system... depending on the page size sqlite
-		// determines for the platform. For most unix platforms (osx, linux, etc)
-		// the pagesize should be 1024 bytes
 		resp := request("GET", "http://test/1.5/"+uid+"/info/quota", nil, context)
-		assert.Equal(`[9,null]`, resp.Body.String())
+		assert.Equal("[0.0439453125,null]", resp.Body.String())
 	}
 
 }
