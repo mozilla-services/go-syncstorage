@@ -201,7 +201,17 @@ func (d *DB) LastModified() (modified int, err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	err = d.db.QueryRow("SELECT max(modified) FROM Collections").Scan(&modified)
+	var m sql.NullInt64
+
+	err = d.db.QueryRow("SELECT max(modified) FROM Collections").Scan(&m)
+	if err == nil {
+		if !m.Valid {
+			return 0, nil
+		} else {
+			return int(m.Int64), nil
+		}
+	}
+
 	return
 }
 
@@ -228,6 +238,10 @@ func (d *DB) GetCollectionModified(cId int) (modified int, err error) {
 	d.Lock()
 	defer d.Unlock()
 	err = d.db.QueryRow("SELECT modified FROM Collections where Id=?", cId).Scan(&modified)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+
 	return
 }
 
