@@ -26,14 +26,6 @@ func init() {
 	}
 }
 
-type logHandler struct {
-	handler http.Handler
-}
-
-func (h logHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-}
-
 func main() {
 
 	// for now we will use a fixed number of pools
@@ -54,7 +46,7 @@ func main() {
 	}
 
 	router := api.NewRouterFromContext(context)
-	loggedRouter := api.LogHandler(router)
+	router = api.LogHandler(router)
 
 	// set up additional handlers
 
@@ -62,13 +54,13 @@ func main() {
 	if config.Tls.Cert != "" {
 		log.WithFields(log.Fields{"addr": listenOn, "tls": true}).Info("HTTP Listening at " + listenOn)
 		err := http.ListenAndServeTLS(
-			listenOn, config.Tls.Cert, config.Tls.Key, loggedRouter)
+			listenOn, config.Tls.Cert, config.Tls.Key, router)
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
 		log.WithFields(log.Fields{"addr": listenOn, "tls": false}).Info("HTTP Listening at " + listenOn)
-		err := http.ListenAndServe(listenOn, loggedRouter)
+		err := http.ListenAndServe(listenOn, router)
 		if err != nil {
 			log.Fatal(err)
 		}
