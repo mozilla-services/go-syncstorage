@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -22,7 +23,10 @@ type loggingHandler struct {
 func (h loggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	logger := makeLogger(w)
 	url := *req.URL
+
+	start := time.Now()
 	h.handler.ServeHTTP(logger, req)
+	took := int(time.Duration(time.Now().Sub(start).Nanoseconds()) / time.Millisecond)
 
 	uri := req.RequestURI
 
@@ -51,6 +55,7 @@ func (h loggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			"size":       logger.Size(),
 			"req_header": req.Header,
 			"res_header": logger.Header(),
+			"t":          took,
 		}
 
 		log.WithFields(fields).Debug(logMsg)
@@ -61,6 +66,7 @@ func (h loggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			"req_size": req.ContentLength,
 			"status":   logger.Status(),
 			"size":     logger.Size(),
+			"t":        took,
 		}).Info(logMsg)
 	}
 }

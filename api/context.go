@@ -53,7 +53,7 @@ const (
 
 // NewRouterFromContext creates a mux.Router and registers handlers from
 // the supplied context to handle routes
-func NewRouterFromContext(c *Context) *mux.Router {
+func NewRouterFromContext(c *Context) http.Handler {
 	r := mux.NewRouter()
 
 	r.HandleFunc("/__heartbeat__", c.handleHeartbeat)
@@ -83,7 +83,8 @@ func NewRouterFromContext(c *Context) *mux.Router {
 	storage.HandleFunc("/{collection}/{bsoId}", c.acceptOK(c.hawk(c.hBsoPUT))).Methods("PUT")
 	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoDELETE)).Methods("DELETE")
 
-	return r
+	// wrap to make sure every response gets a XWeaveTimestampHandler
+	return XWeaveTimestampHandler(r)
 }
 
 func handleTODO(w http.ResponseWriter, r *http.Request) {
@@ -640,6 +641,8 @@ func parseIntoBSO(jsonData json.RawMessage, bso *syncstorage.PutBSOInput) *parse
 			switch k {
 			case "id", "payload", "ttl", "sortindex":
 				// it's ok
+			case "modified":
+				// to pass the python test_meta_global_sanity functional test
 			default:
 				return &parseError{field: k, msg: "invalid field"}
 			}

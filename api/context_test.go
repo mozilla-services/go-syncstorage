@@ -220,6 +220,12 @@ func TestContextHeartbeat(t *testing.T) {
 	assert.Equal(t, "OK", resp.Body.String())
 }
 
+func TestContextHasXWeaveTimestamp(t *testing.T) {
+	resp := request("GET", "/__heartbeat__", nil, nil)
+	assert.Equal(t, http.StatusOK, resp.Code)
+	assert.NotEqual(t, "", resp.Header().Get("X-Weave-Timestamp"))
+}
+
 func TestContextEchoUID(t *testing.T) {
 	resp := request("GET", "/1.5/123456/echo-uid", nil, nil)
 	assert.Equal(t, http.StatusOK, resp.Code)
@@ -1164,6 +1170,7 @@ func TestContextBsoPUT(t *testing.T) {
 		assert.Equal(1, b.SortIndex)
 		assert.NoError(err)
 		assert.NotEqual("", resp.Header().Get("X-Last-Modified"))
+		assert.NotEqual("", resp.Header().Get("X-Weave-Timestamp"))
 	}
 
 	{ // test with fewer params
