@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
-
 	"github.com/gorilla/mux"
 	. "github.com/mostlygeek/go-debug"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
@@ -88,8 +86,6 @@ func handleTODO(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Not implemented", http.StatusNotImplemented)
 }
 
-type syncApiHandler func(http.ResponseWriter, *http.Request, string)
-
 func NewContext(secrets []string, dispatch *syncstorage.Dispatch) (*Context, error) {
 
 	if len(secrets) == 0 {
@@ -123,35 +119,6 @@ type Context struct {
 	MaxBSOGetLimit int
 }
 
-// uid extracts the uid value from the URL and passes it another
-// http.HandlerFunc for actual functionality
-func (c *Context) uid(h syncApiHandler) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var uid string
-		var ok bool
-
-		vars := mux.Vars(r)
-		if uid, ok = vars["uid"]; !ok {
-			http.Error(w, "UID missing", http.StatusBadRequest)
-		}
-
-		// finally pass it off to the handler
-		h(w, r, uid)
-	})
-}
-
-// Error produces an HTTP 500 error, basically means a bug in the system
-func (c *Context) Error(w http.ResponseWriter, r *http.Request, err error) {
-	log.WithFields(log.Fields{
-		"err":    err.Error(),
-		"method": r.Method,
-		"path":   r.URL.Path,
-	}).Errorf("HTTP Error: %s", err.Error())
-	http.Error(w,
-		http.StatusText(http.StatusInternalServerError),
-		http.StatusInternalServerError)
-}
-
 func (c *Context) WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
@@ -178,7 +145,7 @@ func (c *Context) NewLine(w http.ResponseWriter, r *http.Request, val interface{
 	// trying to make it all newline JSON
 	js, err := json.Marshal(val)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	}
 
@@ -202,7 +169,7 @@ func (c *Context) NewLine(w http.ResponseWriter, r *http.Request, val interface{
 func (c *Context) JSON(w http.ResponseWriter, r *http.Request, val interface{}) {
 	js, err := json.Marshal(val)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(js)
@@ -263,7 +230,7 @@ func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid stri
 func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string) {
 	modified, err := c.Dispatch.LastModified(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else if sentNotModified(w, r, modified) {
 		return
 	}
@@ -271,7 +238,7 @@ func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string)
 	// TODO support quota
 	used, _, err := c.Dispatch.InfoQuota(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		tmp := float64(used) / 1024
 		c.JsonNewline(w, r, []*float64{&tmp, nil})
@@ -281,7 +248,7 @@ func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string)
 func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid string) {
 	info, err := c.Dispatch.InfoCollections(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		modified := 0
 		for _, modtime := range info {
@@ -303,14 +270,14 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, uid string) {
 	modified, err := c.Dispatch.LastModified(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else if sentNotModified(w, r, modified) {
 		return
 	}
 
 	results, err := c.Dispatch.InfoCollectionUsage(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		// the sync 1.5 api says data should be in KB
 		resultsKB := make(map[string]float64)
@@ -324,14 +291,14 @@ func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, u
 func (c *Context) hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, uid string) {
 	modified, err := c.Dispatch.LastModified(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else if sentNotModified(w, r, modified) {
 		return
 	}
 
 	results, err := c.Dispatch.InfoCollectionCounts(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		c.JsonNewline(w, r, results)
 	}
@@ -358,7 +325,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 			w.Write([]byte("[]"))
 			return
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 			return
 
 		}
@@ -461,7 +428,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	// the GET parameters
 	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else if sentNotModified(w, r, cmodified) {
 		return
@@ -469,7 +436,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 
 	results, err := c.Dispatch.GetBSOs(uid, cId, ids, newer, sort, limit, offset)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	}
 	m := syncstorage.ModifiedToString(cmodified)
@@ -639,14 +606,14 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		if err == syncstorage.ErrInvalidCollectionName {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
 
 	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else if sentNotModified(w, r, cmodified) {
 		return
@@ -666,7 +633,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 	postResults, err := c.Dispatch.PostBSOs(uid, cId, bsoToBeProcessed)
 
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		m := syncstorage.ModifiedToString(postResults.Modified)
 
@@ -691,14 +658,14 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 			// nothing to delete... return a successful response
 			c.JsonNewline(w, r, map[string]int{"modified": syncstorage.Now()})
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
 
 	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else if sentNotModified(w, r, cmodified) {
 		return
@@ -709,13 +676,13 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 	if idExists {
 		modified, err = c.Dispatch.DeleteBSOs(uid, cId, strings.Split(bids[0], ",")...)
 		if err != nil {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 			return
 		}
 	} else {
 		err = c.Dispatch.DeleteCollection(uid, cId)
 		if err != nil {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 			return
 		}
 	}
@@ -752,7 +719,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 		if err == syncstorage.ErrNotFound {
 			http.NotFound(w, r)
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
@@ -762,7 +729,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 		if err == syncstorage.ErrNotFound {
 			http.NotFound(w, r)
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
@@ -778,7 +745,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 	if err == nil {
 		c.JsonNewline(w, r, bso)
 	} else {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	}
 }
 
@@ -805,13 +772,13 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 
 	cId, err = c.getcid(r, uid, true)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	}
 
 	modified, err = c.Dispatch.GetBSOModified(uid, cId, bId)
 	if err != nil && err != syncstorage.ErrNotFound {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else if sentNotModified(w, r, modified) {
 		return
@@ -819,7 +786,7 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		c.Error(w, r, errors.New("PUT could not read JSON body"))
+		InternalError(w, r, errors.New("PUT could not read JSON body"))
 		return
 	}
 
@@ -880,7 +847,7 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 		if err == syncstorage.ErrNotFound {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
@@ -891,7 +858,7 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 
 	modified, err = c.Dispatch.DeleteBSO(uid, cId, bId)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else {
 		m := syncstorage.ModifiedToString(modified)
@@ -905,7 +872,7 @@ func (c *Context) hDeleteEverything(w http.ResponseWriter, r *http.Request, uid 
 
 	err := c.Dispatch.DeleteEverything(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else {
 		m := syncstorage.ModifiedToString(syncstorage.Now())
