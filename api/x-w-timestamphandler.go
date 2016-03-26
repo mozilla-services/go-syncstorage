@@ -17,13 +17,46 @@ type xWeaveTimestampHandler struct {
 	handler http.Handler
 }
 
-func (x xWeaveTimestampHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// have to add it before any Write() or WriteHeader() calls
-	// if this is a problem by writing it too early this
-	// will be refactor into the actual context handlers
-	// so it is at late as possible
-	w.Header().Set("X-Weave-Timestamp",
-		syncstorage.ModifiedToString(syncstorage.Now()))
+// timestampWriter wraps a http.ResponseWriter and adds
+// the X-Weave-Timestamp header right before a call to Write()
+// or WriteHeader(). Since it is not possible to add headers after
+// already sending headers or data to the client.
+type timestampWriter struct {
+	// the original
+	w           http.ResponseWriter
+	wroteHeader bool
+}
 
-	x.handler.ServeHTTP(w, req)
+// addTS will add the X-Weave-Timestamp
+func (t *timestampWriter) addTS() {
+	if t.wroteHeader {
+		return
+	}
+
+	if lm := t.w.Header().Get("X-Last-Modified"); lm != "" {
+		t.w.Header().Set("X-Weave-Timestamp", lm)
+	} else {
+		t.w.Header().Set("X-Weave-Timestamp",
+			syncstorage.ModifiedToString(syncstorage.Now()))
+	}
+
+	t.wroteHeader = true
+}
+
+// implement http.ResponseWriter
+func (t *timestampWriter) Header() http.Header { return t.w.Header() }
+func (t *timestampWriter) Write(b []byte) (int, error) {
+	t.addTS()
+	return t.w.Write(b)
+}
+func (t *timestampWriter) WriteHeader(i int) {
+	t.addTS()
+	t.w.WriteHeader(i)
+	return
+}
+
+func (x xWeaveTimestampHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	wrapWriter := &timestampWriter{w: w, wroteHeader: false}
+	defer wrapWriter.addTS() // just in case it doesn't get added
+	x.handler.ServeHTTP(wrapWriter, req)
 }

@@ -234,9 +234,29 @@ func TestContextHasXWeaveTimestamp(t *testing.T) {
 }
 
 func TestContextEchoUID(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
 	resp := request("GET", "/1.5/123456/echo-uid", nil, nil)
-	assert.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, "123456", resp.Body.String())
+
+	assert.NotEqual("", resp.Header().Get("X-Weave-Timestamp"))
+	assert.NotEqual("", resp.Header().Get("X-Last-Modified"))
+	assert.Equal(http.StatusOK, resp.Code)
+	assert.Equal("123456", resp.Body.String())
+}
+
+// TestContextXWeaveTimestamp makes sure header exists
+// and is set to the correct value
+func TestContextXWeaveTimestamp(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	resp := request("GET", "/1.5/123456/echo-uid", nil, nil)
+
+	ts := resp.Header().Get("X-Weave-Timestamp")
+	lm := resp.Header().Get("X-Last-Modified")
+
+	assert.NotEqual(ts, "")
+	assert.NotEqual(lm, "")
+	assert.Equal(ts, lm)
 }
 
 func TestContextInfoQuota(t *testing.T) {
