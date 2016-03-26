@@ -589,10 +589,9 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
-			// nothing to delete... return a successful response
-			JsonNewline(w, r, map[string]string{
-				"modified": syncstorage.ModifiedToString(syncstorage.Now()),
-			})
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"modified":%s}`, syncstorage.ModifiedToString(syncstorage.Now()))
+			return
 		} else {
 			InternalError(w, r, err)
 		}
@@ -631,7 +630,8 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 		}
 	}
 
-	JsonNewline(w, r, map[string]string{"modified": syncstorage.ModifiedToString(modified)})
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"modified":%s}`, syncstorage.ModifiedToString(modified))
 }
 
 func (c *Context) getbso(w http.ResponseWriter, r *http.Request) (bId string, ok bool) {
