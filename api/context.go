@@ -69,12 +69,14 @@ func NewRouterFromContext(c *Context) http.Handler {
 	storage.HandleFunc("/{collection}/{bsoId}", acceptOK(c.hawk(c.hBsoPUT))).Methods("PUT")
 	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoDELETE)).Methods("DELETE")
 
-	// wrap to make sure every response gets a XWeaveTimestampHandler
-	return XWeaveTimestampHandler(r)
+	// wrap into a WeaveHandler to deal with:
+	// -- adding X-Weave-Timestamp
+	// -- 404 should be application/json
+	return WeaveHandler(r)
 }
 
 func handleTODO(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	JSONError(w, "Not implemented", http.StatusNotImplemented)
 }
 
 func NewContext(secrets []string, dispatch *syncstorage.Dispatch) (*Context, error) {
@@ -258,7 +260,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	}
 
 	if err = r.ParseForm(); err != nil {
-		http.Error(w, "Bad query parameters", http.StatusBadRequest)
+		JSONError(w, "Bad query parameters", http.StatusBadRequest)
 		return
 	}
 
@@ -269,13 +271,13 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 			if syncstorage.BSOIdOk(id) {
 				ids[i] = id
 			} else {
-				http.Error(w, fmt.Sprintf("Invalid bso id %s", id), http.StatusBadRequest)
+				JSONError(w, fmt.Sprintf("Invalid bso id %s", id), http.StatusBadRequest)
 				return
 			}
 		}
 
 		if len(ids) > 100 {
-			http.Error(w, fmt.Sprintf("Too many ids provided"), http.StatusRequestEntityTooLarge)
+			JSONError(w, fmt.Sprintf("Too many ids provided"), http.StatusRequestEntityTooLarge)
 			return
 		}
 	}
@@ -285,13 +287,13 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	if v := r.Form.Get("newer"); v != "" {
 		floatNew, err := strconv.ParseFloat(v, 64)
 		if err != nil {
-			http.Error(w, "Invalid newer param format", http.StatusBadRequest)
+			JSONError(w, "Invalid newer param format", http.StatusBadRequest)
 			return
 		}
 
 		newer = int(floatNew * 1000)
 		if !syncstorage.NewerOk(newer) {
-			http.Error(w, "Invalid newer value", http.StatusBadRequest)
+			JSONError(w, "Invalid newer value", http.StatusBadRequest)
 			return
 		}
 	}
@@ -303,7 +305,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	if v := r.Form.Get("limit"); v != "" {
 		limit, err = strconv.Atoi(v)
 		if err != nil || !syncstorage.LimitOk(limit) {
-			http.Error(w, "Invalid limit value", http.StatusBadRequest)
+			JSONError(w, "Invalid limit value", http.StatusBadRequest)
 			return
 		}
 	}
@@ -331,7 +333,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	if v := r.Form.Get("offset"); v != "" {
 		offset, err = strconv.Atoi(v)
 		if err != nil || !syncstorage.OffsetOk(offset) {
-			http.Error(w, "Invalid offset value", http.StatusBadRequest)
+			JSONError(w, "Invalid offset value", http.StatusBadRequest)
 			return
 		}
 	}
@@ -345,7 +347,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 		case "index":
 			sort = syncstorage.SORT_INDEX
 		default:
-			http.Error(w, "Invalid sort value", http.StatusBadRequest)
+			JSONError(w, "Invalid sort value", http.StatusBadRequest)
 			return
 		}
 	}
@@ -473,7 +475,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 	ct := r.Header.Get("Content-Type")
 
 	if ct != "application/json" && ct != "text/plain" && ct != "application/newlines" {
-		http.Error(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
+		JSONError(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
 		return
 	}
 
@@ -522,7 +524,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 	}
 
 	if len(bsoToBeProcessed) > MAX_BSO_PER_POST_REQUEST {
-		http.Error(w, fmt.Sprintf("Exceeded %d BSO per request", MAX_BSO_PER_POST_REQUEST),
+		JSONError(w, fmt.Sprintf("Exceeded %d BSO per request", MAX_BSO_PER_POST_REQUEST),
 			http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -530,7 +532,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 	cId, err := c.getcid(r, uid, true) // automake the collection if it doesn't exit
 	if err != nil {
 		if err == syncstorage.ErrInvalidCollectionName {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			JSONError(w, err.Error(), http.StatusBadRequest)
 		} else {
 			InternalError(w, r, err)
 		}
@@ -619,7 +621,7 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 func (c *Context) getbso(w http.ResponseWriter, r *http.Request) (bId string, ok bool) {
 	bId, ok = mux.Vars(r)["bsoId"]
 	if !ok || !syncstorage.BSOIdOk(bId) {
-		http.Error(w, "Invalid bso ID", http.StatusNotFound)
+		JSONError(w, "Invalid bso ID", http.StatusNotFound)
 	}
 
 	return
@@ -680,7 +682,7 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 	// accept text/plain from old (broken) clients
 	ct := r.Header.Get("Content-Type")
 	if ct != "application/json" && ct != "text/plain" && ct != "application/newlines" {
-		http.Error(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
+		JSONError(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
 		return
 	}
 
@@ -733,11 +735,11 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 
 	if err != nil {
 		if err == syncstorage.ErrPayloadTooBig {
-			http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+			JSONError(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
 			return
 		}
 
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		JSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -771,7 +773,7 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 	bso, err := c.Dispatch.GetBSO(uid, cId, bId)
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
-			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			JSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
 			InternalError(w, r, err)
 		}
@@ -795,7 +797,6 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 }
 
 func (c *Context) hDeleteEverything(w http.ResponseWriter, r *http.Request, uid string) {
-
 	err := c.Dispatch.DeleteEverything(uid)
 	if err != nil {
 		InternalError(w, r, err)

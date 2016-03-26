@@ -42,9 +42,7 @@ func InternalError(w http.ResponseWriter, r *http.Request, err error) {
 		"method": r.Method,
 		"path":   r.URL.Path,
 	}).Errorf("HTTP Error: %s", err.Error())
-	http.Error(w,
-		http.StatusText(http.StatusInternalServerError),
-		http.StatusInternalServerError)
+	JSONError(w, err.Error(), http.StatusInternalServerError)
 }
 
 // JsonNewline returns data as newline separated or as a single
@@ -97,28 +95,21 @@ func JSON(w http.ResponseWriter, r *http.Request, val interface{}) {
 	}
 }
 
+type jsonerr struct {
+	Err string `json:"err"`
+}
+
+func JSONError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	js, _ := json.Marshal(jsonerr{msg})
+	w.Write(js)
+}
+
 // OKResponse writes a 200 response with a simple string body
 func OKResponse(w http.ResponseWriter, s string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, s)
-}
-
-// Legacy Weave Error Handlers
-const (
-	// old legacy stuff, used to keep compatibility with python/old clients
-	// https://github.com/mozilla-services/server-syncstorage/blob/fd3c8b90278cb9944cb224964af6e6dae19c9263/syncstorage/tweens.py#L17-L21
-
-	WEAVE_UNKNOWN_ERROR  = "0"
-	WEAVE_ILLEGAL_METH   = "1"  // Illegal method/protocol
-	WEAVE_MALFORMED_JSON = "6"  // Json parse failure
-	WEAVE_INVALID_WBO    = "8"  // Invalid Weave Basic Object
-	WEAVE_OVER_QUOTA     = "14" // User over quota
-)
-
-func WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-	w.Write([]byte(WEAVE_INVALID_WBO))
 }
