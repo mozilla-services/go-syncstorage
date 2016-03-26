@@ -266,6 +266,12 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 
 	if v := r.Form.Get("ids"); v != "" {
 		ids = strings.Split(v, ",")
+
+		if len(ids) > BATCH_MAX_IDS {
+			JSONError(w, "exceeded max batch size", http.StatusBadRequest)
+			return
+		}
+
 		for i, id := range ids {
 			id = strings.TrimSpace(id)
 			if syncstorage.BSOIdOk(id) {
