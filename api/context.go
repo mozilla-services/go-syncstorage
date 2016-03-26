@@ -35,15 +35,6 @@ const (
 
 	// maximum number of BSOs per GET request
 	MAX_BSO_GET_LIMIT = 2500
-
-	// old legacy stuff, used to keep compatibility with python/old clients
-	// https://github.com/mozilla-services/server-syncstorage/blob/fd3c8b90278cb9944cb224964af6e6dae19c9263/syncstorage/tweens.py#L17-L21
-
-	WEAVE_UNKNOWN_ERROR  = "0"
-	WEAVE_ILLEGAL_METH   = "1"  // Illegal method/protocol
-	WEAVE_MALFORMED_JSON = "6"  // Json parse failure
-	WEAVE_INVALID_WBO    = "8"  // Invalid Weave Basic Object
-	WEAVE_OVER_QUOTA     = "14" // User over quota
 )
 
 // NewRouterFromContext creates a mux.Router and registers handlers from
@@ -119,12 +110,6 @@ type Context struct {
 	MaxBSOGetLimit int
 }
 
-func (c *Context) WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-	w.Write([]byte(WEAVE_INVALID_WBO))
-}
-
 // getcid turns the collection name in the URI to its internal Id number. the `automake`
 // parameter will auto-make it if it doesn't exist
 func (c *Context) getcid(r *http.Request, uid string, automake bool) (cId int, err error) {
@@ -150,17 +135,9 @@ func (c *Context) getcid(r *http.Request, uid string, automake bool) (cId int, e
 	return
 }
 
-// Ok writes a 200 response with a simple string body
-func okResponse(w http.ResponseWriter, s string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, s)
-}
-
 func (c *Context) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// todo check dependencies to make sure they're ok..
-	okResponse(w, "OK")
+	OKResponse(w, "OK")
 }
 
 func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid string) {
@@ -170,7 +147,7 @@ func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid stri
 	time.Sleep(100 * time.Millisecond)
 
 	w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(syncstorage.Now()))
-	okResponse(w, uid)
+	OKResponse(w, uid)
 }
 
 // hInfoQuota calculates the total disk space used by the user by calculating
@@ -507,7 +484,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		decoder := json.NewDecoder(r.Body)
 		err := decoder.Decode(&raw)
 		if err != nil {
-			c.WeaveInvalidWBOError(w, r)
+			WeaveInvalidWBOError(w, r)
 			return
 		}
 	} else { // deal with application/newlines
@@ -536,7 +513,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 			// couldn't parse a BSO into something real
 			// abort immediately
 			if err.field == "-" { // json error, not an object
-				c.WeaveInvalidWBOError(w, r)
+				WeaveInvalidWBOError(w, r)
 				return
 			}
 
@@ -741,7 +718,7 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 
 	var bso syncstorage.PutBSOInput
 	if err := parseIntoBSO(body, &bso); err != nil {
-		c.WeaveInvalidWBOError(w, r)
+		WeaveInvalidWBOError(w, r)
 		return
 	}
 
