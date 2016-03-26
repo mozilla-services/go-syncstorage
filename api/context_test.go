@@ -119,7 +119,6 @@ func sendrequest(req *http.Request, c *Context) *httptest.ResponseRecorder {
 
 func TestContextJSON(t *testing.T) {
 	assert := assert.New(t)
-	c := makeTestContext()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/", nil)
 	req.Header.Set("Accept", "application/json")
@@ -133,7 +132,7 @@ func TestContextJSON(t *testing.T) {
 
 	err := json.Unmarshal(js, &val)
 	if assert.NoError(err) {
-		c.JSON(w, req, val)
+		JSON(w, req, val)
 		assert.Equal("application/json", w.HeaderMap.Get("Content-Type"))
 		assert.Equal(`[{"A":"one","B":1},{"A":"two","B":2}]`, w.Body.String())
 	}
@@ -142,7 +141,6 @@ func TestContextJSON(t *testing.T) {
 
 func TestContextNewLine(t *testing.T) {
 	assert := assert.New(t)
-	c := makeTestContext()
 
 	// some test data
 	var val []struct {
@@ -160,7 +158,7 @@ func TestContextNewLine(t *testing.T) {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/", nil)
 		req.Header.Set("Accept", "application/newlines")
-		c.NewLine(w, req, val[0])
+		NewLine(w, req, val[0])
 		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
 		expected := `{"A":"one","B":1}` + "\n"
 		assert.Equal(expected, w.Body.String())
@@ -171,7 +169,7 @@ func TestContextNewLine(t *testing.T) {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/", nil)
 		req.Header.Set("Accept", "application/newlines")
-		c.NewLine(w, req, val)
+		NewLine(w, req, val)
 		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
 		expected := `{"A":"one","B":1}
 {"A":"two","B":2}
@@ -183,7 +181,6 @@ func TestContextNewLine(t *testing.T) {
 
 func TestContextJsonNewline(t *testing.T) {
 	assert := assert.New(t)
-	c := makeTestContext()
 
 	// some test data
 	var val []struct {
@@ -201,7 +198,7 @@ func TestContextJsonNewline(t *testing.T) {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/", nil)
 		req.Header.Set("Accept", "application/json")
-		c.JsonNewline(w, req, val)
+		JsonNewline(w, req, val)
 		assert.Equal("application/json", w.HeaderMap.Get("Content-Type"))
 		assert.Equal(`[{"A":"one","B":1},{"A":"two","B":2},{"A":"three","B":3}]`, w.Body.String())
 	}
@@ -211,7 +208,7 @@ func TestContextJsonNewline(t *testing.T) {
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/", nil)
 		req.Header.Set("Accept", "application/newlines")
-		c.JsonNewline(w, req, val)
+		JsonNewline(w, req, val)
 		assert.Equal("application/newlines", w.HeaderMap.Get("Content-Type"))
 		expected := `{"A":"one","B":1}
 {"A":"two","B":2}

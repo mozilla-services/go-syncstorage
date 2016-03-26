@@ -125,57 +125,6 @@ func (c *Context) WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(WEAVE_INVALID_WBO))
 }
 
-// JsonNewline returns data as newline separated or as a single
-// json array
-func (c *Context) JsonNewline(w http.ResponseWriter, r *http.Request, val interface{}) {
-
-	if r.Header.Get("Accept") == "application/newlines" {
-		c.NewLine(w, r, val)
-	} else {
-		c.JSON(w, r, val)
-	}
-}
-
-// NewLine prints out new line \n separated JSON objects instead of a
-// single JSON array of objects
-func (c *Context) NewLine(w http.ResponseWriter, r *http.Request, val interface{}) {
-
-	var vals []json.RawMessage
-	// make sure we can convert all of it to JSON before
-	// trying to make it all newline JSON
-	js, err := json.Marshal(val)
-	if err != nil {
-		InternalError(w, r, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/newlines")
-
-	// array of objects?
-	newlineChar := []byte("\n")
-	err = json.Unmarshal(js, &vals)
-	if err != nil { // not an array
-		w.Write(js)
-		w.Write(newlineChar)
-	} else {
-		for _, raw := range vals {
-			w.Write(raw)
-			w.Write(newlineChar)
-		}
-
-	}
-}
-
-func (c *Context) JSON(w http.ResponseWriter, r *http.Request, val interface{}) {
-	js, err := json.Marshal(val)
-	if err != nil {
-		InternalError(w, r, err)
-	} else {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(js)
-	}
-}
-
 // getcid turns the collection name in the URI to its internal Id number. the `automake`
 // parameter will auto-make it if it doesn't exist
 func (c *Context) getcid(r *http.Request, uid string, automake bool) (cId int, err error) {
@@ -241,7 +190,7 @@ func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string)
 		InternalError(w, r, err)
 	} else {
 		tmp := float64(used) / 1024
-		c.JsonNewline(w, r, []*float64{&tmp, nil})
+		JsonNewline(w, r, []*float64{&tmp, nil})
 	}
 }
 
@@ -263,7 +212,7 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 
 		m := syncstorage.ModifiedToString(modified)
 		w.Header().Set("X-Last-Modified", m)
-		c.JsonNewline(w, r, info)
+		JsonNewline(w, r, info)
 	}
 }
 
@@ -284,7 +233,7 @@ func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, u
 		for name, bytes := range results {
 			resultsKB[name] = float64(bytes) / 1024
 		}
-		c.JsonNewline(w, r, resultsKB)
+		JsonNewline(w, r, resultsKB)
 	}
 }
 
@@ -300,7 +249,7 @@ func (c *Context) hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		InternalError(w, r, err)
 	} else {
-		c.JsonNewline(w, r, results)
+		JsonNewline(w, r, results)
 	}
 }
 
@@ -448,13 +397,13 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	}
 
 	if full {
-		c.JsonNewline(w, r, results.BSOs)
+		JsonNewline(w, r, results.BSOs)
 	} else {
 		bsoIds := make([]string, len(results.BSOs))
 		for i, b := range results.BSOs {
 			bsoIds[i] = b.Id
 		}
-		c.JsonNewline(w, r, bsoIds)
+		JsonNewline(w, r, bsoIds)
 	}
 }
 
@@ -642,7 +591,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		}
 
 		w.Header().Set("X-Last-Modified", m)
-		c.JsonNewline(w, r, &PostResults{
+		JsonNewline(w, r, &PostResults{
 			Modified: m,
 			Success:  postResults.Success,
 			Failed:   results.Failed,
@@ -656,7 +605,7 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
 			// nothing to delete... return a successful response
-			c.JsonNewline(w, r, map[string]int{"modified": syncstorage.Now()})
+			JsonNewline(w, r, map[string]int{"modified": syncstorage.Now()})
 		} else {
 			InternalError(w, r, err)
 		}
@@ -687,7 +636,7 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 		}
 	}
 
-	c.JsonNewline(w, r, map[string]int{"modified": modified})
+	JsonNewline(w, r, map[string]int{"modified": modified})
 }
 
 func (c *Context) getbso(w http.ResponseWriter, r *http.Request) (bId string, ok bool) {
@@ -743,7 +692,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 
 	bso, err = c.Dispatch.GetBSO(uid, cId, bId)
 	if err == nil {
-		c.JsonNewline(w, r, bso)
+		JsonNewline(w, r, bso)
 	} else {
 		InternalError(w, r, err)
 	}
