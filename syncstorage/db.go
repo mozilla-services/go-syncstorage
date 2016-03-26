@@ -544,7 +544,9 @@ func (d *DB) GetBSOs(
 func (d *DB) GetBSOModified(cId int, bId string) (modified int, err error) {
 	d.Lock()
 	defer d.Unlock()
-	err = d.db.QueryRow("SELECT modified FROM BSO where CollectionId=? and Id=?", cId, bId).Scan(&modified)
+	err = d.db.QueryRow(`SELECT modified
+						 FROM BSO
+						 WHERE CollectionId=? and Id=? and TTL > ?`, cId, bId, Now()).Scan(&modified)
 
 	if err != nil {
 		if err == sql.ErrNoRows {

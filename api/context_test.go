@@ -1005,12 +1005,14 @@ func TestContextBsoGET(t *testing.T) {
 
 	payload := syncstorage.String("test")
 	sortIndex := syncstorage.Int(100)
-	if _, err = context.Dispatch.PutBSO(uid, cId, bsoId, payload, sortIndex, nil); !assert.NoError(err) {
+	ttl := syncstorage.Int(1000)
+	if _, err = context.Dispatch.PutBSO(uid, cId, bsoId, payload, sortIndex, ttl); !assert.NoError(err) {
 		return
 	}
 
 	resp := request("GET", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, nil, context)
 	if !assert.Equal(http.StatusOK, resp.Code) {
+		fmt.Println(resp.Body.String())
 		return
 	}
 
@@ -1291,5 +1293,8 @@ func TestContextDeleteAndDBScanBug(t *testing.T) {
 	assert.NoError(err)
 
 	_, err = context.Dispatch.GetCollectionId(uid, "bookmarks")
+	assert.Equal(syncstorage.ErrNotFound, err)
+
+	_, err = context.Dispatch.GetBSOModified(uid, 1, "test")
 	assert.Equal(syncstorage.ErrNotFound, err)
 }
