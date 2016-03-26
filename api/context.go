@@ -901,6 +901,13 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 
 func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 
+	// accept text/plain from old (broken) clients
+	ct := r.Header.Get("Content-Type")
+	if ct != "application/json" && ct != "text/plain" && ct != "application/newlines" {
+		http.Error(w, "Not acceptable Content-Type", http.StatusUnsupportedMediaType)
+		return
+	}
+
 	var (
 		bId      string
 		ok       bool
