@@ -900,7 +900,7 @@ func TestContextCollectionDELETE(t *testing.T) {
 
 	uid := "123456"
 
-	var respData map[string]int
+	var respData map[string]float64
 
 	// delete entire collection
 	{
