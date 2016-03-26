@@ -661,7 +661,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
-			http.NotFound(w, r)
+			JSONError(w, "Collection Not Found", http.StatusNotFound)
 		} else {
 			InternalError(w, r, err)
 		}
@@ -671,7 +671,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 	modified, err := c.Dispatch.GetBSOModified(uid, cId, bId)
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
-			http.NotFound(w, r)
+			JSONError(w, "BSO Not Found", http.StatusNotFound)
 		} else {
 			InternalError(w, r, err)
 		}
@@ -780,7 +780,7 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 
 	cId, err = c.getcid(r, uid, false)
 	if err == syncstorage.ErrNotFound {
-		http.NotFound(w, r)
+		JSONError(w, "Collection Not Found", http.StatusNotFound)
 		return
 	}
 
