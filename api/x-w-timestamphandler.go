@@ -22,6 +22,7 @@ type xWeaveTimestampHandler struct {
 // or WriteHeader(). Since it is not possible to add headers after
 // already sending headers or data to the client.
 type timestampWriter struct {
+	http.ResponseWriter
 	// the original
 	w           http.ResponseWriter
 	wroteHeader bool

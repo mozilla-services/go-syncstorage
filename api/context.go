@@ -2,8 +2,6 @@ package api
 
 import (
 	"bufio"
-	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,13 +11,9 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
-
 	"github.com/gorilla/mux"
 	. "github.com/mostlygeek/go-debug"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
-	"github.com/mostlygeek/go-syncstorage/token"
-	"github.com/mozilla-services/hawk-go"
 )
 
 var apiDebug = Debug("syncapi")
@@ -41,15 +35,6 @@ const (
 
 	// maximum number of BSOs per GET request
 	MAX_BSO_GET_LIMIT = 2500
-
-	// old legacy stuff, used to keep compatibility with python/old clients
-	// https://github.com/mozilla-services/server-syncstorage/blob/fd3c8b90278cb9944cb224964af6e6dae19c9263/syncstorage/tweens.py#L17-L21
-
-	WEAVE_UNKNOWN_ERROR  = "0"
-	WEAVE_ILLEGAL_METH   = "1"  // Illegal method/protocol
-	WEAVE_MALFORMED_JSON = "6"  // Json parse failure
-	WEAVE_INVALID_WBO    = "8"  // Invalid Weave Basic Object
-	WEAVE_OVER_QUOTA     = "14" // User over quota
 )
 
 // NewRouterFromContext creates a mux.Router and registers handlers from
@@ -66,22 +51,22 @@ func NewRouterFromContext(c *Context) http.Handler {
 	v := r.PathPrefix("/1.5/{uid:[0-9]+}/").Subrouter()
 
 	// not part of the API, used to make sure uid matching works
-	v.HandleFunc("/echo-uid", c.acceptOK(c.hawk(c.handleEchoUID))).Methods("GET")
+	v.HandleFunc("/echo-uid", acceptOK(c.hawk(c.handleEchoUID))).Methods("GET")
 
 	info := v.PathPrefix("/info/").Subrouter()
-	info.HandleFunc("/collections", c.acceptOK(c.hawk(c.hInfoCollections))).Methods("GET")
-	info.HandleFunc("/collection_usage", c.acceptOK(c.hawk(c.hInfoCollectionUsage))).Methods("GET")
-	info.HandleFunc("/collection_counts", c.acceptOK(c.hawk(c.hInfoCollectionCounts))).Methods("GET")
+	info.HandleFunc("/collections", acceptOK(c.hawk(c.hInfoCollections))).Methods("GET")
+	info.HandleFunc("/collection_usage", acceptOK(c.hawk(c.hInfoCollectionUsage))).Methods("GET")
+	info.HandleFunc("/collection_counts", acceptOK(c.hawk(c.hInfoCollectionCounts))).Methods("GET")
 	info.HandleFunc("/quota", c.hawk(c.hInfoQuota)).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", handleTODO).Methods("DELETE")
 
-	storage.HandleFunc("/{collection}", c.acceptOK(c.hawk(c.hCollectionGET))).Methods("GET")
+	storage.HandleFunc("/{collection}", acceptOK(c.hawk(c.hCollectionGET))).Methods("GET")
 	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionPOST)).Methods("POST")
 	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionDELETE)).Methods("DELETE")
-	storage.HandleFunc("/{collection}/{bsoId}", c.acceptOK(c.hawk(c.hBsoGET))).Methods("GET")
-	storage.HandleFunc("/{collection}/{bsoId}", c.acceptOK(c.hawk(c.hBsoPUT))).Methods("PUT")
+	storage.HandleFunc("/{collection}/{bsoId}", acceptOK(c.hawk(c.hBsoGET))).Methods("GET")
+	storage.HandleFunc("/{collection}/{bsoId}", acceptOK(c.hawk(c.hBsoPUT))).Methods("PUT")
 	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoDELETE)).Methods("DELETE")
 
 	// wrap to make sure every response gets a XWeaveTimestampHandler
@@ -91,8 +76,6 @@ func NewRouterFromContext(c *Context) http.Handler {
 func handleTODO(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Not implemented", http.StatusNotImplemented)
 }
-
-type syncApiHandler func(http.ResponseWriter, *http.Request, string)
 
 func NewContext(secrets []string, dispatch *syncstorage.Dispatch) (*Context, error) {
 
@@ -127,212 +110,6 @@ type Context struct {
 	MaxBSOGetLimit int
 }
 
-// acceptOK checks that the request has an Accept header that is either
-// application/json or application/newlines
-func (c *Context) acceptOK(h http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		accept := r.Header.Get("Accept")
-
-		// no Accept defaults to JSON
-		if accept == "" {
-			r.Header.Set("Accept", "application/json")
-			h(w, r)
-			return
-		}
-
-		if accept != "application/json" && accept != "application/newlines" {
-			http.Error(w, http.StatusText(http.StatusNotAcceptable), http.StatusNotAcceptable)
-		} else {
-			h(w, r)
-		}
-	})
-}
-
-// hawk checks HAWK authentication headers and returns an unauthorized response
-// if they are invalid otherwise passes call to syncApiHandler
-func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		// have the ability to disable hawk auth for testing purposes
-		// when hawk is disabled we need to pull the uid from the
-		// url params... when hawk is enabled the uid comes from the Token sent
-		// by the tokenserver
-		if c.DisableHawk {
-			vars := mux.Vars(r)
-			if uid, ok := vars["uid"]; !ok {
-				http.Error(w, "do not have a uid to work with", http.StatusBadRequest)
-			} else {
-				authDebug("Hawk disabled. Using uid: %s", uid)
-				h(w, r, uid)
-			}
-
-			return
-		}
-
-		// Step 1: Ensure the Hawk header is OK. Use ParseRequestHeader
-		// so the token does not have to be parsed twice to extract
-		// the UID from it
-		auth, err := hawk.NewAuthFromRequest(r, nil, nil)
-		if err != nil {
-			if e, ok := err.(hawk.AuthFormatError); ok {
-				http.Error(w,
-					fmt.Sprintf("Malformed hawk header, field: %s, err: %s", e.Field, e.Err),
-					http.StatusBadRequest)
-			} else {
-				w.Header().Set("WWW-Authenticate", "Hawk")
-				http.Error(w, err.Error(), http.StatusUnauthorized)
-			}
-			return
-		}
-
-		// Step 2: Extract the Token
-		var (
-			parsedToken token.Token
-			tokenError  error = ErrTokenInvalid
-		)
-
-		for _, secret := range c.Secrets {
-			parsedToken, tokenError = token.ParseToken([]byte(secret), auth.Credentials.ID)
-			if err != nil { // wrong secret..
-				continue
-			}
-		}
-
-		if tokenError != nil {
-			authDebug("tokenError: %s", tokenError.Error())
-			http.Error(w,
-				fmt.Sprintf("Invalid token: %s", tokenError.Error()),
-				http.StatusBadRequest)
-			return
-		} else {
-			// required to these manually so the auth.Valid()
-			// check has all the information it needs later
-			auth.Credentials.Key = parsedToken.DerivedSecret
-			auth.Credentials.Hash = sha256.New
-		}
-
-		// Step 3: Make sure it's valid...
-		if err := auth.Valid(); err != nil {
-			w.Header().Set("WWW-Authenticate", "Hawk")
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-
-		// Step 4: Validate the payload hash if it exists
-		if auth.Hash != nil {
-			if r.Header.Get("Content-Type") == "" {
-				http.Error(w, "Content-Type missing", http.StatusBadRequest)
-				return
-			}
-
-			// read and replace io.Reader
-			content, err := ioutil.ReadAll(r.Body)
-			if err != nil {
-				http.Error(w, "Could not read request body", http.StatusInternalServerError)
-				return
-			}
-
-			r.Body = ioutil.NopCloser(bytes.NewReader(content))
-			pHash := auth.PayloadHash(r.Header.Get("Content-Type"))
-			pHash.Sum(content)
-			if !auth.ValidHash(pHash) {
-				w.Header().Set("WWW-Authenticate", "Hawk")
-				http.Error(w, "Hawk error, payload hash invalid", http.StatusUnauthorized)
-				return
-			}
-		}
-
-		// Step 5: *woot*
-		h(w, r, strconv.FormatUint(parsedToken.Payload.Uid, 10))
-	})
-}
-
-// uid extracts the uid value from the URL and passes it another
-// http.HandlerFunc for actual functionality
-func (c *Context) uid(h syncApiHandler) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var uid string
-		var ok bool
-
-		vars := mux.Vars(r)
-		if uid, ok = vars["uid"]; !ok {
-			http.Error(w, "UID missing", http.StatusBadRequest)
-		}
-
-		// finally pass it off to the handler
-		h(w, r, uid)
-	})
-}
-
-// Error produces an HTTP 500 error, basically means a bug in the system
-func (c *Context) Error(w http.ResponseWriter, r *http.Request, err error) {
-	log.WithFields(log.Fields{
-		"err":    err.Error(),
-		"method": r.Method,
-		"path":   r.URL.Path,
-	}).Errorf("HTTP Error: %s", err.Error())
-	http.Error(w,
-		http.StatusText(http.StatusInternalServerError),
-		http.StatusInternalServerError)
-}
-
-func (c *Context) WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-	w.Write([]byte(WEAVE_INVALID_WBO))
-}
-
-// JsonNewline returns data as newline separated or as a single
-// json array
-func (c *Context) JsonNewline(w http.ResponseWriter, r *http.Request, val interface{}) {
-
-	if r.Header.Get("Accept") == "application/newlines" {
-		c.NewLine(w, r, val)
-	} else {
-		c.JSON(w, r, val)
-	}
-}
-
-// NewLine prints out new line \n separated JSON objects instead of a
-// single JSON array of objects
-func (c *Context) NewLine(w http.ResponseWriter, r *http.Request, val interface{}) {
-
-	var vals []json.RawMessage
-	// make sure we can convert all of it to JSON before
-	// trying to make it all newline JSON
-	js, err := json.Marshal(val)
-	if err != nil {
-		c.Error(w, r, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/newlines")
-
-	// array of objects?
-	newlineChar := []byte("\n")
-	err = json.Unmarshal(js, &vals)
-	if err != nil { // not an array
-		w.Write(js)
-		w.Write(newlineChar)
-	} else {
-		for _, raw := range vals {
-			w.Write(raw)
-			w.Write(newlineChar)
-		}
-
-	}
-}
-
-func (c *Context) JSON(w http.ResponseWriter, r *http.Request, val interface{}) {
-	js, err := json.Marshal(val)
-	if err != nil {
-		c.Error(w, r, err)
-	} else {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(js)
-	}
-}
-
 // getcid turns the collection name in the URI to its internal Id number. the `automake`
 // parameter will auto-make it if it doesn't exist
 func (c *Context) getcid(r *http.Request, uid string, automake bool) (cId int, err error) {
@@ -358,17 +135,9 @@ func (c *Context) getcid(r *http.Request, uid string, automake bool) (cId int, e
 	return
 }
 
-// Ok writes a 200 response with a simple string body
-func okResponse(w http.ResponseWriter, s string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, s)
-}
-
 func (c *Context) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// todo check dependencies to make sure they're ok..
-	okResponse(w, "OK")
+	OKResponse(w, "OK")
 }
 
 func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid string) {
@@ -378,7 +147,7 @@ func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid stri
 	time.Sleep(100 * time.Millisecond)
 
 	w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(syncstorage.Now()))
-	okResponse(w, uid)
+	OKResponse(w, uid)
 }
 
 // hInfoQuota calculates the total disk space used by the user by calculating
@@ -387,7 +156,7 @@ func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid stri
 func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string) {
 	modified, err := c.Dispatch.LastModified(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else if sentNotModified(w, r, modified) {
 		return
 	}
@@ -395,17 +164,17 @@ func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string)
 	// TODO support quota
 	used, _, err := c.Dispatch.InfoQuota(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		tmp := float64(used) / 1024
-		c.JsonNewline(w, r, []*float64{&tmp, nil})
+		JsonNewline(w, r, []*float64{&tmp, nil})
 	}
 }
 
 func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid string) {
 	info, err := c.Dispatch.InfoCollections(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		modified := 0
 		for _, modtime := range info {
@@ -420,44 +189,44 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 
 		m := syncstorage.ModifiedToString(modified)
 		w.Header().Set("X-Last-Modified", m)
-		c.JsonNewline(w, r, info)
+		JsonNewline(w, r, info)
 	}
 }
 
 func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, uid string) {
 	modified, err := c.Dispatch.LastModified(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else if sentNotModified(w, r, modified) {
 		return
 	}
 
 	results, err := c.Dispatch.InfoCollectionUsage(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		// the sync 1.5 api says data should be in KB
 		resultsKB := make(map[string]float64)
 		for name, bytes := range results {
 			resultsKB[name] = float64(bytes) / 1024
 		}
-		c.JsonNewline(w, r, resultsKB)
+		JsonNewline(w, r, resultsKB)
 	}
 }
 
 func (c *Context) hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, uid string) {
 	modified, err := c.Dispatch.LastModified(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else if sentNotModified(w, r, modified) {
 		return
 	}
 
 	results, err := c.Dispatch.InfoCollectionCounts(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
-		c.JsonNewline(w, r, results)
+		JsonNewline(w, r, results)
 	}
 }
 
@@ -482,7 +251,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 			w.Write([]byte("[]"))
 			return
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 			return
 
 		}
@@ -585,7 +354,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	// the GET parameters
 	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else if sentNotModified(w, r, cmodified) {
 		return
@@ -593,7 +362,7 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 
 	results, err := c.Dispatch.GetBSOs(uid, cId, ids, newer, sort, limit, offset)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	}
 	m := syncstorage.ModifiedToString(cmodified)
@@ -605,13 +374,13 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 	}
 
 	if full {
-		c.JsonNewline(w, r, results.BSOs)
+		JsonNewline(w, r, results.BSOs)
 	} else {
 		bsoIds := make([]string, len(results.BSOs))
 		for i, b := range results.BSOs {
 			bsoIds[i] = b.Id
 		}
-		c.JsonNewline(w, r, bsoIds)
+		JsonNewline(w, r, bsoIds)
 	}
 }
 
@@ -715,7 +484,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		decoder := json.NewDecoder(r.Body)
 		err := decoder.Decode(&raw)
 		if err != nil {
-			c.WeaveInvalidWBOError(w, r)
+			WeaveInvalidWBOError(w, r)
 			return
 		}
 	} else { // deal with application/newlines
@@ -744,7 +513,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 			// couldn't parse a BSO into something real
 			// abort immediately
 			if err.field == "-" { // json error, not an object
-				c.WeaveInvalidWBOError(w, r)
+				WeaveInvalidWBOError(w, r)
 				return
 			}
 
@@ -763,14 +532,14 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		if err == syncstorage.ErrInvalidCollectionName {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
 
 	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else if sentNotModified(w, r, cmodified) {
 		return
@@ -790,7 +559,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 	postResults, err := c.Dispatch.PostBSOs(uid, cId, bsoToBeProcessed)
 
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	} else {
 		m := syncstorage.ModifiedToString(postResults.Modified)
 
@@ -799,7 +568,7 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		}
 
 		w.Header().Set("X-Last-Modified", m)
-		c.JsonNewline(w, r, &PostResults{
+		JsonNewline(w, r, &PostResults{
 			Modified: m,
 			Success:  postResults.Success,
 			Failed:   results.Failed,
@@ -813,16 +582,16 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
 			// nothing to delete... return a successful response
-			c.JsonNewline(w, r, map[string]int{"modified": syncstorage.Now()})
+			JsonNewline(w, r, map[string]int{"modified": syncstorage.Now()})
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
 
 	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else if sentNotModified(w, r, cmodified) {
 		return
@@ -833,18 +602,18 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 	if idExists {
 		modified, err = c.Dispatch.DeleteBSOs(uid, cId, strings.Split(bids[0], ",")...)
 		if err != nil {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 			return
 		}
 	} else {
 		err = c.Dispatch.DeleteCollection(uid, cId)
 		if err != nil {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 			return
 		}
 	}
 
-	c.JsonNewline(w, r, map[string]int{"modified": modified})
+	JsonNewline(w, r, map[string]int{"modified": modified})
 }
 
 func (c *Context) getbso(w http.ResponseWriter, r *http.Request) (bId string, ok bool) {
@@ -876,7 +645,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 		if err == syncstorage.ErrNotFound {
 			http.NotFound(w, r)
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
@@ -886,7 +655,7 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 		if err == syncstorage.ErrNotFound {
 			http.NotFound(w, r)
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
@@ -900,9 +669,9 @@ func (c *Context) hBsoGET(w http.ResponseWriter, r *http.Request, uid string) {
 
 	bso, err = c.Dispatch.GetBSO(uid, cId, bId)
 	if err == nil {
-		c.JsonNewline(w, r, bso)
+		JsonNewline(w, r, bso)
 	} else {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 	}
 }
 
@@ -929,13 +698,13 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 
 	cId, err = c.getcid(r, uid, true)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	}
 
 	modified, err = c.Dispatch.GetBSOModified(uid, cId, bId)
 	if err != nil && err != syncstorage.ErrNotFound {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else if sentNotModified(w, r, modified) {
 		return
@@ -943,13 +712,13 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		c.Error(w, r, errors.New("PUT could not read JSON body"))
+		InternalError(w, r, errors.New("PUT could not read JSON body"))
 		return
 	}
 
 	var bso syncstorage.PutBSOInput
 	if err := parseIntoBSO(body, &bso); err != nil {
-		c.WeaveInvalidWBOError(w, r)
+		WeaveInvalidWBOError(w, r)
 		return
 	}
 
@@ -1004,7 +773,7 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 		if err == syncstorage.ErrNotFound {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
-			c.Error(w, r, err)
+			InternalError(w, r, err)
 		}
 		return
 	}
@@ -1015,7 +784,7 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 
 	modified, err = c.Dispatch.DeleteBSO(uid, cId, bId)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else {
 		m := syncstorage.ModifiedToString(modified)
@@ -1029,7 +798,7 @@ func (c *Context) hDeleteEverything(w http.ResponseWriter, r *http.Request, uid 
 
 	err := c.Dispatch.DeleteEverything(uid)
 	if err != nil {
-		c.Error(w, r, err)
+		InternalError(w, r, err)
 		return
 	} else {
 		m := syncstorage.ModifiedToString(syncstorage.Now())
