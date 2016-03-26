@@ -62,22 +62,22 @@ func NewRouterFromContext(c *Context) http.Handler {
 	v := r.PathPrefix("/1.5/{uid:[0-9]+}/").Subrouter()
 
 	// not part of the API, used to make sure uid matching works
-	v.HandleFunc("/echo-uid", c.acceptOK(c.hawk(c.handleEchoUID))).Methods("GET")
+	v.HandleFunc("/echo-uid", acceptOK(c.hawk(c.handleEchoUID))).Methods("GET")
 
 	info := v.PathPrefix("/info/").Subrouter()
-	info.HandleFunc("/collections", c.acceptOK(c.hawk(c.hInfoCollections))).Methods("GET")
-	info.HandleFunc("/collection_usage", c.acceptOK(c.hawk(c.hInfoCollectionUsage))).Methods("GET")
-	info.HandleFunc("/collection_counts", c.acceptOK(c.hawk(c.hInfoCollectionCounts))).Methods("GET")
+	info.HandleFunc("/collections", acceptOK(c.hawk(c.hInfoCollections))).Methods("GET")
+	info.HandleFunc("/collection_usage", acceptOK(c.hawk(c.hInfoCollectionUsage))).Methods("GET")
+	info.HandleFunc("/collection_counts", acceptOK(c.hawk(c.hInfoCollectionCounts))).Methods("GET")
 	info.HandleFunc("/quota", c.hawk(c.hInfoQuota)).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", handleTODO).Methods("DELETE")
 
-	storage.HandleFunc("/{collection}", c.acceptOK(c.hawk(c.hCollectionGET))).Methods("GET")
+	storage.HandleFunc("/{collection}", acceptOK(c.hawk(c.hCollectionGET))).Methods("GET")
 	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionPOST)).Methods("POST")
 	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionDELETE)).Methods("DELETE")
-	storage.HandleFunc("/{collection}/{bsoId}", c.acceptOK(c.hawk(c.hBsoGET))).Methods("GET")
-	storage.HandleFunc("/{collection}/{bsoId}", c.acceptOK(c.hawk(c.hBsoPUT))).Methods("PUT")
+	storage.HandleFunc("/{collection}/{bsoId}", acceptOK(c.hawk(c.hBsoGET))).Methods("GET")
+	storage.HandleFunc("/{collection}/{bsoId}", acceptOK(c.hawk(c.hBsoPUT))).Methods("PUT")
 	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoDELETE)).Methods("DELETE")
 
 	// wrap to make sure every response gets a XWeaveTimestampHandler
@@ -121,27 +121,6 @@ type Context struct {
 
 	// Settings that tweak web behaviour
 	MaxBSOGetLimit int
-}
-
-// acceptOK checks that the request has an Accept header that is either
-// application/json or application/newlines
-func (c *Context) acceptOK(h http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		accept := r.Header.Get("Accept")
-
-		// no Accept defaults to JSON
-		if accept == "" {
-			r.Header.Set("Accept", "application/json")
-			h(w, r)
-			return
-		}
-
-		if accept != "application/json" && accept != "application/newlines" {
-			http.Error(w, http.StatusText(http.StatusNotAcceptable), http.StatusNotAcceptable)
-		} else {
-			h(w, r)
-		}
-	})
 }
 
 // uid extracts the uid value from the URL and passes it another
