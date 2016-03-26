@@ -31,7 +31,7 @@ var (
 )
 
 const (
-	MAX_BSO_PER_POST_REQUEST = 100
+	BATCH_MAX_IDS = 100
 
 	// maximum number of BSOs per GET request
 	MAX_BSO_GET_LIMIT = 2500
@@ -523,8 +523,8 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 		}
 	}
 
-	if len(bsoToBeProcessed) > MAX_BSO_PER_POST_REQUEST {
-		JSONError(w, fmt.Sprintf("Exceeded %d BSO per request", MAX_BSO_PER_POST_REQUEST),
+	if len(bsoToBeProcessed) > BATCH_MAX_IDS {
+		JSONError(w, fmt.Sprintf("Exceeded %d BSO per request", BATCH_MAX_IDS),
 			http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -584,7 +584,9 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
 			// nothing to delete... return a successful response
-			JsonNewline(w, r, map[string]int{"modified": syncstorage.Now()})
+			JsonNewline(w, r, map[string]string{
+				"modified": syncstorage.ModifiedToString(syncstorage.Now()),
+			})
 		} else {
 			InternalError(w, r, err)
 		}
@@ -602,7 +604,15 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 	modified := syncstorage.Now()
 	bids, idExists := r.URL.Query()["ids"]
 	if idExists {
-		modified, err = c.Dispatch.DeleteBSOs(uid, cId, strings.Split(bids[0], ",")...)
+
+		bidlist := strings.Split(bids[0], ",")
+
+		if len(bidlist) > BATCH_MAX_IDS {
+			JSONError(w, "exceeded max batch size", http.StatusBadRequest)
+			return
+		}
+
+		modified, err = c.Dispatch.DeleteBSOs(uid, cId, bidlist...)
 		if err != nil {
 			InternalError(w, r, err)
 			return
@@ -615,7 +625,7 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 		}
 	}
 
-	JsonNewline(w, r, map[string]int{"modified": modified})
+	JsonNewline(w, r, map[string]string{"modified": syncstorage.ModifiedToString(modified)})
 }
 
 func (c *Context) getbso(w http.ResponseWriter, r *http.Request) (bId string, ok bool) {
