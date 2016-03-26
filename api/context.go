@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -371,6 +372,12 @@ func (c *Context) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid string) {
+
+	// sleep here to make sure X-Weave-Timestamp code puts in
+	// a to spec value
+	time.Sleep(100 * time.Millisecond)
+
+	w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(syncstorage.Now()))
 	okResponse(w, uid)
 }
 
