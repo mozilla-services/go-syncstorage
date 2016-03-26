@@ -87,6 +87,13 @@ func request(method, urlStr string, body io.Reader, c *Context) *httptest.Respon
 	return requestheaders(method, urlStr, body, header, c)
 }
 
+func jsonrequest(method, urlStr string, body io.Reader, c *Context) *httptest.ResponseRecorder {
+	header := make(http.Header)
+	header.Set("Accept", "application/json")
+	header.Set("Content-Type", "application/json")
+	return requestheaders(method, urlStr, body, header, c)
+}
+
 func requestheaders(method, urlStr string, body io.Reader, header http.Header, c *Context) *httptest.ResponseRecorder {
 
 	req, err := http.NewRequest(method, urlStr, body)
@@ -748,6 +755,15 @@ func TestContextCollectionPOST(t *testing.T) {
 		{"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
 	]`)
 
+	{
+		req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/bookmarks", nil)
+		req.Header.Add("Content-Type", "application/octet-stream")
+		resp := sendrequest(req, context)
+		if !assert.Equal(http.StatusUnsupportedMediaType, resp.Code) {
+			return
+		}
+	}
+
 	req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/bookmarks", body)
 	req.Header.Add("Content-Type", "application/json")
 
@@ -1116,14 +1132,13 @@ func TestContextBsoGET(t *testing.T) {
 	{
 
 		header := make(http.Header)
-		header.Add("X-If-Unmodified-Since", fmt.Sprintf("%.2f", bso.Modified))
+		header.Add("X-If-Unmodified-Since", fmt.Sprintf("%.2f", bso.Modified-0.1))
 		resp := requestheaders(
 			"GET",
 			"http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId,
 			nil,
 			header,
 			context)
-
 		assert.Equal(http.StatusPreconditionFailed, resp.Code)
 	}
 
@@ -1149,13 +1164,22 @@ func TestContextBsoPUT(t *testing.T) {
 	testNum := 0
 
 	cId, _ := context.Dispatch.GetCollectionId(uid, collection)
+	{
+		testNum++
+		header := make(http.Header)
+		header.Set("Content-Type", "application/octet-stream")
+		resp := requestheaders("PUT", "http://test/1.5/"+uid+"/storage/col/12", nil, header, context)
+		if !assert.Equal(http.StatusUnsupportedMediaType, resp.Code) {
+			return
+		}
+	}
 
 	{
 		testNum++
 		bsoId := "test" + strconv.Itoa(testNum)
 		data := `{"id":"` + bsoId + `", "payload":"hello","sortindex":1, "ttl": 1000000}`
 		body := bytes.NewBufferString(data)
-		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
+		resp := jsonrequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {
 			return
 		}
@@ -1174,7 +1198,7 @@ func TestContextBsoPUT(t *testing.T) {
 		bsoId := "test" + strconv.Itoa(testNum)
 		data := `{"id":"` + bsoId + `", "payload":"hello","sortindex":1}`
 		body := bytes.NewBufferString(data)
-		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
+		resp := jsonrequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {
 			return
 		}
@@ -1189,7 +1213,7 @@ func TestContextBsoPUT(t *testing.T) {
 		bsoId := "test" + strconv.Itoa(testNum)
 		data := `{"id":"` + bsoId + `", "payload":"hello", "sortindex":1}`
 		body := bytes.NewBufferString(data)
-		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
+		resp := jsonrequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {
 			return
 		}
@@ -1204,7 +1228,7 @@ func TestContextBsoPUT(t *testing.T) {
 		bsoId := "test" + strconv.Itoa(testNum)
 		data := `{"id":"` + bsoId + `", "payload":"hello", "sortindex":1}`
 		body := bytes.NewBufferString(data)
-		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
+		resp := jsonrequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {
 			return
 		}
@@ -1215,7 +1239,7 @@ func TestContextBsoPUT(t *testing.T) {
 
 		data = `{"id":"` + bsoId + `", "payload":"updated", "sortindex":2}`
 		body = bytes.NewBufferString(data)
-		resp = request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
+		resp = jsonrequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bsoId, body, context)
 		if !assert.Equal(http.StatusOK, resp.Code) {
 			return
 		}
@@ -1239,7 +1263,7 @@ func TestContextBsoPUTWeaveInvalidWSOError(t *testing.T) {
 	{
 		data := `{"id": [1,2,3], "payload":"hello", "sortindex":1}`
 		body := bytes.NewBufferString(data)
-		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bId, body, context)
+		resp := jsonrequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bId, body, context)
 		if assert.Equal(http.StatusBadRequest, resp.Code) {
 			assert.Equal(WEAVE_INVALID_WBO, resp.Body.String())
 		}
@@ -1248,7 +1272,7 @@ func TestContextBsoPUTWeaveInvalidWSOError(t *testing.T) {
 	{
 		data := "42"
 		body := bytes.NewBufferString(data)
-		resp := request("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bId, body, context)
+		resp := jsonrequest("PUT", "http://test/1.5/"+uid+"/storage/"+collection+"/"+bId, body, context)
 		if assert.Equal(http.StatusBadRequest, resp.Code) {
 			assert.Equal(WEAVE_INVALID_WBO, resp.Body.String())
 		}
