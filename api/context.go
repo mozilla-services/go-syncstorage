@@ -168,6 +168,9 @@ func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string)
 	if err != nil {
 		InternalError(w, r, err)
 	} else {
+		m := syncstorage.ModifiedToString(modified)
+		w.Header().Set("X-Last-Modified", m)
+
 		tmp := float64(used) / 1024
 		JsonNewline(w, r, []*float64{&tmp, nil})
 	}
@@ -212,6 +215,8 @@ func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, u
 		for name, bytes := range results {
 			resultsKB[name] = float64(bytes) / 1024
 		}
+		m := syncstorage.ModifiedToString(modified)
+		w.Header().Set("X-Last-Modified", m)
 		JsonNewline(w, r, resultsKB)
 	}
 }
@@ -228,6 +233,8 @@ func (c *Context) hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		InternalError(w, r, err)
 	} else {
+		m := syncstorage.ModifiedToString(modified)
+		w.Header().Set("X-Last-Modified", m)
 		JsonNewline(w, r, results)
 	}
 }
@@ -358,8 +365,8 @@ func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid str
 		}
 	}
 
-	// this is here since IO is more expensive than parsing
-	// the GET parameters
+	// this is way down here since IO is more expensive
+	// than parsing if the GET params are valid
 	cmodified, err := c.Dispatch.GetCollectionModified(uid, cId)
 	if err != nil {
 		InternalError(w, r, err)
