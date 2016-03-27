@@ -22,11 +22,26 @@ const SCHEMA_0 = `
 
 	CREATE TABLE Collections (
 	  -- storage an integer to save some space
-	  Id		INTEGER PRIMARY KEY ASC,
+	  Id		INTEGER PRIMARY KEY ASC AUTOINCREMENT,
 	  Name      VARCHAR(32) UNIQUE,
 
 	  Modified  INTEGER NOT NULL DEFAULT 0
 	);
+
+	INSERT INTO Collections (Id, Name) VALUES
+		( 1, "clients"),
+		( 2, "crypto"),
+		( 3, "forms"),
+		( 4, "history"),
+		( 5, "keys"),
+		( 6, "meta"),
+		( 7, "bookmarks"),
+		( 8, "prefs"),
+		( 9, "tabs"),
+		(10, "passwords"),
+		(11, "addons"),
+		-- forces new collections to start at 100
+		(99, "-push-");
 
 	CREATE TABLE KeyValues (
 		Key VARCHAR(32) NOT NULL,
@@ -35,15 +50,4 @@ const SCHEMA_0 = `
 	);
 
 	INSERT INTO KeyValues (Key, Value) VALUES ("SCHEMA_VERSION", 0);
-	INSERT INTO Collections (Name) VALUES
-		("bookmarks"),
-		("history"),
-		("forms"),
-		("prefs"),
-		("tabs"),
-		("passwords"),
-		("crypto"),
-		("client"),
-		("keys"),
-		("meta");
 	`

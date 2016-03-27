@@ -219,6 +219,33 @@ func (d *DB) GetCollectionId(name string) (id int, err error) {
 	d.Lock()
 	defer d.Unlock()
 
+	// return common collection id without touching the DB
+	// ew? yes, but it'll compile nice and fast
+	switch name {
+	case "clients":
+		return 1, nil
+	case "crypto":
+		return 2, nil
+	case "forms":
+		return 3, nil
+	case "history":
+		return 4, nil
+	case "keys":
+		return 5, nil
+	case "meta":
+		return 6, nil
+	case "bookmarks":
+		return 7, nil
+	case "prefs":
+		return 8, nil
+	case "tabs":
+		return 9, nil
+	case "passwords":
+		return 10, nil
+	case "addons":
+		return 11, nil
+	}
+
 	if !CollectionNameOk(name) {
 		err = ErrInvalidCollectionName
 		return
@@ -231,7 +258,6 @@ func (d *DB) GetCollectionId(name string) (id int, err error) {
 	}
 
 	return
-
 }
 
 func (d *DB) GetCollectionModified(cId int) (modified int, err error) {

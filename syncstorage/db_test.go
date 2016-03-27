@@ -36,6 +36,77 @@ func TestNewDB(t *testing.T) {
 	defer removeTestDB(db)
 }
 
+// TestStaticCollectionId ensures common collection
+// names are map to standard id numbers. It should also
+// save database looks ups for these as they are
+// baked in
+func TestStaticCollectionId(t *testing.T) {
+	assert := assert.New(t)
+	db, err := getTestDB()
+	if !assert.NoError(err) {
+		return
+	}
+
+	// make sure static collection ids match names
+	commonCols := map[int]string{
+		1: "clients", 2: "crypto", 3: "forms", 4: "history",
+		5: "keys", 6: "meta", 7: "bookmarks", 8: "prefs",
+		9: "tabs", 10: "passwords", 11: "addons",
+	}
+
+	// ensure DB actually has predefined common collections
+	{
+		rows, err := db.db.Query("SELECT Id, Name FROM Collections")
+		if !assert.NoError(err) {
+			return
+		}
+
+		results := make(map[int]string)
+
+		for rows.Next() {
+			var id int
+			var name string
+			if err := rows.Scan(&id, &name); !assert.NoError(err) {
+				return
+			}
+			results[id] = name
+		}
+		rows.Close()
+
+		for id, name := range commonCols {
+			n, ok := results[id]
+			assert.True(ok, id) // make sure it exists
+			assert.Equal(name, n)
+		}
+	}
+
+	// test that GetCollectionId returns the correct Ids
+	// for the common collections
+	{
+		for id, name := range commonCols {
+			checkid, err := db.GetCollectionId(name)
+			if !assert.NoError(err, name) {
+				return
+			}
+
+			if !assert.Equal(checkid, id, name) {
+				return
+			}
+		}
+	}
+
+	// make sure custom collections start at Id: 100
+	{
+		id, err := db.CreateCollection("col1")
+		if !assert.NoError(err) {
+			return
+		}
+
+		// make sure new collection start at 100
+		assert.Equal(id, 100)
+	}
+}
+
 func TestBsoExists(t *testing.T) {
 	assert := assert.New(t)
 

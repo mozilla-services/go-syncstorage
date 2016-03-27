@@ -28,7 +28,7 @@ var (
 		"tabs",
 		"passwords",
 		"crypto",
-		"client",
+		"clients",
 		"keys",
 		"meta",
 	}
@@ -207,7 +207,7 @@ func TestContextInfoCollections(t *testing.T) {
 		"tabs":      modified + 4000,
 		"passwords": modified + 5000,
 		"crypto":    modified + 6000,
-		"client":    modified + 7000,
+		"clients":   modified + 7000,
 		"keys":      modified + 8000,
 		"meta":      modified + 9000,
 	}
@@ -1293,7 +1293,7 @@ func TestContextDeleteAndDBScanBug(t *testing.T) {
 	assert.NoError(err)
 
 	_, err = context.Dispatch.GetCollectionId(uid, "bookmarks")
-	assert.Equal(syncstorage.ErrNotFound, err)
+	assert.NoError(err)
 
 	_, err = context.Dispatch.GetBSOModified(uid, 1, "test")
 	assert.Equal(syncstorage.ErrNotFound, err)
