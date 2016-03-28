@@ -519,7 +519,7 @@ func testApiUsageStats(db SyncApi, t *testing.T) {
 			if assert.NoError(err) {
 
 				// numbers pulled from previous tests
-				assert.Equal(12, pageStats.Total)  // total pages in database
+				assert.Equal(13, pageStats.Total)  // total pages in database
 				assert.Equal(2, pageStats.Free)    // unused pages (from delete)
 				assert.Equal(1024, pageStats.Size) // bytes/page
 			}
@@ -568,7 +568,7 @@ func testApiOptimize(db SyncApi, t *testing.T) {
 			assert.Equal(3, purged)
 			stats, err := db.Usage()
 			if assert.NoError(err) {
-				assert.Equal(25, stats.FreePercent()) // we know this from a previous test ;)
+				assert.Equal(23, stats.FreePercent()) // we know this from a previous test ;)
 				vac, err := db.Optimize(20)
 				assert.NoError(err)
 				assert.True(vac)
