@@ -112,11 +112,11 @@ func (p *Pool) borrowdb(uid string) (*DB, error) {
 		p.locks[uid] = &sync.Mutex{}
 		pDebugCacheB("Created a new lock for %s", uid)
 	}
-	p.Unlock()
 
 	pDebugCacheB("Attempt Lock for %s", uid)
 	p.locks[uid].Lock()
 	pDebugCacheB("Locked %s", uid)
+	p.Unlock()
 
 	var db *DB
 	var ok bool
