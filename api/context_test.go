@@ -54,7 +54,8 @@ func makeTestContext() *Context {
 		panic(err)
 	}
 
-	context, err := NewContext([]string{"sekret"}, dispatch)
+	secrets := []string{"secret1", "secret2", "secret3"}
+	context, err := NewContext(secrets, dispatch)
 	if err != nil {
 		panic(err)
 	}

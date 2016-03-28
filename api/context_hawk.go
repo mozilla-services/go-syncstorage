@@ -40,7 +40,7 @@ func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
 		auth, err := hawk.NewAuthFromRequest(r, nil, nil)
 		if err != nil {
 			if e, ok := err.(hawk.AuthFormatError); ok {
-				http.Error(w,
+				JSONError(w,
 					fmt.Sprintf("Malformed hawk header, field: %s, err: %s", e.Field, e.Err),
 					http.StatusBadRequest)
 			} else {
@@ -58,8 +58,8 @@ func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
 
 		for _, secret := range c.Secrets {
 			parsedToken, tokenError = token.ParseToken([]byte(secret), auth.Credentials.ID)
-			if err != nil { // wrong secret..
-				continue
+			if tokenError == nil { // found the right secret
+				break
 			}
 		}
 
