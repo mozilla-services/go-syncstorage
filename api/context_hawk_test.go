@@ -81,7 +81,7 @@ func hawkrequestbody(
 	return req, auth
 }
 
-func testtoken(c *Context, uid uint64) token.Token {
+func testtoken(secret string, uid uint64) token.Token {
 	node := "https://syncnode-12345.services.mozilla.com"
 	payload := token.TokenPayload{
 		Uid:     uid,
@@ -90,7 +90,7 @@ func testtoken(c *Context, uid uint64) token.Token {
 		Salt:    "pacific",
 	}
 
-	tok, err := token.NewToken([]byte(c.Secrets[0]), payload)
+	tok, err := token.NewToken([]byte(secret), payload)
 	if err != nil {
 		panic(err)
 	}
@@ -103,11 +103,27 @@ func TestHawkAuthGET(t *testing.T) {
 	context := hawkcontext()
 
 	var uid uint64 = 12345
-	tok := testtoken(context, uid)
 
+	tok := testtoken(context.Secrets[0], uid)
 	req, _ := hawkrequest("GET", syncurl(uid, "info/collections"), tok)
 	resp := sendrequest(req, context)
 	assert.Equal(t, http.StatusOK, resp.Code)
+}
+
+func TestHawkMultiSecrets(t *testing.T) {
+	t.Parallel()
+	context := hawkcontext()
+
+	var uid uint64 = 12345
+
+	for _, secret := range context.Secrets {
+		tok := testtoken(secret, uid)
+		req, _ := hawkrequest("GET", syncurl(uid, "info/collections"), tok)
+		resp := sendrequest(req, context)
+		if assert.Equal(t, http.StatusOK, resp.Code) {
+			return
+		}
+	}
 }
 
 func TestHawkAuthPOST(t *testing.T) {
@@ -117,7 +133,7 @@ func TestHawkAuthPOST(t *testing.T) {
 
 	var uid uint64 = 12345
 
-	tok := testtoken(context, uid)
+	tok := testtoken(context.Secrets[0], uid)
 
 	body := bytes.NewBufferString(`[
 		{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
