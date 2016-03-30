@@ -50,7 +50,7 @@ func main() {
 
 	// set up additional handlers
 
-	listenOn := ":" + strconv.Itoa(config.Port)
+	listenOn := config.Host + ":" + strconv.Itoa(config.Port)
 	if config.Tls.Cert != "" {
 		log.WithFields(log.Fields{"addr": listenOn, "tls": true}).Info("HTTP Listening at " + listenOn)
 		err := http.ListenAndServeTLS(

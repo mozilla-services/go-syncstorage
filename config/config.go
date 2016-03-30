@@ -25,6 +25,7 @@ type LogConfig struct {
 
 var Config struct {
 	Log     *LogConfig
+	Host    string `envconfig:"default=0.0.0.0"`
 	Port    int
 	Secrets []string
 	DataDir string
@@ -38,6 +39,7 @@ var Config struct {
 // so we can use config.Port and not config.Config.Port
 var (
 	Log          *LogConfig
+	Host         string
 	Port         int
 	DataDir      string
 	Secrets      []string
@@ -105,6 +107,7 @@ func init() {
 	}
 
 	Log = Config.Log
+	Host = Config.Host
 	Port = Config.Port
 	Secrets = Config.Secrets
 	DataDir = Config.DataDir
