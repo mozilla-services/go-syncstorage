@@ -31,10 +31,10 @@ const (
 )
 
 type TokenPayload struct {
-	Salt    string  `json: "salt"`
-	Uid     uint64  `json: "uid"`
-	Node    string  `json: "node"`
-	Expires float64 `json: "expires"`
+	Salt    string  `json:"salt"`
+	Uid     uint64  `json:"uid"`
+	Node    string  `json:"node"`
+	Expires float64 `json:"expires"`
 }
 
 type Token struct {
@@ -71,7 +71,6 @@ func generateToken(secret []byte, payload TokenPayload) (string, error) {
 	}
 
 	// Calculate and encode the token secret
-
 	mac := hmac.New(sha256.New, signatureSecret)
 	mac.Write(encodedPayload)
 	payloadSignature := mac.Sum(nil)

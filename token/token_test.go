@@ -74,11 +74,11 @@ func Test_ParseToken(t *testing.T) {
 	}
 
 	if generatedToken.Token != parsedToken.Token {
-		t.Error("Different Token %+v vs %+v", generatedToken, parsedToken)
+		t.Errorf("Different Token %+v vs %+v", generatedToken, parsedToken)
 	}
 
 	if generatedToken.DerivedSecret != parsedToken.DerivedSecret {
-		t.Error("Different DerivedSecret %+v vs %+v", generatedToken, parsedToken)
+		t.Errorf("Different DerivedSecret %+v vs %+v", generatedToken, parsedToken)
 	}
 }
 

@@ -404,8 +404,6 @@ func (d *DB) InfoQuota() (used, quota int, err error) {
 	} else {
 		return 0, 0, nil
 	}
-
-	return
 }
 
 func (d *DB) InfoCollectionUsage() (map[string]int, error) {
