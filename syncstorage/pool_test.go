@@ -61,6 +61,8 @@ func TestPoolBorrowAllowsOnlyOne(t *testing.T) {
 
 	uid := "abc123"
 	p, _ := NewPool(getTempBase(), TwoLevelPath)
+
+	// borrow it up here
 	_, err := p.borrowdb(uid)
 
 	if !assert.NoError(err) {
@@ -80,14 +82,12 @@ func TestPoolBorrowAllowsOnlyOne(t *testing.T) {
 		// expect the borrow to wait, timing seems pretty arbitrary
 		// but 100ms should be *MORE* than enough for something that
 		// should already be in the pool's cache
+		p.returndb(uid)
 		return
 	case <-ch:
 		assert.Fail("Expected lock to prevent a new borrow")
 		return
 	}
-
-	p.returndb(uid)
-	assert.True(<-ch)
 }
 
 // make a pool with a very small cache size so it must evict

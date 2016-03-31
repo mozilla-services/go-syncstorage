@@ -42,7 +42,6 @@ func extractModifiedTimestamp(r *http.Request) (ts int, headerType XModHeader, e
 
 	if modSince != "" && unmodSince != "" {
 		return 0, X_TS_HEADER_NONE, errors.New("X-If-Modified-Since and X-If-Unmodified-Since both provided")
-		return
 	}
 
 	if modSince != "" {

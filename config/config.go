@@ -57,7 +57,7 @@ func init() {
 	}
 
 	if Config.MaxOpenFiles%8 != 0 || Config.MaxOpenFiles < 8 {
-		log.Fatal("Config Error: MAX_OPEN_FILES must be >= 8 and MAX_OPEN_FILES % 8 == 0")
+		log.Fatal("Config Error: MAX_OPEN_FILES must be >= 8 and MAX_OPEN_FILES mod 8 == 0")
 	}
 
 	if _, err := os.Stat(Config.DataDir); os.IsNotExist(err) {

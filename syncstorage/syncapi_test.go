@@ -165,7 +165,7 @@ func testApiInfoCollectionUsage(db SyncApi, t *testing.T) {
 				_, err := db.PutBSO(cId, "b"+strconv.Itoa(i), payload, nil, nil)
 
 				if !assert.NoError(err) {
-					t.Fatal()
+					t.Fatal(err.Error())
 				}
 
 				// keep a count of amount of random data we created per collection
@@ -208,7 +208,7 @@ func testApiInfoCollectionCounts(db SyncApi, t *testing.T) {
 			for i := 0; i < numRecords; i++ {
 				_, err := db.PutBSO(cId, "b"+strconv.Itoa(i), String("x"), nil, nil)
 				if !assert.NoError(err) {
-					t.Fatal()
+					t.Fatal(err.Error())
 				}
 			}
 		}
