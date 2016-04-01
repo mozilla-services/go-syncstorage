@@ -11,11 +11,6 @@ import (
 	. "github.com/mostlygeek/go-debug"
 )
 
-const (
-	// max number of ms pool can be locked in cleanup
-	MAX_CLEANUP_TIME = time.Millisecond * 5
-)
-
 var (
 	pDebug  = Debug("syncstorage:pool")
 	pDebugC = Debug("syncstorage:pool:Cleanup")
@@ -141,14 +136,9 @@ func (p *Pool) Cleanup() {
 	p.Lock()
 	defer p.Unlock()
 
-	start := time.Now()
 	element := p.lru.Back()
 
 	for {
-		if time.Now().Sub(start) > MAX_CLEANUP_TIME {
-			return
-		}
-
 		if element == nil {
 			//pDebugC("empty lru, exit")
 			return

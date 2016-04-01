@@ -12,7 +12,8 @@ import (
 )
 
 func getTempBase() string {
-	dir, _ := ioutil.TempDir(os.TempDir(), "pool_test")
+	tmpdir := "pool_test"
+	dir, _ := ioutil.TempDir(os.TempDir(), tmpdir)
 	return dir
 }
 
@@ -69,84 +70,120 @@ func TestPoolCleanup(t *testing.T) {
 
 	assert := assert.New(t)
 
-	// make sure TTL cleanup works correctly by
-	// testing at intervals
-	{
-		// pool cleans up with 20ms TTL
-		p, _ := NewPoolTime(getTempBase(), time.Millisecond*20)
-
-		_, err := p.getDB("uid1")
-		if !assert.NoError(err) {
-			return
-		}
-
-		// wait 10ms, add another one, t=10ms
-		time.Sleep(time.Millisecond * 10)
-		_, err = p.getDB("uid2")
-		if !assert.NoError(err) {
-			return
-		}
-
-		// wait 15ms, t=25ms
-		time.Sleep(time.Millisecond * 15)
-		p.Cleanup() // should remove "uid1"
-
-		assert.Equal(1, p.lru.Len())
-		assert.Equal(1, len(p.dbs))
-
-		// wait 15ms, t=40ms, uid2 expired at 30ms
-		time.Sleep(time.Millisecond * 15)
-		p.Cleanup()
-
-		assert.Equal(0, p.lru.Len())
-		assert.Equal(0, len(p.dbs))
+	// make sure TTL cleanup works correctly
+	p, _ := NewPoolTime(getTempBase(), time.Millisecond*50)
+	_, err := p.getDB("uid1") //t=0, expires @t=50ms
+	if !assert.NoError(err) {
+		return
 	}
 
+	// wait 25ms, add another one, t=25ms
+	time.Sleep(time.Millisecond * 25)
+	_, err = p.getDB("uid2") // expires @t=75ms
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Equal(2, p.lru.Len())
+	assert.Equal(2, len(p.dbs))
+
+	// wait 40ms, t=75ms
+	time.Sleep(time.Millisecond * 40)
+	p.Cleanup() // should remove "uid1"
+
+	assert.Equal(1, p.lru.Len())
+	assert.Equal(1, len(p.dbs))
+
+	// wait 50ms, t=125ms, uid2 expired at 75ms
+	time.Sleep(time.Millisecond * 50)
+	p.Cleanup()
+
+	assert.Equal(0, p.lru.Len())
+	assert.Equal(0, len(p.dbs))
+}
+
+func TestPoolCleanupGoroutine(t *testing.T) {
+	assert := assert.New(t)
 	// make sure the goroutine cleans things up
-	{
-		// pool cleans up with 20ms TTL
-		p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
-		p.getDB("uid1")
-		p.getDB("uid2")
-		p.getDB("uid3")
 
-		assert.Equal(3, p.lru.Len())
-		assert.Equal(3, len(p.dbs))
+	// pool cleans up with 20ms TTL
+	p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
+	p.getDB("uid1")
+	p.getDB("uid2")
+	p.getDB("uid3")
 
-		p.Start() // start cleaup goroutine
+	assert.Equal(3, p.lru.Len())
+	assert.Equal(3, len(p.dbs))
 
-		// wait enough time for cleanup to run
-		time.Sleep(time.Millisecond * 20)
-		assert.Equal(0, p.lru.Len())
-		assert.Equal(0, len(p.dbs))
+	p.Start() // start cleaup goroutine
 
-		p.Stop()
+	// wait enough time for cleanup to run
+	time.Sleep(time.Millisecond * 20)
+	assert.Equal(0, p.lru.Len())
+	assert.Equal(0, len(p.dbs))
+
+	p.Stop()
+}
+
+// TestPoolCleanupSkipUsed tests that used items are skipped over for cleanup
+func TestPoolCleanupSkipUsed(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	// pool cleans up with 20ms TTL
+	p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
+	p.getDB("testused-1")
+	db, _ := p.getDB("testused-2")
+	p.getDB("testused-3")
+
+	assert.Equal(3, p.lru.Len())
+	assert.Equal(3, len(p.dbs))
+
+	// make sure it skipped when used
+	db.used(true)
+	time.Sleep(time.Millisecond * 20)
+	p.Cleanup()
+	assert.Equal(1, p.lru.Len())
+	assert.Equal(1, len(p.dbs))
+
+	// make sure it cleaned up now
+	db.used(false)
+	p.Cleanup()
+	assert.Equal(0, p.lru.Len())
+	assert.Equal(0, len(p.dbs))
+}
+
+func TestPoolCleanupStop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping in short mode")
 	}
+	t.Parallel()
+	assert := assert.New(t)
+	// make sure pool.Stop() stops cleanup
 
-	// make sure in-use items are not cleaned up
-	{
-		// pool cleans up with 20ms TTL
-		p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
-		p.getDB("testused-1")
-		db, _ := p.getDB("testused-2")
-		p.getDB("testused-3")
+	// pool cleans up with 20ms TTL
+	p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
+	p.Start()
+	p.getDB("uid1")
+	assert.Equal(1, p.lru.Len())
+	assert.Equal(1, len(p.dbs))
+	// wait enough time for cleanup to run
+	time.Sleep(time.Millisecond * 20)
+	p.Stop()
 
-		assert.Equal(3, p.lru.Len())
-		assert.Equal(3, len(p.dbs))
+	assert.Equal(0, p.lru.Len())
+	assert.Equal(0, len(p.dbs))
 
-		// make sure it skipped when used
-		db.used(true)
-		time.Sleep(time.Millisecond * 20)
-		p.Cleanup()
-		assert.Equal(1, p.lru.Len())
-		assert.Equal(1, len(p.dbs))
+	// add it again
+	p.getDB("uid1")
+	assert.Equal(1, p.lru.Len())
+	assert.Equal(1, len(p.dbs))
+	// wait for cleanup
+	time.Sleep(time.Millisecond * 20)
 
-		// make sure it cleaned up now
-		db.used(false)
-		p.Cleanup()
-		assert.Equal(0, p.lru.Len())
-		assert.Equal(0, len(p.dbs))
-	}
+	// should still be there
+	assert.Equal(1, p.lru.Len())
+	assert.Equal(1, len(p.dbs))
 }
 
 func TestPoolPathAndFile(t *testing.T) {
