@@ -3,7 +3,7 @@ package syncstorage
 func newPoolwrap() *poolwrap { return newPoolwrapUID("1234567890") }
 func newPoolwrapUID(uid string) *poolwrap {
 
-	p, err := NewPool(getTempBase(), TwoLevelPath)
+	p, err := NewPool(getTempBase())
 	if err != nil {
 		panic(err)
 	}

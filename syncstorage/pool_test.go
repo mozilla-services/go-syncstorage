@@ -16,114 +16,150 @@ func getTempBase() string {
 	return dir
 }
 
-func TestPoolPathAndFile(t *testing.T) {
+func TestPoolGetDB(t *testing.T) {
 	assert := assert.New(t)
+	uid0 := "abc123"
+	uid1 := "xyz456"
 
-	T_basepath := getTempBase()
-	T_sep := string(os.PathSeparator)
+	p, _ := NewPool(getTempBase())
 
-	p, _ := NewPool(T_basepath, TwoLevelPath)
+	db1, err := p.getDB(uid0)
+	if !assert.NoError(err) {
+		return
+	}
+	if !assert.NotNil(db1) {
+		return
+	}
 
-	path, file := p.PathAndFile("uid1234")
-	assert.Equal("uid1234.db", file)
-	assert.Equal(T_basepath+T_sep+"4"+T_sep+"3", path)
+	db2, err := p.getDB(uid0)
+	if !assert.NoError(err) {
+		return
+	}
+	if !assert.NotNil(db2) {
+		return
+	}
+
+	db3, err := p.getDB(uid1)
+	if !assert.NoError(err) {
+		return
+	}
+	if !assert.NotNil(db3) {
+		return
+	}
+
+	// make sure the cache size is right
+	assert.Equal(2, len(p.dbs))
+	assert.Equal(2, p.lru.Len())
+
+	// make sure items are in the lru are in
+	// the right order
+	newest := p.lru.Front()
+	assert.Equal(uid1, newest.Value.(*dbelement).uid)
+
+	older := newest.Next()
+	assert.Equal(uid0, older.Value.(*dbelement).uid)
 }
 
-func TestPoolBorrowAndReturn(t *testing.T) {
-
-	assert := assert.New(t)
-
-	uid := "abc123"
-	p, _ := NewPool(getTempBase(), TwoLevelPath)
-	db, err := p.borrowdb(uid)
-
-	assert.NoError(err)
-	assert.NotNil(db)
-
-	// we have to return it for the next test
-	p.returndb(uid)
-
-	// make sure we get the same value of of the DB
-	db2, err := p.borrowdb(uid)
-	assert.NoError(err)
-	assert.NotNil(db2)
-	assert.Equal(db, db2)
-
-	p.returndb(uid)
-}
-
-func TestPoolBorrowAllowsOnlyOne(t *testing.T) {
+// TestPoolCleanup makes sure the cleanup goroutine is
+// working
+func TestPoolCleanup(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping in short mode")
 	}
 
 	assert := assert.New(t)
 
-	uid := "abc123"
-	p, _ := NewPool(getTempBase(), TwoLevelPath)
+	// make sure TTL cleanup works correctly by
+	// testing at intervals
+	{
+		// pool cleans up with 20ms TTL
+		p, _ := NewPoolTime(getTempBase(), time.Millisecond*20)
 
-	// borrow it up here
-	_, err := p.borrowdb(uid)
+		_, err := p.getDB("uid1")
+		if !assert.NoError(err) {
+			return
+		}
 
-	if !assert.NoError(err) {
-		return
+		// wait 10ms, add another one, t=10ms
+		time.Sleep(time.Millisecond * 10)
+		_, err = p.getDB("uid2")
+		if !assert.NoError(err) {
+			return
+		}
+
+		// wait 15ms, t=25ms
+		time.Sleep(time.Millisecond * 15)
+		p.Cleanup() // should remove "uid1"
+
+		assert.Equal(1, p.lru.Len())
+		assert.Equal(1, len(p.dbs))
+
+		// wait 15ms, t=40ms, uid2 expired at 30ms
+		time.Sleep(time.Millisecond * 15)
+		p.Cleanup()
+
+		assert.Equal(0, p.lru.Len())
+		assert.Equal(0, len(p.dbs))
 	}
 
-	ch := make(chan bool, 1)
+	// make sure the goroutine cleans things up
+	{
+		// pool cleans up with 20ms TTL
+		p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
+		p.getDB("uid1")
+		p.getDB("uid2")
+		p.getDB("uid3")
 
-	go func(uid string) {
-		p.borrowdb(uid)
-		defer p.returndb(uid)
-		ch <- true
-	}(uid)
+		assert.Equal(3, p.lru.Len())
+		assert.Equal(3, len(p.dbs))
 
-	select {
-	case <-time.After(100 * time.Millisecond):
-		// expect the borrow to wait, timing seems pretty arbitrary
-		// but 100ms should be *MORE* than enough for something that
-		// should already be in the pool's cache
-		p.returndb(uid)
-		return
-	case <-ch:
-		assert.Fail("Expected lock to prevent a new borrow")
-		return
+		p.Start() // start cleaup goroutine
+
+		// wait enough time for cleanup to run
+		time.Sleep(time.Millisecond * 20)
+		assert.Equal(0, p.lru.Len())
+		assert.Equal(0, len(p.dbs))
+
+		p.Stop()
+	}
+
+	// make sure in-use items are not cleaned up
+	{
+		// pool cleans up with 20ms TTL
+		p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
+		p.getDB("testused-1")
+		db, _ := p.getDB("testused-2")
+		p.getDB("testused-3")
+
+		assert.Equal(3, p.lru.Len())
+		assert.Equal(3, len(p.dbs))
+
+		// make sure it skipped when used
+		db.used(true)
+		time.Sleep(time.Millisecond * 20)
+		p.Cleanup()
+		assert.Equal(1, p.lru.Len())
+		assert.Equal(1, len(p.dbs))
+
+		// make sure it cleaned up now
+		db.used(false)
+		p.Cleanup()
+		assert.Equal(0, p.lru.Len())
+		assert.Equal(0, len(p.dbs))
 	}
 }
 
-// make a pool with a very small cache size so it must evict
-// *DBs to make room
-func TestPoolLRU(t *testing.T) {
+func TestPoolPathAndFile(t *testing.T) {
 	assert := assert.New(t)
-	cachesize := 1
 
-	pool, err := NewPoolCacheSize(getTempBase(), TwoLevelPath, cachesize)
-	if !assert.NoError(err) {
-		return
-	}
+	T_basepath := getTempBase()
+	T_sep := string(os.PathSeparator)
 
-	users := 5
-	name := "custom"
-	cIds := make([]int, users)
+	p, _ := NewPool(T_basepath)
 
-	for i := 0; i < users; i++ {
-		uid := "123456" + strconv.Itoa(i)
-		cIds[i], err = pool.CreateCollection(uid, name)
-		if !assert.NoError(err) {
-			return
-		}
-	}
-
-	for i := 0; i < users; i++ {
-		uid := "123456" + strconv.Itoa(i)
-		cId, err := pool.GetCollectionId(uid, name)
-		if !assert.NoError(err) {
-			return
-		}
-
-		assert.Equal(cIds[i], cId)
-	}
-
-	assert.Equal(cachesize, pool.cache.Len())
+	path, file := p.PathAndFile("uid1234")
+	assert.Equal("uid1234.db", file)
+	assert.Equal(T_basepath+T_sep+"4"+T_sep+"3", path)
 }
 
 // TestPoolParallel uses a very small LRU cache and uses multiple
@@ -135,16 +171,15 @@ func TestPoolParallel(t *testing.T) {
 
 	assert := assert.New(t)
 
-	// smallest cache size to force evictions to happen
-	cachesize := 1
-
 	var wg sync.WaitGroup
 
-	pool, err := NewPoolCacheSize(getTempBase(), TwoLevelPath, cachesize)
+	ttl := time.Millisecond * 10
+	pool, err := NewPoolTime(getTempBase(), ttl)
 	if !assert.NoError(err) {
 		return
 	}
-	users := 5
+
+	users := 20
 	for u := 0; u < users; u++ {
 		uid := strconv.Itoa(u)
 		_, err := pool.CreateCollection(uid, "test")
@@ -169,8 +204,13 @@ func TestPoolParallel(t *testing.T) {
 			}
 		}(strconv.Itoa(u))
 	}
-
 	wg.Wait()
+
+	assert.Equal(users, pool.lru.Len())
+	time.Sleep(ttl)
+	pool.Cleanup()
+	assert.Equal(0, pool.lru.Len())
+	assert.Equal(0, len(pool.dbs))
 }
 
 // Use poolwrap to test that the abstracted interface for SyncApi
