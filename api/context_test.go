@@ -49,7 +49,7 @@ func init() {
 
 func makeTestContext() *Context {
 	dir, _ := ioutil.TempDir(os.TempDir(), "sync_storage_api_test")
-	dispatch, err := syncstorage.NewDispatch(4, dir, syncstorage.TwoLevelPath, 10)
+	dispatch, err := syncstorage.NewDispatch(4, dir, time.Minute)
 	if err != nil {
 		panic(err)
 	}

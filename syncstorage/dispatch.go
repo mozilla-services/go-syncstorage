@@ -3,6 +3,7 @@ package syncstorage
 import (
 	"crypto/sha1"
 	"encoding/binary"
+	"time"
 )
 
 // Dispatch creates a ring of syncstorage.Pool and distributes
@@ -13,10 +14,14 @@ type Dispatch struct {
 	numPools uint16
 }
 
-func NewDispatch(numPools uint16, basepath string, p PathMaker, cachesize int) (d *Dispatch, err error) {
+func NewDispatch(numPools uint16, basepath string, ttl time.Duration) (d *Dispatch, err error) {
 	pools := make([]*Pool, numPools)
 	for k, _ := range pools {
-		pools[k], err = NewPoolCacheSize(basepath, p, cachesize)
+		pools[k], err = NewPoolTime(basepath, ttl)
+
+		// start each pool's Cleanup goroutine
+		pools[k].Start()
+
 		if err != nil {
 			return nil, err
 		}
