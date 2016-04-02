@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coocood/freecache"
 	"github.com/gorilla/mux"
 	. "github.com/mostlygeek/go-debug"
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
@@ -92,6 +93,9 @@ func NewContext(secrets []string, dispatch *syncstorage.Dispatch) (*Context, err
 	return &Context{
 		Dispatch: dispatch,
 		Secrets:  secrets,
+
+		// allocate space to store 256K nonce signatures (~4MB RAM w/ MD5)
+		hawkCache: freecache.NewCache(256 * 1024 * HAWK_NONCE_SIGNATURE_SIZE),
 	}, nil
 }
 
@@ -105,6 +109,9 @@ type Context struct {
 
 	// for testing
 	DisableHawk bool
+
+	// caches
+	hawkCache *freecache.Cache // nonce cache
 
 	// tweaks
 

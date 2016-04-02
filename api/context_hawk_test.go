@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
 	"github.com/mostlygeek/go-syncstorage/token"
@@ -165,6 +166,40 @@ func TestHawkAuthPOST(t *testing.T) {
 		assert.Equal("initial payload", bso.Payload)
 		assert.Equal(1, bso.SortIndex)
 	}
+}
+
+func TestHawkNonceCheckFunc(t *testing.T) {
+	c := hawkcontext()
+	assert := assert.New(t)
+
+	// check ts within 1min
+	creds0 := &hawk.Credentials{ID: "hello"}
+	ts1 := time.Now().Add(61 * time.Second)
+	assert.False(c.hawkNonceNotFound("t0", ts1, creds0))
+	ts2 := time.Now().Add(-61 * time.Second)
+	assert.False(c.hawkNonceNotFound("t1", ts2, creds0))
+
+	// check replay
+	creds1 := &hawk.Credentials{ID: "bacon"}
+	ts := time.Now()
+	assert.True(c.hawkNonceNotFound("t2", ts, creds1))
+	assert.False(c.hawkNonceNotFound("t2", ts, creds1))
+}
+
+func TestHawkAuthNonceRequest(t *testing.T) {
+	t.Parallel()
+	context := hawkcontext()
+
+	var uid uint64 = 12345
+
+	tok := testtoken(context.Secrets[0], uid)
+	req, _ := hawkrequest("GET", syncurl(uid, "info/collections"), tok)
+	resp := sendrequest(req, context)
+	assert.Equal(t, http.StatusOK, resp.Code)
+
+	// send it again
+	resp2 := sendrequest(req, context)
+	assert.NotEqual(t, http.StatusOK, resp2.Code)
 }
 
 // TODO test Hawk auth failures

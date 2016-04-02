@@ -13,20 +13,16 @@
 			"Rev": "219c8cb75c258c552e999735be6df753ffc7afdc"
 		},
 		{
+			"ImportPath": "github.com/coocood/freecache",
+			"Rev": "1aa53c26cb85c33eef6d832305447982e95f844c"
+		},
+		{
 			"ImportPath": "github.com/gorilla/context",
 			"Rev": "1c83b3eabd45b6d76072b66b746c20815fb2872d"
 		},
 		{
 			"ImportPath": "github.com/gorilla/mux",
 			"Rev": "9c068cf16d982f8bd444b8c352acbeec34c4fe5b"
-		},
-		{
-			"ImportPath": "github.com/hashicorp/golang-lru",
-			"Rev": "b361c4c189a958f7d0ad435952611c140751afe2"
-		},
-		{
-			"ImportPath": "github.com/hashicorp/golang-lru/internal",
-			"Rev": "b361c4c189a958f7d0ad435952611c140751afe2"
 		},
 		{
 			"ImportPath": "github.com/mattn/go-sqlite3",
@@ -41,6 +37,10 @@
 		{
 			"ImportPath": "github.com/mozilla-services/hawk-go",
 			"Rev": "10afe9a7e788961c214cf07e919c87c6652b09fe"
+		},
+		{
+			"ImportPath": "github.com/spaolacci/murmur3",
+			"Rev": "0d12bf811670bf6a1a63828dfbd003eded177fce"
 		},
 		{
 			"ImportPath": "github.com/vrischmann/envconfig",
