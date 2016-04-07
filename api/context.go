@@ -31,11 +31,16 @@ var (
 	ErrTokenExpired = errors.New("Token is expired")
 )
 
+type cacheStatus int
+
 const (
 	BATCH_MAX_IDS = 100
 
 	// maximum number of BSOs per GET request
 	MAX_BSO_GET_LIMIT = 2500
+
+	CACHE_HIT = iota
+	CACHE_MISS
 )
 
 // NewRouterFromContext creates a mux.Router and registers handlers from
@@ -91,6 +96,8 @@ func NewContext(secrets []string, dispatch *syncstorage.Dispatch) (*Context, err
 	}
 
 	return &Context{
+		colCache: NewCollectionCache(),
+
 		Dispatch: dispatch,
 		Secrets:  secrets,
 
@@ -101,6 +108,8 @@ func NewContext(secrets []string, dispatch *syncstorage.Dispatch) (*Context, err
 
 type Context struct {
 	Dispatch *syncstorage.Dispatch
+
+	colCache *collectionCache
 
 	// preshared secrets with the token server
 	// support a list of them as clients may send
@@ -144,6 +153,24 @@ func (c *Context) getcid(r *http.Request, uid string, automake bool) (cId int, e
 	return
 }
 
+// sentCacheModified will send the weave X-modified headers and returns true if it wrote to w
+func (c *Context) sentCacheModified(w http.ResponseWriter, r *http.Request, uid string) bool {
+
+	var modified int
+
+	if modified = c.colCache.GetModified(uid); modified == 0 { // no cache
+		modified, err := c.Dispatch.LastModified(uid)
+		if err != nil {
+			InternalError(w, r, err)
+			return true
+		}
+
+		c.colCache.SetModified(uid, modified)
+	}
+
+	return sentNotModified(w, r, modified)
+}
+
 func (c *Context) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// todo check dependencies to make sure they're ok..
 	OKResponse(w, "OK")
@@ -163,30 +190,69 @@ func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid stri
 // it based on the number of DB pages used * size of each page.
 // TODO actually implement quotas in the system.
 func (c *Context) hInfoQuota(w http.ResponseWriter, r *http.Request, uid string) {
-	modified, err := c.Dispatch.LastModified(uid)
-	if err != nil {
-		InternalError(w, r, err)
-	} else if sentNotModified(w, r, modified) {
+	var (
+		modified int
+		results  map[string]int
+		err      error
+	)
+
+	if c.sentCacheModified(w, r, uid) {
 		return
-	}
-
-	// TODO support quota
-	used, _, err := c.Dispatch.InfoQuota(uid)
-	if err != nil {
-		InternalError(w, r, err)
 	} else {
-		m := syncstorage.ModifiedToString(modified)
-		w.Header().Set("X-Last-Modified", m)
-
-		tmp := float64(used) / 1024
-		JsonNewline(w, r, []*float64{&tmp, nil})
+		modified = c.colCache.GetModified(uid)
 	}
+
+	// load cached results, or from the DB
+	if results = c.colCache.GetInfoCollectionUsage(uid); results == nil {
+		results, err = c.Dispatch.InfoCollectionUsage(uid)
+		if err != nil {
+			InternalError(w, r, err)
+			return
+		}
+
+		if len(results) > 0 {
+			c.colCache.SetInfoCollectionUsage(uid, results)
+		}
+
+		setCacheHeader(w, CACHE_MISS)
+	} else {
+		setCacheHeader(w, CACHE_HIT)
+	}
+
+	used := 0
+	for _, bytes := range results {
+		used += bytes
+	}
+
+	m := syncstorage.ModifiedToString(modified)
+	w.Header().Set("X-Last-Modified", m)
+
+	tmp := float64(used) / 1024
+	JsonNewline(w, r, []*float64{&tmp, nil}) // crazy pointer cause need the nil
 }
 
 func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid string) {
-	info, err := c.Dispatch.InfoCollections(uid)
+
+	var (
+		cacheStat cacheStatus
+		info      map[string]int
+		err       error
+	)
+
+	if d := c.colCache.GetInfoCollections(uid); d != nil {
+		cacheStat = CACHE_HIT
+		info = d
+	} else {
+		info, err = c.Dispatch.InfoCollections(uid)
+		if len(info) > 0 {
+			c.colCache.SetInfoCollections(uid, info)
+			cacheStat = CACHE_MISS
+		}
+	}
+
 	if err != nil {
 		InternalError(w, r, err)
+		return
 	} else {
 		modified := 0
 		for _, modtime := range info {
@@ -199,51 +265,87 @@ func (c *Context) hInfoCollections(w http.ResponseWriter, r *http.Request, uid s
 			return
 		}
 
+		c.colCache.SetModified(uid, modified)
 		m := syncstorage.ModifiedToString(modified)
 		w.Header().Set("X-Last-Modified", m)
+		setCacheHeader(w, cacheStat)
 		JsonNewline(w, r, info)
 	}
 }
 
 func (c *Context) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request, uid string) {
-	modified, err := c.Dispatch.LastModified(uid)
-	if err != nil {
-		InternalError(w, r, err)
-	} else if sentNotModified(w, r, modified) {
+	var (
+		modified int
+		results  map[string]int
+		err      error
+	)
+
+	if c.sentCacheModified(w, r, uid) {
 		return
+	} else {
+		modified = c.colCache.GetModified(uid)
 	}
 
-	results, err := c.Dispatch.InfoCollectionUsage(uid)
-	if err != nil {
-		InternalError(w, r, err)
-	} else {
-		// the sync 1.5 api says data should be in KB
-		resultsKB := make(map[string]float64)
-		for name, bytes := range results {
-			resultsKB[name] = float64(bytes) / 1024
+	// load cached results, or from the DB
+	if results = c.colCache.GetInfoCollectionUsage(uid); results == nil {
+		results, err = c.Dispatch.InfoCollectionUsage(uid)
+		if err != nil {
+			InternalError(w, r, err)
+			return
 		}
-		m := syncstorage.ModifiedToString(modified)
-		w.Header().Set("X-Last-Modified", m)
-		JsonNewline(w, r, resultsKB)
+
+		if len(results) > 0 {
+			c.colCache.SetInfoCollectionUsage(uid, results)
+		}
+
+		setCacheHeader(w, CACHE_MISS)
+	} else {
+		setCacheHeader(w, CACHE_HIT)
 	}
+
+	// the sync 1.5 api says data should be in KB
+
+	resultsKB := make(map[string]float64)
+	for name, bytes := range results {
+		resultsKB[name] = float64(bytes) / 1024
+	}
+	m := syncstorage.ModifiedToString(modified)
+	w.Header().Set("X-Last-Modified", m)
+	JsonNewline(w, r, resultsKB)
 }
 
 func (c *Context) hInfoCollectionCounts(w http.ResponseWriter, r *http.Request, uid string) {
-	modified, err := c.Dispatch.LastModified(uid)
-	if err != nil {
-		InternalError(w, r, err)
-	} else if sentNotModified(w, r, modified) {
+	var (
+		modified int
+		results  map[string]int
+		err      error
+	)
+
+	if c.sentCacheModified(w, r, uid) {
 		return
+	} else {
+		modified = c.colCache.GetModified(uid)
 	}
 
-	results, err := c.Dispatch.InfoCollectionCounts(uid)
-	if err != nil {
-		InternalError(w, r, err)
+	if results = c.colCache.GetInfoCollectionCounts(uid); results == nil {
+		results, err = c.Dispatch.InfoCollectionCounts(uid)
+		if err != nil {
+			InternalError(w, r, err)
+			return
+		}
+
+		if len(results) > 0 {
+			c.colCache.SetInfoCollectionCounts(uid, results)
+		}
+
+		setCacheHeader(w, CACHE_MISS)
 	} else {
-		m := syncstorage.ModifiedToString(modified)
-		w.Header().Set("X-Last-Modified", m)
-		JsonNewline(w, r, results)
+		setCacheHeader(w, CACHE_HIT)
 	}
+
+	m := syncstorage.ModifiedToString(modified)
+	w.Header().Set("X-Last-Modified", m)
+	JsonNewline(w, r, results)
 }
 
 func (c *Context) hCollectionGET(w http.ResponseWriter, r *http.Request, uid string) {
@@ -589,6 +691,9 @@ func (c *Context) hCollectionPOST(w http.ResponseWriter, r *http.Request, uid st
 			results.Failed[bsoId] = failMessage
 		}
 
+		// remove all cached data for the user
+		c.colCache.Clear(uid)
+
 		w.Header().Set("X-Last-Modified", m)
 		JsonNewline(w, r, &PostResults{
 			Modified: m,
@@ -644,6 +749,8 @@ func (c *Context) hCollectionDELETE(w http.ResponseWriter, r *http.Request, uid 
 		}
 	}
 
+	// remove all cached data for the user
+	c.colCache.Clear(uid)
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"modified":%s}`, syncstorage.ModifiedToString(modified))
 }
@@ -773,6 +880,9 @@ func (c *Context) hBsoPUT(w http.ResponseWriter, r *http.Request, uid string) {
 		return
 	}
 
+	// remove all cached data for the user
+	c.colCache.Clear(uid)
+
 	m := syncstorage.ModifiedToString(modified)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Last-Modified", m)
@@ -819,6 +929,9 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 		InternalError(w, r, err)
 		return
 	} else {
+		// remove all cached data for the user
+		c.colCache.Clear(uid)
+
 		m := syncstorage.ModifiedToString(modified)
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("X-Last-Modified", m)
@@ -832,6 +945,9 @@ func (c *Context) hDeleteEverything(w http.ResponseWriter, r *http.Request, uid 
 		InternalError(w, r, err)
 		return
 	} else {
+		// remove all cached data for the user
+		c.colCache.Clear(uid)
+
 		m := syncstorage.ModifiedToString(syncstorage.Now())
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("X-Last-Modified", m)

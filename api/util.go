@@ -65,7 +65,7 @@ func extractModifiedTimestamp(r *http.Request) (ts int, headerType XModHeader, e
 	return 0, X_TS_HEADER_NONE, nil
 }
 
-// checkModified will check the provided modified timestamp against
+// sentNotModified will check the provided modified timestamp against
 // either the X-If-Modified-Since or X-If-Unmodified-Since and return
 // true if it wrote to w
 func sentNotModified(w http.ResponseWriter, r *http.Request, modified int) (sentResponse bool) {
@@ -89,4 +89,15 @@ func sentNotModified(w http.ResponseWriter, r *http.Request, modified int) (sent
 	}
 
 	return false
+}
+
+func setCacheHeader(w http.ResponseWriter, status cacheStatus) {
+	switch status {
+	case CACHE_HIT:
+		w.Header().Set("X-Weave-Cache", "HIT")
+	case CACHE_MISS:
+		w.Header().Set("X-Weave-Cache", "MISS")
+	default:
+		w.Header().Set("X-Weave-Cache", "NONE")
+	}
 }

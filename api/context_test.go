@@ -169,15 +169,21 @@ func TestContextInfoQuota(t *testing.T) {
 	assert := assert.New(t)
 	context := makeTestContext()
 
-	uid := "123456"
+	uid := "122211"
 
-	{ // put some data in..
-		body := bytes.NewBufferString(`[
-		{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
-		{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
-		{"id":"bso3", "payload": "initial payload", "sortindex": 1, "ttl": 2100000} ]`)
+	// create lots of bsos ... used to test cache time
+	for cId := 0; cId < 25; cId++ {
+		body := bytes.NewBufferString("[")
+		for bid := 1; bid <= 100; bid++ {
+			fmt.Fprintf(body, `{"id":"bso%d", "payload": "initial payload"}`, bid)
+			if bid != 100 {
+				body.WriteString(",")
+			}
+		}
+		body.WriteString("]")
 
-		req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/col2", body)
+		col := "col" + strconv.Itoa(cId)
+		req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/"+col, body)
 		req.Header.Add("Content-Type", "application/json")
 
 		resp := sendrequest(req, context)
@@ -187,8 +193,19 @@ func TestContextInfoQuota(t *testing.T) {
 	}
 
 	{
+		//start := time.Now()
 		resp := request("GET", "http://test/1.5/"+uid+"/info/quota", nil, context)
-		assert.Equal("[0.0439453125,null]", resp.Body.String())
+		//fmt.Println(time.Now().Sub(start).Nanoseconds())
+		assert.Equal("[36.62109375,null]", resp.Body.String())
+		assert.Equal("MISS", resp.Header().Get("X-Weave-Cache"))
+	}
+
+	{ // make sure it is cached
+		//start := time.Now()
+		resp := request("GET", "http://test/1.5/"+uid+"/info/quota", nil, context)
+		//fmt.Println(time.Now().Sub(start).Nanoseconds())
+		assert.Equal("[36.62109375,null]", resp.Body.String())
+		assert.Equal("HIT", resp.Header().Get("X-Weave-Cache"))
 	}
 
 }
@@ -308,11 +325,80 @@ func TestContextInfoCollections(t *testing.T) {
 
 }
 
+func TestContextInfoCollectionsCache(t *testing.T) {
+	assert := assert.New(t)
+
+	uid := "123456"
+	context := makeTestContext()
+
+	// need some data in there to start out with
+	body := bytes.NewBufferString(`{"id":"bso2","payload":"cache"}`)
+	req, _ := http.NewRequest("PUT", "/1.5/"+uid+"/storage/bookmarks/bso2", body)
+	req.Header.Add("Content-Type", "application/json")
+	sendrequest(req, context)
+	r := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+	assert.Equal("MISS", r.Header().Get("X-Weave-Cache"))
+
+	{ // POST should clear the cache
+		r := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("HIT", r.Header().Get("X-Weave-Cache"))
+
+		body := bytes.NewBufferString(`[{"id":"bso1","payload":"cache"}]`)
+		req, _ := http.NewRequest("POST", "/1.5/"+uid+"/storage/bookmarks", body)
+		req.Header.Add("Content-Type", "application/json")
+		sendrequest(req, context)
+
+		resp1 := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("MISS", resp1.Header().Get("X-Weave-Cache"))
+		resp2 := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("HIT", resp2.Header().Get("X-Weave-Cache"))
+	}
+
+	{ // DELETE Collection should clear the cache
+		r := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("HIT", r.Header().Get("X-Weave-Cache"))
+
+		request("DELETE", "http://test/1.5/"+uid+"/storage/bookmarks", nil, context)
+
+		r = request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("MISS", r.Header().Get("X-Weave-Cache"))
+		r = request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("HIT", r.Header().Get("X-Weave-Cache"))
+	}
+
+	{ // PUT BSO should clear the cache
+		r := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("HIT", r.Header().Get("X-Weave-Cache"))
+
+		body := bytes.NewBufferString(`{"id":"bso2","payload":"cache"}`)
+		req, _ := http.NewRequest("PUT", "/1.5/"+uid+"/storage/bookmarks/bso2", body)
+		req.Header.Add("Content-Type", "application/json")
+		sendrequest(req, context)
+
+		resp1 := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("MISS", resp1.Header().Get("X-Weave-Cache"))
+		resp2 := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("HIT", resp2.Header().Get("X-Weave-Cache"))
+	}
+
+	{ // DELETE BSO should clear the cache
+		r := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("HIT", r.Header().Get("X-Weave-Cache"))
+
+		request("DELETE", "http://test/1.5/"+uid+"/storage/bookmarks/bso2", nil, context)
+
+		r = request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("MISS", r.Header().Get("X-Weave-Cache"))
+		r = request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
+		assert.Equal("HIT", r.Header().Get("X-Weave-Cache"))
+	}
+}
+
 func TestContextInfoCollectionUsage(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
-	uid := "12345"
+	uid := "999999"
 	context := makeTestContext()
 
 	sizes := []int{463, 467, 479, 487, 491}
@@ -350,6 +436,24 @@ func TestContextInfoCollectionUsage(t *testing.T) {
 	for _, cName := range collectionNames {
 		assert.Equal(expectedKB, collections[cName])
 	}
+}
+
+func TestContextInfoCollectionUsageCache(t *testing.T) {
+	assert := assert.New(t)
+
+	uid := "111211"
+	context := makeTestContext()
+
+	// need some data in there to start out with
+	body := bytes.NewBufferString(`{"id":"bso2","payload":"cache"}`)
+	req, _ := http.NewRequest("PUT", "/1.5/"+uid+"/storage/cache/bso2", body)
+	req.Header.Add("Content-Type", "application/json")
+	sendrequest(req, context)
+
+	r := request("GET", "http://test/1.5/"+uid+"/info/collection_usage", nil, context)
+	assert.Equal("MISS", r.Header().Get("X-Weave-Cache"))
+	r = request("GET", "http://test/1.5/"+uid+"/info/collection_usage", nil, context)
+	assert.Equal("HIT", r.Header().Get("X-Weave-Cache"))
 }
 
 func TestContextCollectionCounts(t *testing.T) {
@@ -393,6 +497,13 @@ func TestContextCollectionCounts(t *testing.T) {
 	for cName, expectedCount := range expected {
 		assert.Equal(expectedCount, collections[cName])
 	}
+
+	// test the caching
+	assert.Equal("MISS", resp.Header().Get("X-Weave-Cache"))
+	resp2 := request("GET", "http://test/1.5/"+uid+"/info/collection_counts", nil, context)
+	assert.Equal("HIT", resp2.Header().Get("X-Weave-Cache"))
+	assert.Equal(data, resp2.Body.Bytes())
+	assert.Equal(resp.Header().Get("X-Last-Modified"), resp2.Header().Get("X-Last-Modified"))
 }
 
 func TestContextCollectionGET(t *testing.T) {
