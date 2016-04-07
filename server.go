@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -28,13 +29,9 @@ func init() {
 
 func main() {
 
-	// for now we will use a fixed number of pools
-	// and spread config.MaxOpenFiles evenly among them
 	numPools := uint16(8)
-	cacheSize := int(uint16(config.MaxOpenFiles) / numPools)
-
 	dispatch, err := syncstorage.NewDispatch(
-		numPools, config.DataDir, syncstorage.TwoLevelPath, cacheSize)
+		numPools, config.DataDir, 5*time.Minute)
 
 	if err != nil {
 		log.Fatal(err)
