@@ -140,14 +140,14 @@ func TestPoolCleanupSkipUsed(t *testing.T) {
 	assert.Equal(3, len(p.dbs))
 
 	// make sure it skipped when used
-	db.used(true)
+	db.Use()
 	time.Sleep(time.Millisecond * 20)
 	p.Cleanup()
 	assert.Equal(1, p.lru.Len())
 	assert.Equal(1, len(p.dbs))
 
 	// make sure it cleaned up now
-	db.used(false)
+	db.Release()
 	p.Cleanup()
 	assert.Equal(0, p.lru.Len())
 	assert.Equal(0, len(p.dbs))

@@ -45,6 +45,14 @@ func (d *Dispatch) Index(uid string) uint16 {
 	return binary.BigEndian.Uint16(h[18:]) % d.numPools
 }
 
+func (d *Dispatch) LockUser(uid string) error {
+	return d.pools[d.Index(uid)].Use(uid)
+
+}
+func (d *Dispatch) UnlockUser(uid string) error {
+	return d.pools[d.Index(uid)].Release(uid)
+}
+
 // =======================================================
 // Below implements approximately SyncApi except each
 // method takes a `uid string`. This `uid` is used for

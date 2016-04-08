@@ -46,13 +46,26 @@ const (
 // NewRouterFromContext creates a mux.Router and registers handlers from
 // the supplied context to handle routes
 func NewRouterFromContext(c *Context) http.Handler {
+
+	// wrappers to make code cleaner below
+
+	// check hawk auth and synchronize db access
+	hs := func(h syncApiHandler) http.HandlerFunc {
+		return c.hawk(c.synchronizeDBAccess(h))
+	}
+
+	// check Accept header, hawk auth and synchronize db access
+	ahs := func(h syncApiHandler) http.HandlerFunc {
+		return acceptOK(c.hawk(c.synchronizeDBAccess(h)))
+	}
+
 	r := mux.NewRouter()
 
 	r.HandleFunc("/__heartbeat__", c.handleHeartbeat)
-	r.HandleFunc("/1.5/{uid:[0-9]+}", c.hawk(c.hDeleteEverything)).Methods("DELETE")
-	r.HandleFunc("/1.5/{uid:[0-9]+}/storage", c.hawk(c.hDeleteEverything)).Methods("DELETE")
+	r.HandleFunc("/1.5/{uid:[0-9]+}", hs(c.hDeleteEverything)).Methods("DELETE")
+	r.HandleFunc("/1.5/{uid:[0-9]+}/storage", hs(c.hDeleteEverything)).Methods("DELETE")
 
-	// support sync api version 1.5
+	// support c.sync api version 1.5
 	// https://docs.services.mozilla.com/storage/apis-1.5.html
 	v := r.PathPrefix("/1.5/{uid:[0-9]+}/").Subrouter()
 
@@ -60,20 +73,20 @@ func NewRouterFromContext(c *Context) http.Handler {
 	v.HandleFunc("/echo-uid", acceptOK(c.hawk(c.handleEchoUID))).Methods("GET")
 
 	info := v.PathPrefix("/info/").Subrouter()
-	info.HandleFunc("/collections", acceptOK(c.hawk(c.hInfoCollections))).Methods("GET")
-	info.HandleFunc("/collection_usage", acceptOK(c.hawk(c.hInfoCollectionUsage))).Methods("GET")
-	info.HandleFunc("/collection_counts", acceptOK(c.hawk(c.hInfoCollectionCounts))).Methods("GET")
-	info.HandleFunc("/quota", c.hawk(c.hInfoQuota)).Methods("GET")
+	info.HandleFunc("/collections", ahs(c.hInfoCollections)).Methods("GET")
+	info.HandleFunc("/collection_usage", ahs(c.hInfoCollectionUsage)).Methods("GET")
+	info.HandleFunc("/collection_counts", ahs(c.hInfoCollectionCounts)).Methods("GET")
+	info.HandleFunc("/quota", hs(c.hInfoQuota)).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
 	storage.HandleFunc("/", handleTODO).Methods("DELETE")
 
-	storage.HandleFunc("/{collection}", acceptOK(c.hawk(c.hCollectionGET))).Methods("GET")
-	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionPOST)).Methods("POST")
-	storage.HandleFunc("/{collection}", c.hawk(c.hCollectionDELETE)).Methods("DELETE")
-	storage.HandleFunc("/{collection}/{bsoId}", acceptOK(c.hawk(c.hBsoGET))).Methods("GET")
-	storage.HandleFunc("/{collection}/{bsoId}", acceptOK(c.hawk(c.hBsoPUT))).Methods("PUT")
-	storage.HandleFunc("/{collection}/{bsoId}", c.hawk(c.hBsoDELETE)).Methods("DELETE")
+	storage.HandleFunc("/{collection}", ahs(c.hCollectionGET)).Methods("GET")
+	storage.HandleFunc("/{collection}", hs(c.hCollectionPOST)).Methods("POST")
+	storage.HandleFunc("/{collection}", hs(c.hCollectionDELETE)).Methods("DELETE")
+	storage.HandleFunc("/{collection}/{bsoId}", ahs(c.hBsoGET)).Methods("GET")
+	storage.HandleFunc("/{collection}/{bsoId}", ahs(c.hBsoPUT)).Methods("PUT")
+	storage.HandleFunc("/{collection}/{bsoId}", hs(c.hBsoDELETE)).Methods("DELETE")
 
 	// wrap into a WeaveHandler to deal with:
 	// -- adding X-Weave-Timestamp
@@ -169,6 +182,17 @@ func (c *Context) sentCacheModified(w http.ResponseWriter, r *http.Request, uid 
 	}
 
 	return sentNotModified(w, r, modified)
+}
+
+func (c *Context) synchronizeDBAccess(h syncApiHandler) syncApiHandler {
+	return func(w http.ResponseWriter, r *http.Request, uid string) {
+		if err := c.Dispatch.LockUser(uid); err != nil {
+			InternalError(w, r, err)
+			return
+		}
+		defer c.Dispatch.UnlockUser(uid)
+		h(w, r, uid)
+	}
 }
 
 func (c *Context) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
