@@ -87,6 +87,25 @@ func NewPoolTime(basepath string, ttl time.Duration) (*Pool, error) {
 	return pool, nil
 }
 
+// TwoLevelPath creates a reverse sub-directory path structure
+// e.g. uid:123456 => DATA_ROOT/65/43/123456.db
+func TwoLevelPath(uid string) []string {
+	l := len(uid)
+	switch {
+	case l >= 4:
+		return []string{
+			uid[l-1:l] + uid[l-2:l-1],
+			uid[l-3:l-2] + uid[l-4:l-3],
+		}
+	case l >= 2:
+		return []string{
+			uid[l-1:l] + uid[l-2:l-1],
+		}
+	default:
+		return []string{}
+	}
+}
+
 func (p *Pool) PathAndFile(uid string) (path string, file string) {
 	path = string(os.PathSeparator) +
 		filepath.Join(
