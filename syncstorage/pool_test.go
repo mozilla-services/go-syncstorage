@@ -140,14 +140,14 @@ func TestPoolCleanupSkipUsed(t *testing.T) {
 	assert.Equal(3, len(p.dbs))
 
 	// make sure it skipped when used
-	db.used(true)
+	db.Use()
 	time.Sleep(time.Millisecond * 20)
 	p.Cleanup()
 	assert.Equal(1, p.lru.Len())
 	assert.Equal(1, len(p.dbs))
 
 	// make sure it cleaned up now
-	db.used(false)
+	db.Release()
 	p.Cleanup()
 	assert.Equal(0, p.lru.Len())
 	assert.Equal(0, len(p.dbs))
@@ -196,7 +196,7 @@ func TestPoolPathAndFile(t *testing.T) {
 
 	path, file := p.PathAndFile("uid1234")
 	assert.Equal("uid1234.db", file)
-	assert.Equal(T_basepath+T_sep+"4"+T_sep+"3", path)
+	assert.Equal(T_basepath+T_sep+"43"+T_sep+"21", path)
 }
 
 // TestPoolParallel uses a very small LRU cache and uses multiple
@@ -248,6 +248,12 @@ func TestPoolParallel(t *testing.T) {
 	pool.Cleanup()
 	assert.Equal(0, pool.lru.Len())
 	assert.Equal(0, len(pool.dbs))
+}
+
+func BenchmarkTwoLevelPath(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		TwoLevelPath("10000123456")
+	}
 }
 
 // Use poolwrap to test that the abstracted interface for SyncApi

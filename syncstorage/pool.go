@@ -18,20 +18,29 @@ var (
 
 type dbelement struct {
 	sync.Mutex
-	inUse bool
 
-	uid string
-	db  *DB
+	inUse bool
+	uid   string
+	db    *DB
 	// last time this was used
 	lastUsed time.Time
 }
 
-// used helps keep track if something is using
-// this dbelement and won't be eligible for cleanup
-func (de *dbelement) used(inUse bool) {
+// Use locks the dbelement so multiple calls to the database
+// can be done. This is used to synchronize access for HTTP api call
+// handlers which can make mulitple read/write requests in a discrete
+// request
+func (de *dbelement) Use() {
 	de.Lock()
-	defer de.Unlock()
-	de.inUse = inUse
+	de.inUse = true
+}
+func (de *dbelement) Release() {
+	de.inUse = false
+	de.Unlock()
+}
+
+func (de *dbelement) InUse() bool {
+	return de.inUse
 }
 
 type Pool struct {
@@ -76,6 +85,25 @@ func NewPoolTime(basepath string, ttl time.Duration) (*Pool, error) {
 	}
 
 	return pool, nil
+}
+
+// TwoLevelPath creates a reverse sub-directory path structure
+// e.g. uid:123456 => DATA_ROOT/65/43/123456.db
+func TwoLevelPath(uid string) []string {
+	l := len(uid)
+	switch {
+	case l >= 4:
+		return []string{
+			uid[l-1:l] + uid[l-2:l-1],
+			uid[l-3:l-2] + uid[l-4:l-3],
+		}
+	case l >= 2:
+		return []string{
+			uid[l-1:l] + uid[l-2:l-1],
+		}
+	default:
+		return []string{}
+	}
 }
 
 func (p *Pool) PathAndFile(uid string) (path string, file string) {
@@ -147,7 +175,7 @@ func (p *Pool) Cleanup() {
 		dbel := element.Value.(*dbelement)
 
 		// if an element is in use, do not remove it
-		if dbel.inUse {
+		if dbel.InUse() {
 			//pDebugC("%s in use, skip", dbel.uid)
 			element = element.Prev()
 			continue
@@ -209,6 +237,26 @@ func (p *Pool) Stop() {
 	}
 }
 
+func (p *Pool) Use(uid string) error {
+	el, err := p.getDB(uid)
+	if err != nil {
+		return err
+	}
+
+	el.Use()
+	return nil
+}
+
+func (p *Pool) Release(uid string) error {
+	el, err := p.getDB(uid)
+	if err != nil {
+		return err
+	}
+
+	el.Release()
+	return nil
+}
+
 // =======================================================
 // Below implements approximately SyncApi except each
 // method takes a `uid string`. This `uid` is used for
@@ -219,9 +267,6 @@ func (p *Pool) LastModified(uid string) (modified int, err error) {
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
-
 	return el.db.LastModified()
 }
 
@@ -230,8 +275,6 @@ func (p *Pool) GetCollectionId(uid string, name string) (id int, err error) {
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.GetCollectionId(name)
 }
 
@@ -240,8 +283,6 @@ func (p *Pool) GetCollectionModified(uid string, cId int) (modified int, err err
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.GetCollectionModified(cId)
 }
 
@@ -250,8 +291,6 @@ func (p *Pool) CreateCollection(uid string, name string) (cId int, err error) {
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.CreateCollection(name)
 }
 func (p *Pool) DeleteCollection(uid string, cId int) (err error) {
@@ -259,8 +298,6 @@ func (p *Pool) DeleteCollection(uid string, cId int) (err error) {
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.DeleteCollection(cId)
 }
 func (p *Pool) TouchCollection(uid string, cId, modified int) (err error) {
@@ -268,8 +305,6 @@ func (p *Pool) TouchCollection(uid string, cId, modified int) (err error) {
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.TouchCollection(cId, modified)
 }
 
@@ -278,8 +313,6 @@ func (p *Pool) InfoCollections(uid string) (map[string]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.InfoCollections()
 }
 func (p *Pool) InfoQuota(uid string) (used, quota int, err error) {
@@ -287,8 +320,6 @@ func (p *Pool) InfoQuota(uid string) (used, quota int, err error) {
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.InfoQuota()
 }
 func (p *Pool) InfoCollectionUsage(uid string) (map[string]int, error) {
@@ -296,8 +327,6 @@ func (p *Pool) InfoCollectionUsage(uid string) (map[string]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.InfoCollectionUsage()
 }
 func (p *Pool) InfoCollectionCounts(uid string) (map[string]int, error) {
@@ -305,8 +334,6 @@ func (p *Pool) InfoCollectionCounts(uid string) (map[string]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.InfoCollectionCounts()
 }
 
@@ -315,8 +342,6 @@ func (p *Pool) PostBSOs(uid string, cId int, input PostBSOInput) (*PostResults, 
 	if err != nil {
 		return nil, err
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.PostBSOs(cId, input)
 }
 
@@ -333,8 +358,6 @@ func (p *Pool) PutBSO(
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.PutBSO(cId, bId, payload, sortIndex, ttl)
 }
 
@@ -343,8 +366,6 @@ func (p *Pool) GetBSO(uid string, cId int, bId string) (b *BSO, err error) {
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.GetBSO(cId, bId)
 }
 func (p *Pool) GetBSOs(
@@ -360,8 +381,6 @@ func (p *Pool) GetBSOs(
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.GetBSOs(cId, ids, newer, sort, limit, offset)
 }
 func (p *Pool) GetBSOModified(uid string, cId int, bId string) (modified int, err error) {
@@ -370,8 +389,6 @@ func (p *Pool) GetBSOModified(uid string, cId int, bId string) (modified int, er
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.GetBSOModified(cId, bId)
 }
 
@@ -380,8 +397,6 @@ func (p *Pool) DeleteBSO(uid string, cId int, bId string) (modified int, err err
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.DeleteBSO(cId, bId)
 }
 func (p *Pool) DeleteBSOs(uid string, cId int, bIds ...string) (modified int, err error) {
@@ -389,8 +404,6 @@ func (p *Pool) DeleteBSOs(uid string, cId int, bIds ...string) (modified int, er
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.DeleteBSOs(cId, bIds...)
 }
 
@@ -399,8 +412,6 @@ func (p *Pool) PurgeExpired(uid string) (removed int, err error) {
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.PurgeExpired()
 }
 
@@ -409,8 +420,6 @@ func (p *Pool) Usage(uid string) (stats *DBPageStats, err error) {
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.Usage()
 }
 func (p *Pool) Optimize(uid string, thresholdPercent int) (ItHappened bool, err error) {
@@ -418,8 +427,6 @@ func (p *Pool) Optimize(uid string, thresholdPercent int) (ItHappened bool, err 
 	if err != nil {
 		return
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.Optimize(thresholdPercent)
 }
 
@@ -428,7 +435,5 @@ func (p *Pool) DeleteEverything(uid string) error {
 	if err != nil {
 		return err
 	}
-	el.used(true)
-	defer el.used(false)
 	return el.db.DeleteEverything()
 }
