@@ -19,7 +19,7 @@ import (
 	"io"
 	"time"
 
-	"code.google.com/p/go.crypto/hkdf"
+	"golang.org/x/crypto/hkdf"
 )
 
 var TokenSignatureMismatchErr = errors.New("TokenSignatureMismatchErr")
