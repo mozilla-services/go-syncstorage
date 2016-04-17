@@ -32,17 +32,17 @@ test:
     - docker images --no-trunc | awk '/^app/ {print $3}' | tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt
 
 deployment:
-  # this is just for dev
-  hub_all:
-    branch: /.*/
-    commands:
-      - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
-      - cp go-syncstorage $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1
-      - sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1 | tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
+  # this is just for dev, uncomment for testing circleci building
+  #hub_all:
+  #  branch: /.*/
+  #  commands:
+  #    - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
+  #    - cp go-syncstorage $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1
+  #    - sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1 | tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
 
-      - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
-      - docker tag app:build ${DOCKERHUB_REPO}:unstable
-      - docker push ${DOCKERHUB_REPO}:unstable
+  #    - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
+  #    - docker tag app:build ${DOCKERHUB_REPO}:unstable
+  #    - docker push ${DOCKERHUB_REPO}:unstable
 
   hub_latest:
     branch: master
