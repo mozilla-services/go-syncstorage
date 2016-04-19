@@ -60,7 +60,6 @@ deployment:
     commands:
       - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
       - cp go-syncstorage "$CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG"
-      - sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG | tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG
       - sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG | tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG-shasum256.txt
 
       - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
