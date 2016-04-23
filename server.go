@@ -2,10 +2,12 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/facebookgo/httpdown"
 
 	"github.com/mostlygeek/go-syncstorage/api"
 	"github.com/mostlygeek/go-syncstorage/config"
@@ -48,19 +50,31 @@ func main() {
 	// set up additional handlers
 
 	listenOn := config.Host + ":" + strconv.Itoa(config.Port)
-	if config.Tls.Cert != "" {
-		log.WithFields(log.Fields{"addr": listenOn, "tls": true}).Info("HTTP Listening at " + listenOn)
-		err := http.ListenAndServeTLS(
-			listenOn, config.Tls.Cert, config.Tls.Key, router)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		log.WithFields(log.Fields{"addr": listenOn, "tls": false}).Info("HTTP Listening at " + listenOn)
-		err := http.ListenAndServe(listenOn, router)
-		if err != nil {
-			log.Fatal(err)
-		}
+	server := &http.Server{
+		Addr:    listenOn,
+		Handler: router,
 	}
+
+	hd := &httpdown.HTTP{
+		// how long until connections are force closed
+		StopTimeout: 3 * time.Minute,
+
+		// how long before complete abort (even when clients are connected)
+		// this is above StopTimeout. In other worse, how much time to give
+		// force stopping of connections to finish
+		KillTimeout: 2 * time.Minute,
+	}
+
+	log.WithFields(log.Fields{"addr": listenOn, "tls": false, "PID": os.Getpid()}).Info("HTTP Listening at " + listenOn)
+
+	// TODO add in TLS support
+
+	err = httpdown.ListenAndServe(server, hd)
+	if err != nil {
+		log.Error(err.Error())
+	}
+
+	// start closing all the database connections
+	dispatch.Shutdown()
 
 }

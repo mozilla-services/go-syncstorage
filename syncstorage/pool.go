@@ -116,6 +116,8 @@ func (p *Pool) PathAndFile(uid string) (path string, file string) {
 	return
 }
 
+// getDB returns the db or creates a new one. the db is moved to the front of the
+// lru list to mean to most most recent
 func (p *Pool) getDB(uid string) (*dbelement, error) {
 	p.Lock()
 	defer p.Unlock()
@@ -234,6 +236,25 @@ func (p *Pool) Stop() {
 	if p.stopCh != nil {
 		close(p.stopCh)
 		p.stopCh = nil
+	}
+}
+
+// CloseOpenConnections  closes open database connections starting with
+// with the oldest first
+func (p *Pool) CloseOpenConnections() {
+	p.Lock()
+	defer p.Unlock()
+
+	element := p.lru.Back()
+	for {
+		if element == nil {
+			return
+		}
+
+		dbel := element.Value.(*dbelement)
+		pDebugC("Closing: %s", dbel.db.Path)
+		dbel.db.Close()
+		element = element.Prev()
 	}
 }
 
