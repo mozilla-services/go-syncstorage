@@ -502,26 +502,29 @@ func testApiDeleteBSOs(db SyncApi, t *testing.T) {
 func testApiUsageStats(db SyncApi, t *testing.T) {
 	assert := assert.New(t)
 	cId := 1
-	payload := strings.Repeat("x", 1024)
+	payload := strings.Repeat("x", 1024*4)
 
 	create := PostBSOInput{
 		NewPutBSOInput("b0", &payload, Int(10), nil),
 		NewPutBSOInput("b1", &payload, Int(10), nil),
 		NewPutBSOInput("b2", &payload, Int(10), nil),
+		NewPutBSOInput("b3", &payload, Int(10), nil),
+		NewPutBSOInput("b4", &payload, Int(10), nil),
+		NewPutBSOInput("b5", &payload, Int(10), nil),
 	}
 
 	_, err := db.PostBSOs(cId, create)
 	if assert.NoError(err) {
 
-		_, err = db.DeleteBSOs(cId, "b0", "b1")
+		_, err = db.DeleteBSOs(cId, "b0", "b1", "b3")
 		if assert.NoError(err) {
 			pageStats, err := db.Usage()
 			if assert.NoError(err) {
 
 				// numbers pulled from previous tests
-				assert.Equal(13, pageStats.Total)  // total pages in database
-				assert.Equal(2, pageStats.Free)    // unused pages (from delete)
-				assert.Equal(1024, pageStats.Size) // bytes/page
+				assert.Equal(14, pageStats.Total)  // total pages in database
+				assert.Equal(3, pageStats.Free)    // unused pages (from delete)
+				assert.Equal(4096, pageStats.Size) // bytes/page
 			}
 		}
 	}
@@ -552,7 +555,7 @@ func testApiPurgeExpired(db SyncApi, t *testing.T) {
 func testApiOptimize(db SyncApi, t *testing.T) {
 	assert := assert.New(t)
 	cId := 1
-	payload := strings.Repeat("x", 1024)
+	payload := strings.Repeat("x", 4096)
 
 	create := PostBSOInput{
 		NewPutBSOInput("b0", &payload, Int(10), Int(1)),
@@ -568,7 +571,7 @@ func testApiOptimize(db SyncApi, t *testing.T) {
 			assert.Equal(3, purged)
 			stats, err := db.Usage()
 			if assert.NoError(err) {
-				assert.Equal(23, stats.FreePercent()) // we know this from a previous test ;)
+				assert.Equal(27, stats.FreePercent()) // we know this from a previous test ;)
 				vac, err := db.Optimize(20)
 				assert.NoError(err)
 				assert.True(vac)

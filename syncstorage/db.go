@@ -141,7 +141,20 @@ func (d *DB) Open() (err error) {
 		return
 	}
 
-	// initialize and or update tables if required
+	// settings to apply to the database
+	pragmas := []string{
+		"PRAGMA page_size=4096;",
+		"PRAGMA journal_mode=WAL;",
+
+		// do an fsync() on every commit
+		"PRAGMA synchronous=FULL;",
+	}
+
+	for _, p := range pragmas {
+		if _, err = d.db.Exec(p); err != nil {
+			return err
+		}
+	}
 
 	// Initialize Schema 0 if it doesn't exist
 	sqlCheck := "SELECT name from sqlite_master WHERE type='table' AND name=?"
