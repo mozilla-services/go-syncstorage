@@ -3,7 +3,10 @@ package syncstorage
 import (
 	"crypto/sha1"
 	"encoding/binary"
+	"fmt"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 // Dispatch creates a ring of syncstorage.Pool and distributes
@@ -43,6 +46,17 @@ func (d *Dispatch) Index(uid string) uint16 {
 	// There are 20 bytes in a sha1 sum, we only need the
 	// last 2 to determine the id
 	return binary.BigEndian.Uint16(h[18:]) % d.numPools
+}
+
+func (d *Dispatch) Shutdown() {
+
+	// stop all the cleanup goroutines
+	numPools := len(d.pools)
+	for k, p := range d.pools {
+		log.Info(fmt.Sprintf("Shutting down Pool %d/%d", k+1, numPools))
+		p.Stop()
+		p.CloseOpenConnections()
+	}
 }
 
 func (d *Dispatch) LockUser(uid string) error {

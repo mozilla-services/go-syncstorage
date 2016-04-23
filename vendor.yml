@@ -5,6 +5,20 @@ vendors:
   rev: 1aa53c26cb85c33eef6d832305447982e95f844c
 - path: github.com/davecgh/go-spew
   rev: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
+- path: github.com/facebookgo/clock
+  rev: 600d898af40aa09a7a93ecb9265d87b0504b6f03
+- path: github.com/facebookgo/ensure
+  rev: b4ab57deab51ee655ae4bd85281f0715a068016d
+- path: github.com/facebookgo/freeport
+  rev: d4adf43b75b9357dc7775f033e807a3411591522
+- path: github.com/facebookgo/httpdown
+  rev: a3b1354551a26449fbe05f5d855937f6e7acbd71
+- path: github.com/facebookgo/stack
+  rev: 751773369052141c013c6e827a71e8f35c07879c
+- path: github.com/facebookgo/stats
+  rev: 1b76add642e42c6ffba7211ad7b3939ce654526e
+- path: github.com/facebookgo/subset
+  rev: 8dac2c3c48703541e481feddf22975953d4ff842
 - path: github.com/gorilla/context
   rev: a8d44e7d8e4d532b6a27a02dd82abb31cc1b01bd
 - path: github.com/gorilla/mux

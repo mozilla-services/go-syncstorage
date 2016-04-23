@@ -174,6 +174,7 @@ func (d *DB) Open() (err error) {
 
 func (d *DB) Close() {
 	if d.db != nil {
+		dbDebug("Closing: %s", d.Path)
 		d.db.Close()
 	}
 }
