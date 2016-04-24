@@ -1,195 +1,242 @@
 package api
 
-import "sync"
+import (
+	"bytes"
+	"encoding/binary"
+	"io"
+	"sync"
+	"time"
+
+	"github.com/allegro/bigcache"
+)
 
 // cache stores collection data reduce disk IO. The api
 // endpoints: info/collections, info/collection_usage,
-// info/collection_counts are all map[string]int. This
-// can be squashed to []int, like: [<name idx>, int val, ...]
-// to reduce memory requirements
+// info/collection_counts are all map[string]int. Which
+// is basically map[collection name]<last modified ts>
+// this can be turned into []struct{int16,int64} and then
+// packed into a byte array for a caching library
 
 type colMap map[string]int
-type colValues []int
-type usercache struct {
-	// last time the user's db was modified
-	modified int
 
-	infoCollections      colValues
-	infoCollectionCounts colValues
-	infoCollectionUsage  colValues
-	infoQuota            colValues
+// colValue is two numbers, an Index to lookup a collection name and
+// Value which the last modified timestamp
+type colValue struct {
+	Index uint16 // the index value mapping collection name => uint
+	Value uint64 // the timestamp
 }
 
+// colValueSize is how many bytes colValue packs down into
+const colValueSize = 2 + 8
+
+type colValues []colValue
+
 // the ram requirements to cache a user's collection information can be
-// drastically reduced since there aren't that many unique collection
-// names and we can just use ints to point to an list of strings
+// drastically reduced by using ints to refer to a string somewhere
 type squasher struct {
 	sync.Mutex
-	names    map[string]int
-	namesrev map[int]*string
+	names    map[string]uint16
+	namesrev map[uint16]*string
 }
 
 func NewSquasher() *squasher {
 	return &squasher{
-		names:    make(map[string]int),
-		namesrev: make(map[int]*string),
+		names:    make(map[string]uint16),
+		namesrev: make(map[uint16]*string),
 	}
 }
 
 // squash reduces a colMap to a colValues
 func (s *squasher) squash(d colMap) colValues {
-	elements := len(d) * 2
+	elements := len(d)
 	cValues := make(colValues, elements, elements)
 	i := 0
-	for k, v := range d {
+	for k, value := range d {
 		s.Lock()
-		var nameIndex int
+		var nameIndex uint16
 		var ok bool
-		if nameIndex, ok = s.names[k]; !ok {
-			nameIndex = len(s.namesrev)
+
+		if nameIndex, ok = s.names[k]; !ok { // not in our map
+			nameIndex = uint16(len(s.namesrev))
 			key := k                     // copy the string
 			s.namesrev[nameIndex] = &key // pointer to the string
 			s.names[key] = nameIndex
 		}
 		s.Unlock()
 
-		cValues[i] = nameIndex
-		i = i + 1
-		cValues[i] = v
+		cValues[i] = colValue{nameIndex, uint64(value)}
 		i = i + 1
 	}
 
 	return cValues
 }
 
-func (s *squasher) expand(v colValues) (m colMap) {
-	size := len(v) / 2
+func (s *squasher) expand(values colValues) (m colMap) {
+	size := len(values)
 	m = make(colMap, size)
-	for i := 0; i < len(v); i += 2 {
-		key := *s.namesrev[v[i]]
-		m[key] = v[i+1]
+	for _, colVal := range values {
+		key := *s.namesrev[colVal.Index]
+		m[key] = int(colVal.Value)
 	}
 	return
 }
 
+// NewCollectionCache creates a cache with a 12 hour TTL and 32MB fixed size
+// 32MB = ~512bytes/user = ~64K users frequent data cached in RAM
+// 512bytes/user is likely very generous,
+// (3 types) * (11 collections * colValSize + uidSize (25 bytes)) + 8 = 413 bytes/user's cache
 func NewCollectionCache() *collectionCache {
+	return NewCollectionCacheConfig(12*time.Hour, 32)
+}
+
+// NewCollectionCacheConfig creates a cache with a configurable TTL and size in MB
+func NewCollectionCacheConfig(ttl time.Duration, sizeInMB int) *collectionCache {
+	// default caches data for 12 hours before expiring it
+	cacheConf := bigcache.DefaultConfig(ttl)
+	cacheConf.HardMaxCacheSize = sizeInMB
+	cacheConf.Verbose = false
+
+	bcache, _ := bigcache.NewBigCache(cacheConf)
+
 	return &collectionCache{
 		squasher: squasher{
-			names:    make(map[string]int),
-			namesrev: make(map[int]*string),
+			names:    make(map[string]uint16),
+			namesrev: make(map[uint16]*string),
 		},
-		data: make(map[string]*usercache),
+		cache: bcache,
 	}
 }
 
-type collectionCache struct {
-	sync.RWMutex
-	squasher
+const (
+	// constants used to make a namespace for cached values for a uid
+	// using a single character keeps things small
+	c_Modified             = "a"
+	c_InfoCollection       = "b"
+	c_InfoCollectionUsage  = "c"
+	c_InfoCollectionCounts = "d"
+)
 
-	data map[string]*usercache
+// cacheKey creates a cache key with a cache namespace and uid
+func cacheKey(namespace, uid string) string {
+	return namespace + uid
+}
+
+type collectionCache struct {
+	squasher
+	cache *bigcache.BigCache
 }
 
 // Clear wipes all cached data for a user
 func (c *collectionCache) Clear(uid string) {
-	c.Lock()
-	defer c.Unlock()
-	delete(c.data, uid)
+	c.cache.Set(cacheKey(c_Modified, uid), EmptyData)
+	c.cache.Set(cacheKey(c_InfoCollection, uid), EmptyData)
+	c.cache.Set(cacheKey(c_InfoCollectionUsage, uid), EmptyData)
+	c.cache.Set(cacheKey(c_InfoCollectionCounts, uid), EmptyData)
 }
 
-func (c *collectionCache) GetModified(uid string) int {
-	c.RLock()
-	defer c.RUnlock()
+func (c *collectionCache) GetModified(uid string) (modified int) {
+	key := cacheKey(c_Modified, uid)
+	data, err := c.cache.Get(key)
 
-	if d, ok := c.data[uid]; ok {
-		return d.modified
+	if err != nil || len(data) == 0 {
+		return
 	}
-	return 0
+
+	var m uint64
+	buf := bytes.NewReader(data)
+	binary.Read(buf, binary.LittleEndian, &m)
+	return int(m)
 }
 
 func (c *collectionCache) SetModified(uid string, modified int) {
-	c.Lock()
-	defer c.Unlock()
 
-	if c.data[uid] == nil {
-		c.data[uid] = &usercache{
-			modified: modified,
-		}
+	buf := new(bytes.Buffer)
+	if err := binary.Write(buf, binary.LittleEndian, uint64(modified)); err != nil {
+		return
 	} else {
-		c.data[uid].modified = modified
+		key := cacheKey(c_Modified, uid)
+		c.cache.Set(key, buf.Bytes())
 	}
+}
+
+// setColMap turns a colMap into a []byte and sets it in the cache
+func (c *collectionCache) setColMap(key string, data colMap) error {
+
+	squashed := c.squash(data)
+	buf := new(bytes.Buffer)
+	if err := binary.Write(buf, binary.LittleEndian, squashed); err != nil {
+		return err
+	}
+
+	return c.cache.Set(key, buf.Bytes())
+}
+
+// getColMap turns a []byte into a colMap and returns it
+func (c *collectionCache) getColMap(key string) (colMap, error) {
+
+	data, err := c.cache.Get(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	buf := bytes.NewReader(data)
+	numElements := len(data) / colValueSize
+	values := make(colValues, numElements, numElements)
+	var val colValue
+
+	// read one colValue at a time and append it to values
+	for {
+		if err := binary.Read(buf, binary.LittleEndian, &val); err != nil {
+			if err == io.EOF {
+				break
+			}
+
+			return nil, err
+		}
+
+		values = append(values, val)
+	}
+
+	m := c.expand(values)
+	return m, nil
 }
 
 func (c *collectionCache) GetInfoCollections(uid string) colMap {
-	c.RLock()
-	defer c.RUnlock()
-
-	if d, ok := c.data[uid]; ok {
-		if d.infoCollections != nil {
-			return c.expand(d.infoCollections)
-		}
+	if m, err := c.getColMap(cacheKey(c_InfoCollection, uid)); err != nil {
+		return nil
+	} else {
+		return m
 	}
-
-	return nil
 }
 
 func (c *collectionCache) SetInfoCollections(uid string, d colMap) {
-	c.Lock()
-	defer c.Unlock()
-	if c.data[uid] == nil {
-		c.data[uid] = &usercache{
-			infoCollections: c.squash(d),
-		}
-	} else {
-		c.data[uid].infoCollections = c.squash(d)
-	}
+	c.setColMap(cacheKey(c_InfoCollection, uid), d)
 }
 
 func (c *collectionCache) GetInfoCollectionUsage(uid string) colMap {
-	c.RLock()
-	defer c.RUnlock()
-
-	if d, ok := c.data[uid]; ok {
-		if d.infoCollectionUsage != nil {
-			return c.expand(d.infoCollectionUsage)
-		}
+	if m, err := c.getColMap(cacheKey(c_InfoCollectionUsage, uid)); err != nil {
+		return nil
+	} else {
+		return m
 	}
-
-	return nil
 }
 
 func (c *collectionCache) SetInfoCollectionUsage(uid string, d colMap) {
-	c.Lock()
-	defer c.Unlock()
-	if c.data[uid] == nil {
-		c.data[uid] = &usercache{
-			infoCollectionUsage: c.squash(d),
-		}
-	} else {
-		c.data[uid].infoCollectionUsage = c.squash(d)
-	}
+	c.setColMap(cacheKey(c_InfoCollectionUsage, uid), d)
 }
 
 func (c *collectionCache) GetInfoCollectionCounts(uid string) colMap {
-	c.RLock()
-	defer c.RUnlock()
-
-	if d, ok := c.data[uid]; ok {
-		if d.infoCollectionCounts != nil {
-			return c.expand(d.infoCollectionCounts)
-		}
+	if m, err := c.getColMap(cacheKey(c_InfoCollectionCounts, uid)); err != nil {
+		return nil
+	} else {
+		return m
 	}
-
-	return nil
 }
 
 func (c *collectionCache) SetInfoCollectionCounts(uid string, d colMap) {
-	c.Lock()
-	defer c.Unlock()
-	if c.data[uid] == nil {
-		c.data[uid] = &usercache{
-			infoCollectionCounts: c.squash(d),
-		}
-	} else {
-		c.data[uid].infoCollectionCounts = c.squash(d)
-	}
+	c.setColMap(cacheKey(c_InfoCollectionCounts, uid), d)
 }

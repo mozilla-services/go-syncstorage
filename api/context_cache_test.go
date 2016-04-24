@@ -1,12 +1,24 @@
 package api
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+var (
+	benchUid  = "12345"
+	benchData = make(map[string]int)
+)
+
+func init() {
+	for i := 0; i < 10; i++ {
+		benchData[fmt.Sprintf("collect%d", i)] = i
+	}
+}
 
 func gettestmap() colMap {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -39,25 +51,7 @@ func TestSquasherSquashExpand(t *testing.T) {
 	assert.Equal(400, d["other"])
 }
 
-func BenchmarkSquasherSquash(b *testing.B) {
-	s := NewSquasher()
-	m := gettestmap()
-	for i := 0; i < b.N; i++ {
-		s.squash(m)
-	}
-}
-
-func BenchmarkSquasherExpand(b *testing.B) {
-	s := NewSquasher()
-	m := s.squash(gettestmap())
-
-	for i := 0; i < b.N; i++ {
-		s.expand(m)
-	}
-}
-
 func TestCollectionCacheModified(t *testing.T) {
-
 	assert := assert.New(t)
 	c := NewCollectionCache()
 	uid := "10"
@@ -65,6 +59,10 @@ func TestCollectionCacheModified(t *testing.T) {
 	assert.Equal(0, c.GetModified(uid))
 	c.SetModified(uid, 10)
 	assert.Equal(10, c.GetModified(uid))
+	c.SetModified(uid, 11)
+	assert.Equal(11, c.GetModified(uid))
+	c.Clear(uid)
+	assert.Equal(0, c.GetModified(uid))
 
 }
 
@@ -142,4 +140,77 @@ func TestCollectionCacheSetAll(t *testing.T) {
 	assert.Nil(c.GetInfoCollections(uid))
 	assert.Nil(c.GetInfoCollectionCounts(uid))
 	assert.Nil(c.GetInfoCollectionUsage(uid))
+}
+
+func BenchmarkSquasherSquash(b *testing.B) {
+	s := NewSquasher()
+	m := gettestmap()
+	for i := 0; i < b.N; i++ {
+		s.squash(m)
+	}
+}
+
+func BenchmarkSquasherExpand(b *testing.B) {
+	s := NewSquasher()
+	m := s.squash(gettestmap())
+
+	for i := 0; i < b.N; i++ {
+		s.expand(m)
+	}
+}
+
+func BenchmarkCacheKey(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		cacheKey("A", "BCDEFGHIJK")
+	}
+}
+func BenchmarkCollectionCacheClear(b *testing.B) {
+	cache := NewCollectionCache()
+	for i := 0; i < b.N; i++ {
+		cache.Clear(benchUid)
+	}
+}
+func BenchmarkCollectionCacheSetInfoCollections(b *testing.B) {
+	cache := NewCollectionCache()
+	for i := 0; i < b.N; i++ {
+		cache.SetInfoCollections(benchUid, benchData)
+	}
+}
+func BenchmarkCollectionCacheGetInfoCollections(b *testing.B) {
+	cache := NewCollectionCache()
+	cache.SetInfoCollections(benchUid, benchData)
+
+	for i := 0; i < b.N; i++ {
+		cache.GetInfoCollections(benchUid)
+	}
+}
+
+func BenchmarkCollectionCacheSetInfoCollectionUsage(b *testing.B) {
+	cache := NewCollectionCache()
+	for i := 0; i < b.N; i++ {
+		cache.SetInfoCollectionUsage(benchUid, benchData)
+	}
+}
+func BenchmarkCollectionCacheGetInfoCollectionUsage(b *testing.B) {
+	cache := NewCollectionCache()
+	cache.SetInfoCollectionUsage(benchUid, benchData)
+
+	for i := 0; i < b.N; i++ {
+		cache.GetInfoCollectionUsage(benchUid)
+	}
+}
+
+func BenchmarkCollectionCacheSetInfoCollectionCounts(b *testing.B) {
+	cache := NewCollectionCache()
+	for i := 0; i < b.N; i++ {
+		cache.SetInfoCollectionCounts(benchUid, benchData)
+	}
+}
+func BenchmarkCollectionCacheGetInfoCollectionCounts(b *testing.B) {
+	cache := NewCollectionCache()
+	cache.SetInfoCollectionCounts(benchUid, benchData)
+
+	for i := 0; i < b.N; i++ {
+		cache.GetInfoCollectionCounts(benchUid)
+	}
 }

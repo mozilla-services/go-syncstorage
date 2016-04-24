@@ -1,6 +1,8 @@
 vendors:
 - path: github.com/Sirupsen/logrus
   rev: 081307d9bc1364753142d5962fc1d795c742baaf
+- path: github.com/allegro/bigcache
+  rev: 662723b6a7d4a136649111e3c6728e6215c096df
 - path: github.com/coocood/freecache
   rev: 1aa53c26cb85c33eef6d832305447982e95f844c
 - path: github.com/davecgh/go-spew

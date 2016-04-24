@@ -21,6 +21,7 @@ var apiDebug = Debug("syncapi")
 var authDebug = Debug("syncapi:auth")
 
 var (
+	EmptyData            = make([]byte, 0, 0)
 	ErrMissingBSOId      = errors.New("Missing BSO Id")
 	ErrInvalidPostJSON   = errors.New("Malformed POST JSON")
 	ErrRequireSecretList = errors.New("Require secrets list")
