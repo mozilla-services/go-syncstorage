@@ -120,13 +120,6 @@ func (c *Context) hawk(h syncApiHandler) http.HandlerFunc {
 	})
 }
 
-// hawkNonceCheck returns true when nonce is unique, false otherwise
-var (
-	// we don't really need to store a value in the nonce
-	// cache, so just reuse the same slice
-	emptyValue = make([]byte, 0)
-)
-
 func (c *Context) hawkNonceNotFound(nonce string, t time.Time, creds *hawk.Credentials) bool {
 	if c.DisableHawk {
 		return true
@@ -158,7 +151,7 @@ func (c *Context) hawkNonceNotFound(nonce string, t time.Time, creds *hawk.Crede
 
 	key := h.Sum(nil)
 	if _, err := c.hawkCache.Get(key); err == freecache.ErrNotFound {
-		c.hawkCache.Set(key, emptyValue, 60 /* seconds */)
+		c.hawkCache.Set(key, EmptyData, 60 /* seconds */)
 		return true
 	}
 
