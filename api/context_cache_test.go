@@ -63,7 +63,17 @@ func TestCollectionCacheModified(t *testing.T) {
 	assert.Equal(11, c.GetModified(uid))
 	c.Clear(uid)
 	assert.Equal(0, c.GetModified(uid))
+}
 
+func TestCollectionCacheTouch(t *testing.T) {
+	assert := assert.New(t)
+	c := NewCollectionCache()
+	uid := "10"
+
+	assert.Equal(time.Duration(0), c.Touch(uid))
+	time.Sleep(2 * time.Millisecond)
+	diff := c.Touch(uid)
+	assert.NotEqual(time.Duration(0), diff)
 }
 
 func TestCollectionCacheInfoCollections(t *testing.T) {
@@ -164,6 +174,14 @@ func BenchmarkCacheKey(b *testing.B) {
 		cacheKey("A", "BCDEFGHIJK")
 	}
 }
+
+func BenchmarkCacheTouch(b *testing.B) {
+	cache := NewCollectionCache()
+	for i := 0; i < b.N; i++ {
+		cache.Touch("1")
+	}
+}
+
 func BenchmarkCollectionCacheClear(b *testing.B) {
 	cache := NewCollectionCache()
 	for i := 0; i < b.N; i++ {
