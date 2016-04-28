@@ -461,6 +461,29 @@ func TestPrivateGetBSOsSort(t *testing.T) {
 	}
 }
 
+// Regression test for bug that deleted BSOs in *all* collections
+func TestDeleteBSOsInCorrectCollection(t *testing.T) {
+	db, _ := getTestDB()
+	assert := assert.New(t)
+
+	payload := "data"
+	if _, err := db.PutBSO(1, "b1", &payload, nil, nil); !assert.NoError(err) {
+		return
+	}
+	if _, err := db.PutBSO(2, "b1", &payload, nil, nil); !assert.NoError(err) {
+		return
+	}
+
+	_, err := db.DeleteBSOs(1, "b1")
+	if !assert.NoError(err) {
+		return
+	}
+
+	bso, err := db.GetBSO(2, "b1")
+	assert.NotNil(bso)
+	assert.NoError(err)
+}
+
 func TestLastModified(t *testing.T) {
 	t.Parallel()
 	db, _ := getTestDB()

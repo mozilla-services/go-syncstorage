@@ -114,6 +114,7 @@ const (
 	c_InfoCollection       = "b"
 	c_InfoCollectionUsage  = "c"
 	c_InfoCollectionCounts = "d"
+	c_LastChangeRequest    = "e"
 )
 
 // cacheKey creates a cache key with a cache namespace and uid
@@ -132,6 +133,32 @@ func (c *collectionCache) Clear(uid string) {
 	c.cache.Set(cacheKey(c_InfoCollection, uid), EmptyData)
 	c.cache.Set(cacheKey(c_InfoCollectionUsage, uid), EmptyData)
 	c.cache.Set(cacheKey(c_InfoCollectionCounts, uid), EmptyData)
+}
+
+// Touch returns the last time it was called. This was added as a
+// helper to decide if the HTTP API should wait before processing a
+// request to get a monotonically increasing timestamp
+func (c *collectionCache) Touch(uid string) time.Duration {
+	key := cacheKey(c_Modified, uid)
+	data, err := c.cache.Get(key)
+
+	now := time.Now().UnixNano()
+	defer func() {
+		bufW := new(bytes.Buffer)
+		binary.Write(bufW, binary.LittleEndian, now)
+		c.cache.Set(key, bufW.Bytes())
+	}()
+
+	if err != nil || len(data) == 0 {
+		return time.Duration(0)
+	}
+
+	var last int64
+	bufR := bytes.NewReader(data)
+	binary.Read(bufR, binary.LittleEndian, &last)
+	diff := now - last
+	return time.Duration(diff)
+
 }
 
 func (c *collectionCache) GetModified(uid string) (modified int) {

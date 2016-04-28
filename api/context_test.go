@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -836,16 +837,16 @@ func TestContextCollectionPOST(t *testing.T) {
 	assert.Equal(http.StatusOK, resp.Code)
 
 	bso, _ := context.Dispatch.GetBSO(uid, cId, "bso1")
-	assert.Equal(bso.Payload, "initial payload") // stayed the same
-	assert.Equal(bso.SortIndex, 2)               // it updated
+	assert.Equal("initial payload", bso.Payload) // stayed the same
+	assert.Equal(2, bso.SortIndex)               // it updated
 
 	bso, _ = context.Dispatch.GetBSO(uid, cId, "bso2")
-	assert.Equal(bso.Payload, "updated payload") // updated
-	assert.Equal(bso.SortIndex, 1)               // same
+	assert.Equal("updated payload", bso.Payload) // updated
+	assert.Equal(1, bso.SortIndex)               // same
 
 	bso, _ = context.Dispatch.GetBSO(uid, cId, "bso3")
 	assert.Equal(bso.Payload, "updated payload") // updated
-	assert.Equal(bso.SortIndex, 3)               // updated
+	assert.Equal(3, bso.SortIndex)               // updated
 }
 
 func TestContextCollectionPOSTNewLines(t *testing.T) {
@@ -1003,6 +1004,98 @@ func TestContextCollectionPOSTTooLargePayload(t *testing.T) {
 
 	assert.Equal(0, len(results.Success))
 	assert.Equal(1, len(results.Failed["test"]))
+}
+
+// TestContextUniqueLastModified does a bunch of parallel changes (PUT, POST, DELETE)
+// to a collection. The X-Last-Modified results are collected and tested to ensure
+// each HTTP request that changes data monotonically increases the X-Last-Modified timestamp
+// ref: https://github.com/mozilla-services/server-syncstorage/pull/31
+// ref: https://github.com/mostlygeek/go-syncstorage/issues/67
+func TestContextUniqueLastModified(t *testing.T) {
+	t.Parallel()
+
+	assert := assert.New(t)
+	context := makeTestContext()
+	uid := "1234999"
+
+	var wg sync.WaitGroup
+	times := make(map[string]int)
+	resultsCh := make(chan string)
+
+	// fill times map
+	go func() {
+		for newTS := range resultsCh {
+			if curValue, ok := times[newTS]; !ok {
+				times[newTS] = 1
+			} else {
+				times[newTS] = curValue + 1
+			}
+		}
+	}()
+
+	// POST, PUT and DELETE
+	updateData := func(testId string) {
+		defer wg.Done()
+
+		bId := "b1"
+		cName := "col" + testId
+
+		// POST first
+		{
+			body := bytes.NewBufferString(`[
+				{"id":"` + bId + `", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}]`)
+
+			req, _ := http.NewRequest("POST", "http://test/1.5/"+uid+"/storage/"+cName, body)
+			req.Header.Add("Content-Type", "application/json")
+			resp := sendrequest(req, context)
+
+			if !assert.Equal(http.StatusOK, resp.Code, "POST Failed") {
+				return
+			}
+
+			resultsCh <- resp.Header().Get("X-Last-Modified")
+		}
+
+		// PUT to update
+		{
+			body := bytes.NewBufferString(`{"id":"b1","payload":"changed"}`)
+			req, _ := http.NewRequest("PUT", "/1.5/"+uid+"/storage/"+cName+"/"+bId, body)
+			req.Header.Add("Content-Type", "application/json")
+			resp := sendrequest(req, context)
+			if !assert.Equal(http.StatusOK, resp.Code, "PUT failed on "+cName) {
+				return
+			}
+
+			resultsCh <- resp.Header().Get("X-Last-Modified")
+		}
+
+		// Finally Delete it
+		{
+			req, _ := http.NewRequest("DELETE", "/1.5/"+uid+"/storage/"+cName+"/"+bId, nil)
+			resp := sendrequest(req, context)
+			if !assert.Equal(http.StatusOK, resp.Code, "DELETE Failed:"+resp.Body.String()) {
+				return
+			}
+
+			resultsCh <- resp.Header().Get("X-Last-Modified")
+		}
+	}
+
+	for i := 1; i <= 5; i++ {
+		for j := 1; j <= 5; j++ {
+			wg.Add(1)
+			go updateData(strconv.Itoa(i * j))
+		}
+		wg.Wait()
+	}
+
+	close(resultsCh)
+
+	for _, count := range times {
+		if !assert.Equal(1, count, "Duplicate X-Last-Modified detected") {
+			return
+		}
+	}
 }
 
 func TestContextCollectionDELETE(t *testing.T) {

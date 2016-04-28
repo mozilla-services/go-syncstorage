@@ -52,12 +52,12 @@ func NewRouterFromContext(c *Context) http.Handler {
 
 	// check hawk auth and synchronize db access
 	hs := func(h syncApiHandler) http.HandlerFunc {
-		return c.hawk(c.synchronizeDBAccess(h))
+		return c.hawk(c.serializeDBAccess(h))
 	}
 
 	// check Accept header, hawk auth and synchronize db access
 	ahs := func(h syncApiHandler) http.HandlerFunc {
-		return acceptOK(c.hawk(c.synchronizeDBAccess(h)))
+		return acceptOK(c.hawk(c.serializeDBAccess(h)))
 	}
 
 	r := mux.NewRouter()
@@ -185,12 +185,27 @@ func (c *Context) sentCacheModified(w http.ResponseWriter, r *http.Request, uid 
 	return sentNotModified(w, r, modified)
 }
 
-func (c *Context) synchronizeDBAccess(h syncApiHandler) syncApiHandler {
+// serializeDBAccess prevents parallel HTTP requests and maintains that
+// all POST, PUT and DELETE requests will result in a monotonically increasing
+// unique X-Last-Modified header
+func (c *Context) serializeDBAccess(h syncApiHandler) syncApiHandler {
 	return func(w http.ResponseWriter, r *http.Request, uid string) {
 		if err := c.Dispatch.LockUser(uid); err != nil {
 			InternalError(w, r, err)
 			return
 		}
+
+		// Delay write operations to the database by 10ms so X-Last-Modified
+		// is always monotonically increasing
+		// ref: https://github.com/mozilla-services/server-syncstorage/pull/31
+		// ref: https://github.com/mostlygeek/go-syncstorage/issues/67
+		switch r.Method {
+		case "POST", "PUT", "DELETE":
+			if c.colCache.Touch(uid) < time.Duration(10*time.Millisecond) {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+
 		defer c.Dispatch.UnlockUser(uid)
 		h(w, r, uid)
 	}
@@ -938,7 +953,7 @@ func (c *Context) hBsoDELETE(w http.ResponseWriter, r *http.Request, uid string)
 	bso, err := c.Dispatch.GetBSO(uid, cId, bId)
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
-			JSONError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			JSONError(w, fmt.Sprintf("BSO id: %s Not Found", bId), http.StatusNotFound)
 		} else {
 			InternalError(w, r, err)
 		}

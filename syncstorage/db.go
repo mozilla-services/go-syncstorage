@@ -608,13 +608,14 @@ func (d *DB) DeleteBSOs(cId int, bIds ...string) (modified int, err error) {
 		return
 	}
 
-	dml := "DELETE FROM BSO WHERE Id IN (?" +
+	dml := "DELETE FROM BSO WHERE CollectionId=? AND Id IN (?" +
 		strings.Repeat(",?", len(bIds)-1) + ")"
 
 	// https://golang.org/doc/faq#convert_slice_of_interface
-	ids := make([]interface{}, len(bIds))
+	ids := make([]interface{}, len(bIds)+1)
+	ids[0] = cId
 	for i, v := range bIds {
-		ids[i] = v
+		ids[i+1] = v
 	}
 
 	_, err = tx.Exec(dml, ids...)

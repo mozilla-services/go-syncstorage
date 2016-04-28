@@ -59,10 +59,13 @@ func (d *Dispatch) Shutdown() {
 	}
 }
 
+// LockUser locks a user to prevent parallel API calls
 func (d *Dispatch) LockUser(uid string) error {
 	return d.pools[d.Index(uid)].Use(uid)
 
 }
+
+// UnlockUser release the lock on the user so waiting API calls can continue
 func (d *Dispatch) UnlockUser(uid string) error {
 	return d.pools[d.Index(uid)].Release(uid)
 }
