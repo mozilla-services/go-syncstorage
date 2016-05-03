@@ -30,7 +30,6 @@ func init() {
 }
 
 func main() {
-
 	numPools := uint16(8)
 	dispatch, err := syncstorage.NewDispatch(
 		numPools, config.DataDir, 5*time.Minute)
@@ -45,9 +44,18 @@ func main() {
 	}
 
 	router := api.NewRouterFromContext(context)
-	router = api.LogHandler(router)
 
-	// set up additional handlers
+	if config.Log.Mozlog {
+		log.SetFormatter(&api.MozlogFormatter{
+			Hostname: config.Hostname,
+			Pid:      os.Getpid(),
+		})
+	}
+
+	// wrap everything in the LogHandler to get all
+	// the necessary information for mozlog fields
+	// timings, status, etc.
+	router = api.LogHandler(router)
 
 	listenOn := config.Host + ":" + strconv.Itoa(config.Port)
 	server := &http.Server{
@@ -65,9 +73,10 @@ func main() {
 		KillTimeout: 2 * time.Minute,
 	}
 
-	log.WithFields(log.Fields{"addr": listenOn, "tls": false, "PID": os.Getpid()}).Info("HTTP Listening at " + listenOn)
-
-	// TODO add in TLS support
+	log.WithFields(log.Fields{
+		"addr": listenOn,
+		"PID":  os.Getpid(),
+	}).Info("HTTP Listening at " + listenOn)
 
 	err = httpdown.ListenAndServe(server, hd)
 	if err != nil {

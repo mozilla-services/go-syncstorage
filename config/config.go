@@ -9,11 +9,6 @@ import (
 	"github.com/vrischmann/envconfig"
 )
 
-type TlsConfig struct {
-	Cert string `envconfig:"optional"`
-	Key  string `envconfig:"optional"`
-}
-
 type LogConfig struct {
 
 	// logging level, panic, fatal, error, warn, info, debug
@@ -24,27 +19,25 @@ type LogConfig struct {
 }
 
 var Config struct {
-	Log     *LogConfig
-	Host    string `envconfig:"default=0.0.0.0"`
-	Port    int
-	Secrets []string
-	DataDir string
+	Log      *LogConfig
+	Hostname string `envconfig:"optional"`
+	Host     string `envconfig:"default=0.0.0.0"`
+	Port     int
+	Secrets  []string
+	DataDir  string
 
 	MaxOpenFiles int `envconfig:"default=64"`
-
-	// TLS is optiona. If these are empty listens on HTTP
-	Tls *TlsConfig
 }
 
 // so we can use config.Port and not config.Config.Port
 var (
+	Hostname     string
 	Log          *LogConfig
 	Host         string
 	Port         int
 	DataDir      string
 	Secrets      []string
 	MaxOpenFiles int
-	Tls          *TlsConfig
 )
 
 func init() {
@@ -82,36 +75,21 @@ func init() {
 		os.Remove(testfile)
 	}
 
-	if Config.Tls.Cert != "" || Config.Tls.Key != "" {
-		if Config.Tls.Cert == "" {
-			log.Fatal("Config Error: TLS_CERT and TLS_KEY both required")
-		}
-
-		if Config.Tls.Key == "" {
-			log.Fatal("Config Error: TLS_CERT and TLS_KEY both required")
-		}
-
-		if _, err := os.Stat(Config.Tls.Cert); os.IsNotExist(err) {
-			log.Fatalf("Config Error: TLS_CERT not found at %s", Config.Tls.Cert)
-		}
-
-		if _, err := os.Stat(Config.Tls.Key); os.IsNotExist(err) {
-			log.Fatalf("Config Error: TLS_KEY not found at %s", Config.Tls.Key)
-		}
-	}
-
 	switch Config.Log.Level {
 	case "panic", "fatal", "error", "warn", "info", "debug":
 	default:
 		log.Fatalf("Config Error: LOG_LEVEL must be [panic, fatal, error, warn, info, debug]")
 	}
 
+	if Config.Hostname == "" {
+		Config.Hostname, _ = os.Hostname()
+	}
+
+	Hostname = Config.Hostname
 	Log = Config.Log
 	Host = Config.Host
 	Port = Config.Port
 	Secrets = Config.Secrets
 	DataDir = Config.DataDir
 	MaxOpenFiles = Config.MaxOpenFiles
-	Tls = Config.Tls
-
 }
