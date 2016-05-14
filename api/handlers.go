@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -112,4 +114,41 @@ func OKResponse(w http.ResponseWriter, s string) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, s)
+}
+
+// Dockerflow Handlers
+
+// handleHeartbeat answers __heartbeat__ and __lbheartbeat__
+func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
+	// system does not backing services. :)
+	OKResponse(w, "OK")
+}
+
+// handleVersion answers __version__
+func handleVersion(w http.ResponseWriter, r *http.Request) {
+	dir, err := os.Getwd()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, "Could not get CWD")
+		return
+	}
+
+	//f, err := file.Open(path.Clean(dir + os.PathSeparator + "version.json"))
+	filename := path.Clean(dir + string(os.PathSeparator) + "version.json")
+
+	f, err := os.Open(filename)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	stat, err := f.Stat()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "stat failed")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	http.ServeContent(w, r, "__version__", stat.ModTime(), f)
 }

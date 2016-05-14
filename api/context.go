@@ -62,16 +62,17 @@ func NewRouterFromContext(c *Context) http.Handler {
 
 	r := mux.NewRouter()
 
-	r.HandleFunc("/__heartbeat__", c.handleHeartbeat)
+	// Dockerflow endpoints
+	r.HandleFunc("/__heartbeat__", handleHeartbeat)
+	r.HandleFunc("/__lbheartbeat__", handleHeartbeat)
+	r.HandleFunc("/__version__", handleVersion)
+
 	r.HandleFunc("/1.5/{uid:[0-9]+}", hs(c.hDeleteEverything)).Methods("DELETE")
 	r.HandleFunc("/1.5/{uid:[0-9]+}/storage", hs(c.hDeleteEverything)).Methods("DELETE")
 
 	// support c.sync api version 1.5
 	// https://docs.services.mozilla.com/storage/apis-1.5.html
 	v := r.PathPrefix("/1.5/{uid:[0-9]+}/").Subrouter()
-
-	// not part of the API, used to make sure uid matching works
-	v.HandleFunc("/echo-uid", acceptOK(c.hawk(c.handleEchoUID))).Methods("GET")
 
 	info := v.PathPrefix("/info/").Subrouter()
 	info.HandleFunc("/collections", ahs(c.hInfoCollections)).Methods("GET")
@@ -209,21 +210,6 @@ func (c *Context) serializeDBAccess(h syncApiHandler) syncApiHandler {
 		defer c.Dispatch.UnlockUser(uid)
 		h(w, r, uid)
 	}
-}
-
-func (c *Context) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
-	// todo check dependencies to make sure they're ok..
-	OKResponse(w, "OK")
-}
-
-func (c *Context) handleEchoUID(w http.ResponseWriter, r *http.Request, uid string) {
-
-	// sleep here to make sure X-Weave-Timestamp code puts in
-	// a to spec value
-	time.Sleep(100 * time.Millisecond)
-
-	w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(syncstorage.Now()))
-	OKResponse(w, uid)
 }
 
 // hInfoQuota calculates the total disk space used by the user by calculating

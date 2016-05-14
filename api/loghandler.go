@@ -2,13 +2,33 @@ package api
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
+	"regexp"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 )
+
+var (
+	uidregex *regexp.Regexp
+)
+
+func init() {
+	uidregex = regexp.MustCompile(`/1\.5/([0-9]+)/`)
+}
+
+// extractUID extracts the UID from the path in http.Request
+func findUID(path string) string {
+	matches := uidregex.FindStringSubmatch(path)
+	if len(matches) > 0 {
+		return matches[1]
+	} else {
+		return ""
+	}
+}
 
 // LogHandler return a http.Handler that wraps h and logs
 // request out to logrus INFO level with fields
@@ -46,36 +66,101 @@ func (h loggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		req.ContentLength,
 		logger.Size())
 
-	if log.GetLevel() == log.DebugLevel {
-		fields := log.Fields{
-			"method":     req.Method,
-			"path":       uri,
-			"req_size":   req.ContentLength,
-			"status":     logger.Status(),
-			"size":       logger.Size(),
-			"req_header": req.Header,
-			"res_header": logger.Header(),
-			"t":          took,
-		}
+	errno := logger.Status()
+	if errno == http.StatusOK {
+		errno = 0
+	}
 
+	// common fields to log with every request
+	fields := log.Fields{
+		"agent":  req.UserAgent(),
+		"errno":  errno,
+		"method": req.Method,
+		"path":   uri,
+		"req_sz": req.ContentLength,
+		"res_sz": logger.Size(),
+		"t":      took,
+		"uid":    findUID(uri),
+	}
+
+	if log.GetLevel() == log.DebugLevel {
+		fields["req_header"] = req.Header
+		fields["res_header"] = logger.Header()
 		log.WithFields(fields).Debug(logMsg)
 	} else {
-		log.WithFields(log.Fields{
-			"method":   req.Method,
-			"path":     uri,
-			"req_size": req.ContentLength,
-			"status":   logger.Status(),
-			"size":     logger.Size(),
-			"t":        took,
-		}).Info(logMsg)
+		log.WithFields(fields).Info(logMsg)
 	}
 }
 
+// mozlog represents the MozLog standard format https://github.com/mozilla-services/Dockerflow/blob/master/docs/mozlog.md
+type mozlog struct {
+	Timestamp  int64
+	Type       string
+	Logger     string
+	Hostname   string
+	EnvVersion string
+	Pid        int
+	Severity   uint8
+	Fields     log.Fields
+}
+
+// MozlogFormatter is a custom logrus formatter
+type MozlogFormatter struct {
+	Hostname string
+	Pid      int
+}
+
+// Format a logrus.Entry into a mozlog JSON object
+func (f *MozlogFormatter) Format(entry *log.Entry) ([]byte, error) {
+	var severity uint8
+	switch entry.Level {
+	case log.PanicLevel:
+		severity = 1
+	case log.FatalLevel:
+		severity = 2
+	case log.ErrorLevel:
+		severity = 3
+	case log.WarnLevel:
+		severity = 4
+	case log.InfoLevel:
+		severity = 6
+	case log.DebugLevel:
+		severity = 7
+
+	}
+
+	logType := "system"
+	if _, ok := entry.Data["method"]; ok {
+		if _, ok2 := entry.Data["path"]; ok2 {
+			logType = "request.summary"
+		}
+	}
+
+	m := &mozlog{
+		Timestamp:  entry.Time.UnixNano(),
+		Type:       logType,
+		Logger:     "go-syncstorage",
+		Hostname:   f.Hostname,
+		EnvVersion: "2.0",
+		Pid:        f.Pid,
+		Severity:   severity,
+		Fields:     entry.Data,
+	}
+
+	serialized, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(serialized, '\n'), nil
+}
+
 /*
+ * ==============================================================
  * Much of this code was ported / copied over from
  * https://github.com/gorilla/handlers/blob/master/handlers.go
  * and used to implement a custom logger
- *
+ * ==============================================================
  */
 
 func makeLogger(w http.ResponseWriter) loggingResponseWriter {
