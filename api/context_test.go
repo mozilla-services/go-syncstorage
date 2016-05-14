@@ -99,6 +99,7 @@ func jsonrequest(method, urlStr string, body io.Reader, c *Context) *httptest.Re
 func requestheaders(method, urlStr string, body io.Reader, header http.Header, c *Context) *httptest.ResponseRecorder {
 
 	req, err := http.NewRequest(method, urlStr, body)
+
 	req.Header = header
 
 	if err != nil {
@@ -139,23 +140,12 @@ func TestContextHasXWeaveTimestamp(t *testing.T) {
 	assert.NotEqual(t, "", resp.Header().Get("X-Weave-Timestamp"))
 }
 
-func TestContextEchoUID(t *testing.T) {
-	t.Parallel()
-	assert := assert.New(t)
-	resp := request("GET", "/1.5/123456/echo-uid", nil, nil)
-
-	assert.NotEqual("", resp.Header().Get("X-Weave-Timestamp"))
-	assert.NotEqual("", resp.Header().Get("X-Last-Modified"))
-	assert.Equal(http.StatusOK, resp.Code)
-	assert.Equal("123456", resp.Body.String())
-}
-
 // TestContextXWeaveTimestamp makes sure header exists
 // and is set to the correct value
 func TestContextXWeaveTimestamp(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
-	resp := request("GET", "/1.5/123456/echo-uid", nil, nil)
+	resp := request("GET", "http://test/1.5/11121/info/collections", nil, nil)
 
 	ts := resp.Header().Get("X-Weave-Timestamp")
 	lm := resp.Header().Get("X-Last-Modified")
