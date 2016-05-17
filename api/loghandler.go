@@ -136,6 +136,7 @@ func (f *MozlogFormatter) Format(entry *log.Entry) ([]byte, error) {
 		}
 	}
 
+	entry.Data["msg"] = entry.Message
 	m := &mozlog{
 		Timestamp:  entry.Time.UnixNano(),
 		Type:       logType,

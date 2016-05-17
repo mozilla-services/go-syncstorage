@@ -1,13 +1,17 @@
 package syncstorage
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 func newDispatchwrap() *dispatchwrap {
-	return newDispatchwrapUID("1234567890")
+	uid := strconv.FormatInt(time.Now().UnixNano(), 36)
+	return newDispatchwrapUID(uid)
 }
 func newDispatchwrapUID(uid string) *dispatchwrap {
 
-	d, err := NewDispatch(4, getTempBase(), time.Millisecond*10)
+	d, err := NewDispatch(4, getTempBase(), time.Minute)
 	if err != nil {
 		panic(err)
 	}

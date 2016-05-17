@@ -1,6 +1,15 @@
 package syncstorage
 
-func newPoolwrap() *poolwrap { return newPoolwrapUID("1234567890") }
+import (
+	"strconv"
+	"time"
+)
+
+func newPoolwrap() *poolwrap {
+	uid := strconv.FormatInt(time.Now().UnixNano(), 36)
+	return newPoolwrapUID(uid)
+}
+
 func newPoolwrapUID(uid string) *poolwrap {
 
 	p, err := NewPool(getTempBase())

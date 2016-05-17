@@ -54,8 +54,7 @@ func (d *Dispatch) Shutdown() {
 	numPools := len(d.pools)
 	for k, p := range d.pools {
 		log.Info(fmt.Sprintf("Shutting down Pool %d/%d", k+1, numPools))
-		p.Stop()
-		p.CloseOpenConnections()
+		p.Shutdown()
 	}
 }
 

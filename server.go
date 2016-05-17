@@ -32,7 +32,7 @@ func init() {
 func main() {
 	numPools := uint16(8)
 	dispatch, err := syncstorage.NewDispatch(
-		numPools, config.DataDir, 5*time.Minute)
+		numPools, config.DataDir, time.Duration(config.TTL)*time.Second)
 
 	if err != nil {
 		log.Fatal(err)
@@ -76,6 +76,7 @@ func main() {
 	log.WithFields(log.Fields{
 		"addr": listenOn,
 		"PID":  os.Getpid(),
+		"TTL":  config.TTL,
 	}).Info("HTTP Listening at " + listenOn)
 
 	err = httpdown.ListenAndServe(server, hd)

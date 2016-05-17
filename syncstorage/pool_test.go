@@ -4,12 +4,19 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
+
+func init() {
+	// turn off logging
+	log.SetLevel(log.FatalLevel)
+}
 
 func getTempBase() string {
 	tmpdir := "pool_test"
@@ -70,7 +77,8 @@ func TestPoolCleanup(t *testing.T) {
 
 	assert := assert.New(t)
 
-	// make sure TTL cleanup works correctly
+	// make sure TTL cleanup works correctly by adding
+	// the db elements into the purge queue
 	p, _ := NewPoolTime(getTempBase(), time.Millisecond*50)
 	_, err := p.getDB("uid1") //t=0, expires @t=50ms
 	if !assert.NoError(err) {
@@ -91,15 +99,16 @@ func TestPoolCleanup(t *testing.T) {
 	time.Sleep(time.Millisecond * 40)
 	p.Cleanup() // should remove "uid1"
 
-	assert.Equal(1, p.lru.Len())
-	assert.Equal(1, len(p.dbs))
+	assert.Equal(1, len(p.purgeCh))
 
 	// wait 50ms, t=125ms, uid2 expired at 75ms
 	time.Sleep(time.Millisecond * 50)
 	p.Cleanup()
 
-	assert.Equal(0, p.lru.Len())
-	assert.Equal(0, len(p.dbs))
+	// why 3? purgeCh contains: uid1, uid1, uid2
+	// because Cleanup() doesn't know what's in the queue
+	// and will the same elements again
+	assert.Equal(3, len(p.purgeCh))
 }
 
 func TestPoolCleanupGoroutine(t *testing.T) {
@@ -107,7 +116,8 @@ func TestPoolCleanupGoroutine(t *testing.T) {
 	// make sure the goroutine cleans things up
 
 	// pool cleans up with 20ms TTL
-	p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
+	ttl := time.Millisecond * 5
+	p, _ := NewPoolTime(getTempBase(), ttl)
 	p.getDB("uid1")
 	p.getDB("uid2")
 	p.getDB("uid3")
@@ -118,7 +128,7 @@ func TestPoolCleanupGoroutine(t *testing.T) {
 	p.Start() // start cleaup goroutine
 
 	// wait enough time for cleanup to run
-	time.Sleep(time.Millisecond * 20)
+	time.Sleep(ttl * 3)
 	assert.Equal(0, p.lru.Len())
 	assert.Equal(0, len(p.dbs))
 
@@ -139,18 +149,36 @@ func TestPoolCleanupSkipUsed(t *testing.T) {
 	assert.Equal(3, p.lru.Len())
 	assert.Equal(3, len(p.dbs))
 
+	// Note:  this code is a little hairy
+	//
+	// the logic for this got a little funky since the
+	// non-blocking purge expired BSO code got added as
+	// a goroutine. To keep the initial purpose of this test
+	// it's easier to look at how many things have been queued
+	// for purging
+
 	// make sure it skipped when used
 	db.Use()
 	time.Sleep(time.Millisecond * 20)
+
 	p.Cleanup()
-	assert.Equal(1, p.lru.Len())
-	assert.Equal(1, len(p.dbs))
+	assert.Equal(2, len(p.purgeCh))
+	// in purgeCh are testused-1, and testused-3
 
 	// make sure it cleaned up now
 	db.Release()
 	p.Cleanup()
-	assert.Equal(0, p.lru.Len())
-	assert.Equal(0, len(p.dbs))
+
+	assert.Equal(5, len(p.purgeCh))
+
+	// in the purge channel is:
+	//   testused-1
+	//   testused-3
+	//   testused-1
+	//   testused-2
+	//   testused-3
+	// there are duplicates since they get put in there
+	// without synchronization
 }
 
 func TestPoolCleanupStop(t *testing.T) {
@@ -162,13 +190,14 @@ func TestPoolCleanupStop(t *testing.T) {
 	// make sure pool.Stop() stops cleanup
 
 	// pool cleans up with 20ms TTL
-	p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
+	ttl := time.Millisecond * 10
+	p, _ := NewPoolTime(getTempBase(), ttl)
 	p.Start()
 	p.getDB("uid1")
 	assert.Equal(1, p.lru.Len())
 	assert.Equal(1, len(p.dbs))
 	// wait enough time for cleanup to run
-	time.Sleep(time.Millisecond * 20)
+	time.Sleep(ttl * 3)
 	p.Stop()
 
 	assert.Equal(0, p.lru.Len())
@@ -210,8 +239,10 @@ func TestPoolParallel(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ttl := time.Millisecond * 10
+	ttl := time.Millisecond * 5
+
 	pool, err := NewPoolTime(getTempBase(), ttl)
+
 	if !assert.NoError(err) {
 		return
 	}
@@ -242,10 +273,15 @@ func TestPoolParallel(t *testing.T) {
 		}(strconv.Itoa(u))
 	}
 	wg.Wait()
-
 	assert.Equal(users, pool.lru.Len())
-	time.Sleep(ttl)
-	pool.Cleanup()
+
+	// start / wait and stop the goroutines that handle the cleanup
+	// this isn't the most precise way of doing things
+	pool.Start()
+	defer pool.Stop()
+
+	time.Sleep(ttl * 10)
+
 	assert.Equal(0, pool.lru.Len())
 	assert.Equal(0, len(pool.dbs))
 }
@@ -254,6 +290,44 @@ func BenchmarkTwoLevelPath(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		TwoLevelPath("10000123456")
 	}
+}
+
+func TestPoolPurge(t *testing.T) {
+	assert := assert.New(t)
+	uid := "abc123"
+
+	p, _ := NewPool(getTempBase())
+
+	payload := String(strings.Repeat("x", 1024))
+	bsos := 100
+	for i := 0; i < bsos; i++ {
+		bId := "bso" + strconv.Itoa(i)
+		_, err := p.PutBSO(uid, 1, bId, payload, nil, Int(0))
+
+		if !assert.NoError(err) {
+			return
+		}
+	}
+
+	time.Sleep(2 * time.Millisecond)
+
+	el, err := p.getDB(uid)
+	if !assert.NoError(err) {
+		return
+	}
+
+	results, err := el.purge()
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Equal(uid, results.uid)
+	assert.Equal(bsos, results.numPurged)
+
+	// page stats
+	assert.True(results.total > 0)
+	assert.True(results.free > 0)
+	assert.True(results.bytes > 0)
 }
 
 // Use poolwrap to test that the abstracted interface for SyncApi
