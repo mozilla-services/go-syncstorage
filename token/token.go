@@ -8,10 +8,10 @@ package token
 // [2] https://github.com/mozilla-services/tokenserver/blob/3b3d98359285dcbcae1706ded664a63fcb457639/tokenserver/views.py#L262
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -161,7 +161,8 @@ func ParseToken(secret []byte, tokenSecret string) (Token, error) {
 	if err != nil {
 		return Token{}, err
 	}
-	if !bytes.Equal(signature, expectedSignature) {
+
+	if subtle.ConstantTimeCompare(signature, expectedSignature) != 1 {
 		return Token{}, TokenSignatureMismatchErr
 	}
 
