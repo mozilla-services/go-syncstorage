@@ -605,9 +605,9 @@ func testApiDeleteEverything(db SyncApi, t *testing.T) {
 	assert.Exactly(ErrNotFound, err)
 	assert.Nil(b)
 
+	// collection data stick around, maybe an off chance the user
+	// makes it back into the server? it doesn't take up much space either way
 	cTest, err := db.GetCollectionId("my_collection")
-	assert.Exactly(ErrNotFound, err)
-	assert.Equal(0, cTest)
+	assert.Nil(err)
+	assert.Equal(100, cTest)
 }
-
-//func (db SyncApi, t *testing.T) {

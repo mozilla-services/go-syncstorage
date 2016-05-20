@@ -67,6 +67,7 @@ func NewRouterFromContext(c *Context) http.Handler {
 	r.HandleFunc("/__lbheartbeat__", handleHeartbeat)
 	r.HandleFunc("/__version__", handleVersion)
 
+	// top level deletions for the user and their storage
 	r.HandleFunc("/1.5/{uid:[0-9]+}", hs(c.hDeleteEverything)).Methods("DELETE")
 	r.HandleFunc("/1.5/{uid:[0-9]+}/storage", hs(c.hDeleteEverything)).Methods("DELETE")
 
@@ -81,7 +82,6 @@ func NewRouterFromContext(c *Context) http.Handler {
 	info.HandleFunc("/quota", hs(c.hInfoQuota)).Methods("GET")
 
 	storage := v.PathPrefix("/storage/").Subrouter()
-	storage.HandleFunc("/", handleTODO).Methods("DELETE")
 
 	storage.HandleFunc("/{collection}", ahs(c.hCollectionGET)).Methods("GET")
 	storage.HandleFunc("/{collection}", hs(c.hCollectionPOST)).Methods("POST")
