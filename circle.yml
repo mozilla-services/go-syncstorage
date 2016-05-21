@@ -1,55 +1,60 @@
 machine:
   environment:
-    IMPORT_PATH: "github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME"
+
+    # make some env vars to save typing
+    # GWS should already exists on the ubuntu trusty build image
+    GWS: "$HOME/.go_workspace"
+    A: "$GWS/src/github.com/$CIRCLE_PROJECT_USERNAME"
+    B: "$A/$CIRCLE_PROJECT_REPONAME"
 
   services:
     - docker
 
 dependencies:
-  #cache_directories:
-  #  - "~/docker"
-
   override:
-    - docker info
+    # ported from https://discuss.circleci.com/t/overriding-go-inference-in-the-dependencies-phase/660
+    # put the source in $GOPATH
+    - mkdir -p $GWS/pkg $GWS/bin $A
+    - ln -fs $HOME/$CIRCLE_PROJECT_REPONAME $B
 
-    # our build container
-    - docker pull golang:1.6
+    # make it *only* $GWS, dunno why there's two defaults in there
+    - echo 'export GOPATH=$GWS' >> ~/.circlerc
 
-    # create a version.json
-    - printf '{"commit":"%s","version":"%s","source":"https://github.com/%s/%s","build":"%s"}\n' "$CIRCLE_SHA1" "$CIRCLE_TAG" "$CIRCLE_PROJECT_USERNAME" "$CIRCLE_PROJECT_REPONAME" "$CIRCLE_BUILD_URL" > version.json
-    - cp version.json $CIRCLE_ARTIFACTS
+    # pre-compile go-sqlite3 to save time in testing/docker container building
+    - cd "$B" && go install ./vendor/github.com/mattn/go-sqlite3
 
 test:
   override:
-    - docker run -it -v "$PWD:/go/src/$IMPORT_PATH" -w "/go/src/$IMPORT_PATH" golang:1.6 go test -v ./token ./syncstorage ./api
-
-    # build a static binary and package it into a busybox image
-    # used by deployment below
-    - docker run -it -v "$PWD:/go/src/$IMPORT_PATH" -w "/go/src/$IMPORT_PATH" golang:1.6 go build --ldflags '-extldflags "-static"' .
-    
-    # put these here since the build is shared by all deployments
-    - docker build -t "app:build" .
-    - docker images --no-trunc | awk '/^app/ {print $3}' | tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt
+    - cd "$B" && go vet ./token ./syncstorage ./api
+    - cd "$B" && go test -v ./token ./syncstorage ./api
 
 deployment:
-  # this is just for dev, uncomment for testing circleci building
-  #hub_all:
-  #  branch: /.*/
-  #  commands:
-  #    - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
-  #    - cp go-syncstorage $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1
-  #    - sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1 | awk '{print $1}' | tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
-
-  #    - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
-  #    - docker tag app:build ${DOCKERHUB_REPO}:unstable
-  #    - docker push ${DOCKERHUB_REPO}:unstable
-
   hub_latest:
     branch: master
     commands:
+      # create a version.json
+      - >
+          printf '{"commit":"%s","version":"%s","source":"https://github.com/%s/%s","build":"%s"}\n'
+          "$CIRCLE_SHA1"
+          "$CIRCLE_TAG"
+          "$CIRCLE_PROJECT_USERNAME"
+          "$CIRCLE_PROJECT_REPONAME"
+          "$CIRCLE_BUILD_URL" > version.json
+      - cp version.json $CIRCLE_ARTIFACTS
+
+      # build a static binary
+      - cd "$B" && go build --ldflags '-extldflags "-static"' .
+
+      # build image and put its sha256 into artifacts to aid verification
+      - docker build -t "app:build" .
+      - docker images --no-trunc | awk '/^app/ {print $3}' | tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt
+
       - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
       - cp go-syncstorage $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1
-      - sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1 | awk '{print $1}' | tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
+      - >
+          sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1 |
+          awk '{print $1}' |
+          tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
 
       - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
       - docker tag app:build ${DOCKERHUB_REPO}:latest
@@ -58,10 +63,64 @@ deployment:
   hub_releases:
     tag: /.*/
     commands:
+      # create a version.json
+      - >
+          printf '{"commit":"%s","version":"%s","source":"https://github.com/%s/%s","build":"%s"}\n'
+          "$CIRCLE_SHA1"
+          "$CIRCLE_TAG"
+          "$CIRCLE_PROJECT_USERNAME"
+          "$CIRCLE_PROJECT_REPONAME"
+          "$CIRCLE_BUILD_URL" > version.json
+      - cp version.json $CIRCLE_ARTIFACTS
+
+      # build a static binary
+      - cd "$B" && go build --ldflags '-extldflags "-static"' .
+
+      # build image and put its sha256 into artifacts to aid verification
+      - docker build -t "app:build" .
+      - docker images --no-trunc | awk '/^app/ {print $3}' | tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt
+
+
       - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
       - cp go-syncstorage "$CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG"
-      - sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG | awk '{print $1}' | tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG-shasum256.txt
+      - >
+          sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG |
+          awk '{print $1}' |
+          tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_TAG-shasum256.txt
 
       - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
       - docker tag app:build ${DOCKERHUB_REPO}:${CIRCLE_TAG}
       - docker push ${DOCKERHUB_REPO}:${CIRCLE_TAG}
+
+# this is just for dev, uncomment for testing circleci building
+#  hub_all:
+#    branch: /.*/
+#    commands:
+#      # create a version.json
+#      - >
+#          printf '{"commit":"%s","version":"%s","source":"https://github.com/%s/%s","build":"%s"}\n'
+#          "$CIRCLE_SHA1"
+#          "$CIRCLE_TAG"
+#          "$CIRCLE_PROJECT_USERNAME"
+#          "$CIRCLE_PROJECT_REPONAME"
+#          "$CIRCLE_BUILD_URL" > version.json
+#      - cp version.json $CIRCLE_ARTIFACTS
+#
+#      # build a static binary
+#      - cd "$B" && go build --ldflags '-extldflags "-static"' .
+#
+#      # build image and put its sha256 into artifacts to aid verification
+#      - docker build -t "app:build" .
+#      - docker images --no-trunc | awk '/^app/ {print $3}' | tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt
+#
+#      - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
+#      - cp go-syncstorage $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1
+#      - >
+#          sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1 |
+#          awk '{print $1}' |
+#          tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
+#
+#      - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
+#      - docker tag app:build ${DOCKERHUB_REPO}:unstable
+#      - docker push ${DOCKERHUB_REPO}:unstable
+#
