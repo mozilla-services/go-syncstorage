@@ -1433,7 +1433,6 @@ func TestContextBsoDELETE(t *testing.T) {
 func TestContextDelete(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
-	context := makeTestContext()
 	uid := "123456"
 
 	var (
@@ -1441,7 +1440,9 @@ func TestContextDelete(t *testing.T) {
 		err error
 	)
 
+	// test both DELETE /1.5/<uid> and /1.5/<uid>/storage
 	for _, url := range []string{"/1.5/" + uid, "/1.5/" + uid + "/storage"} {
+		context := makeTestContext()
 		if cId, err = context.Dispatch.CreateCollection(uid, "my_collection"); !assert.NoError(err) {
 			return
 		}
@@ -1463,8 +1464,8 @@ func TestContextDelete(t *testing.T) {
 		assert.Nil(b)
 
 		cTest, err := context.Dispatch.GetCollectionId(uid, "my_collection")
-		assert.Exactly(syncstorage.ErrNotFound, err)
-		assert.Equal(0, cTest)
+		assert.Nil(err)
+		assert.Equal(100, cTest)
 	}
 
 }

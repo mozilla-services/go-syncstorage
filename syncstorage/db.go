@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -331,21 +332,19 @@ func (d *DB) DeleteCollection(cId int) (err error) {
 	return
 }
 
-// DeleteEverything will delete all data from the users database
-// it will also purge free pages to recover disk space
+// DeleteEverything will delete all BSOs, record when everything was deleted
+// and vacuum to free up disk pages.
 func (d *DB) DeleteEverything() (err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	// opt to delete all the data and vacuum up free
-	// pages instead of dropping the database/file
-	// since we only care about freeing up disk blocks
+	// delete all BSO data and keep the other metadata around
 	dml := `
-	DELETE FROM BSO;
-	DELETE FROM Collections;
-	VACUUM;
-	`
-	_, err = d.db.Exec(dml)
+		DELETE FROM BSO;
+		INSERT INTO KeyValues (Key, Value) VALUES ("DELETE_EVERYTHING_DATE", ?);
+		VACUUM;
+		`
+	_, err = d.db.Exec(dml, time.Now().Format(time.RFC3339))
 	return
 }
 

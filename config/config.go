@@ -25,19 +25,20 @@ var Config struct {
 	Port     int
 	Secrets  []string
 	DataDir  string
+	TTL      int `envconfig:"default=300"`
 
 	MaxOpenFiles int `envconfig:"default=64"`
 }
 
 // so we can use config.Port and not config.Config.Port
 var (
-	Hostname     string
-	Log          *LogConfig
-	Host         string
-	Port         int
-	DataDir      string
-	Secrets      []string
-	MaxOpenFiles int
+	Hostname string
+	Log      *LogConfig
+	Host     string
+	Port     int
+	DataDir  string
+	Secrets  []string
+	TTL      int
 )
 
 func init() {
@@ -47,10 +48,6 @@ func init() {
 
 	if Config.Port < 1 || Config.Port > 65535 {
 		log.Fatal("Config.Error: PORT invalid")
-	}
-
-	if Config.MaxOpenFiles%8 != 0 || Config.MaxOpenFiles < 8 {
-		log.Fatal("Config Error: MAX_OPEN_FILES must be >= 8 and MAX_OPEN_FILES mod 8 == 0")
 	}
 
 	if _, err := os.Stat(Config.DataDir); os.IsNotExist(err) {
@@ -85,11 +82,15 @@ func init() {
 		Config.Hostname, _ = os.Hostname()
 	}
 
+	if Config.TTL <= 0 {
+		log.Fatal("TTL must be > 0")
+	}
+
 	Hostname = Config.Hostname
 	Log = Config.Log
 	Host = Config.Host
 	Port = Config.Port
 	Secrets = Config.Secrets
 	DataDir = Config.DataDir
-	MaxOpenFiles = Config.MaxOpenFiles
+	TTL = Config.TTL
 }

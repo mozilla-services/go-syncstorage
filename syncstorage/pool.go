@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
+
 	. "github.com/mostlygeek/go-debug"
 )
 
@@ -15,33 +18,6 @@ var (
 	pDebug  = Debug("syncstorage:pool")
 	pDebugC = Debug("syncstorage:pool:Cleanup")
 )
-
-type dbelement struct {
-	sync.Mutex
-
-	inUse bool
-	uid   string
-	db    *DB
-	// last time this was used
-	lastUsed time.Time
-}
-
-// Use locks the dbelement so multiple calls to the database
-// can be done. This is used to synchronize access for HTTP api call
-// handlers which can make mulitple read/write requests in a discrete
-// request
-func (de *dbelement) Use() {
-	de.Lock()
-	de.inUse = true
-}
-func (de *dbelement) Release() {
-	de.inUse = false
-	de.Unlock()
-}
-
-func (de *dbelement) InUse() bool {
-	return de.inUse
-}
 
 type Pool struct {
 	sync.Mutex
@@ -58,12 +34,15 @@ type Pool struct {
 	// key based lookup for a db
 	dbs map[string]*list.Element
 
+	// used to queue uids to purge deleted records
+	purgeCh chan *dbelement
+
 	// used to stop the purge
 	stopCh chan struct{}
 }
 
 func NewPool(basepath string) (*Pool, error) {
-	return NewPoolTime(basepath, time.Minute)
+	return NewPoolTime(basepath, 5*time.Minute)
 }
 
 func NewPoolTime(basepath string, ttl time.Duration) (*Pool, error) {
@@ -78,10 +57,11 @@ func NewPoolTime(basepath string, ttl time.Duration) (*Pool, error) {
 	)
 
 	pool := &Pool{
-		base: path,
-		ttl:  ttl,
-		lru:  list.New(),
-		dbs:  make(map[string]*list.Element),
+		base:    path,
+		ttl:     ttl,
+		lru:     list.New(),
+		dbs:     make(map[string]*list.Element),
+		purgeCh: make(chan *dbelement, 100), // why 100? just an arbitrary pick for version 1
 	}
 
 	return pool, nil
@@ -192,15 +172,20 @@ func (p *Pool) Cleanup() {
 			return
 		}
 
-		//pDebugC("Removing %s", dbel.uid)
 		// remove the element from the pool
 
-		// need this from element before we remove it
 		next := element.Prev()
 
-		p.lru.Remove(element)
-		delete(p.dbs, dbel.uid)
-		dbel.db.Close()
+		if dbel.BeenPurged() {
+			// need this from element before we remove it
+			p.lru.Remove(element)
+			delete(p.dbs, dbel.uid)
+			dbel.db.Close()
+		} else {
+			if p.purgeCh != nil {
+				p.purgeCh <- dbel
+			}
+		}
 
 		element = next
 	}
@@ -227,21 +212,51 @@ func (p *Pool) Start() {
 			}
 		}
 	}()
+
+	// run a goroutine to purge expired records from the database
+	go func() {
+		for dbel := range p.purgeCh {
+			if dbel.BeenPurged() {
+				continue
+			}
+
+			results, err := dbel.purge()
+
+			if err != nil {
+				log.WithFields(log.Fields{
+					"uid": dbel.uid,
+					"err": errors.Cause(err).Error(),
+				}).Errorf("Purge Error for %s, %s", dbel.uid, err.Error())
+				continue
+			}
+
+			log.WithFields(results.Fields()).Infof("Purged Expired BSOs for uid:%s", dbel.uid)
+		}
+	}()
 }
 
 // Stop the cleanup goroutine
 func (p *Pool) Stop() {
 	p.Lock()
 	defer p.Unlock()
+
 	if p.stopCh != nil {
 		close(p.stopCh)
 		p.stopCh = nil
 	}
+
+	if p.purgeCh != nil {
+		close(p.purgeCh)
+		p.stopCh = nil
+	}
 }
 
-// CloseOpenConnections  closes open database connections starting with
-// with the oldest first
-func (p *Pool) CloseOpenConnections() {
+// Shutdown contains logic to cleanup the pool when the server
+// is shutting down
+func (p *Pool) Shutdown() {
+	// stop the cleanup goroutine
+	p.Stop()
+
 	p.Lock()
 	defer p.Unlock()
 
