@@ -1,7 +1,6 @@
 package syncstorage
 
 import (
-	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -11,13 +10,7 @@ import (
 )
 
 func getTestDB() (*DB, error) {
-	f, err := ioutil.TempFile("", "syncstorage-test-")
-	if err != nil {
-		return nil, err
-	}
-
-	path := f.Name()
-	db, err := NewDB(path)
+	db, err := NewDB(":memory:")
 
 	if err != nil {
 		return nil, err

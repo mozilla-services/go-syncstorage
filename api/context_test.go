@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,8 +47,7 @@ func init() {
 }
 
 func makeTestContext() *Context {
-	dir, _ := ioutil.TempDir(os.TempDir(), "sync_storage_api_test")
-	dispatch, err := syncstorage.NewDispatch(4, dir, time.Minute)
+	dispatch, err := syncstorage.NewDispatch(4, ":memory:", time.Minute)
 	if err != nil {
 		panic(err)
 	}

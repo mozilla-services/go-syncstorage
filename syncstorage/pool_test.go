@@ -18,18 +18,12 @@ func init() {
 	log.SetLevel(log.FatalLevel)
 }
 
-func getTempBase() string {
-	tmpdir := "pool_test"
-	dir, _ := ioutil.TempDir(os.TempDir(), tmpdir)
-	return dir
-}
-
 func TestPoolGetDB(t *testing.T) {
 	assert := assert.New(t)
 	uid0 := "abc123"
 	uid1 := "xyz456"
 
-	p, _ := NewPool(getTempBase())
+	p, _ := NewPool(":memory:")
 
 	db1, err := p.getDB(uid0)
 	if !assert.NoError(err) {
@@ -79,7 +73,7 @@ func TestPoolCleanup(t *testing.T) {
 
 	// make sure TTL cleanup works correctly by adding
 	// the db elements into the purge queue
-	p, _ := NewPoolTime(getTempBase(), time.Millisecond*50)
+	p, _ := NewPoolTime(":memory:", time.Millisecond*50)
 	_, err := p.getDB("uid1") //t=0, expires @t=50ms
 	if !assert.NoError(err) {
 		return
@@ -117,7 +111,7 @@ func TestPoolCleanupGoroutine(t *testing.T) {
 
 	// pool cleans up with 20ms TTL
 	ttl := time.Millisecond * 5
-	p, _ := NewPoolTime(getTempBase(), ttl)
+	p, _ := NewPoolTime(":memory:", ttl)
 	p.getDB("uid1")
 	p.getDB("uid2")
 	p.getDB("uid3")
@@ -141,7 +135,7 @@ func TestPoolCleanupSkipUsed(t *testing.T) {
 	assert := assert.New(t)
 
 	// pool cleans up with 20ms TTL
-	p, _ := NewPoolTime(getTempBase(), time.Millisecond*10)
+	p, _ := NewPoolTime(":memory:", time.Millisecond*10)
 	p.getDB("testused-1")
 	db, _ := p.getDB("testused-2")
 	p.getDB("testused-3")
@@ -191,7 +185,7 @@ func TestPoolCleanupStop(t *testing.T) {
 
 	// pool cleans up with 20ms TTL
 	ttl := time.Millisecond * 10
-	p, _ := NewPoolTime(getTempBase(), ttl)
+	p, _ := NewPoolTime(":memory:", ttl)
 	p.Start()
 	p.getDB("uid1")
 	assert.Equal(1, p.lru.Len())
@@ -218,7 +212,8 @@ func TestPoolCleanupStop(t *testing.T) {
 func TestPoolPathAndFile(t *testing.T) {
 	assert := assert.New(t)
 
-	T_basepath := getTempBase()
+	tmpdir := "pool_test_path_and_file"
+	T_basepath, _ := ioutil.TempDir(os.TempDir(), tmpdir)
 	T_sep := string(os.PathSeparator)
 
 	p, _ := NewPool(T_basepath)
@@ -241,7 +236,11 @@ func TestPoolParallel(t *testing.T) {
 
 	ttl := time.Millisecond * 5
 
-	pool, err := NewPoolTime(getTempBase(), ttl)
+	// need to use actual files rather than :memory:
+	// since the pool will open/close connections
+	tmpdir := "pool_test_parallel"
+	basepath, _ := ioutil.TempDir(os.TempDir(), tmpdir)
+	pool, err := NewPoolTime(basepath, ttl)
 
 	if !assert.NoError(err) {
 		return
@@ -296,7 +295,7 @@ func TestPoolPurge(t *testing.T) {
 	assert := assert.New(t)
 	uid := "abc123"
 
-	p, _ := NewPool(getTempBase())
+	p, _ := NewPool(":memory:")
 
 	payload := String(strings.Repeat("x", 1024))
 	bsos := 100

@@ -12,7 +12,7 @@ func newPoolwrap() *poolwrap {
 
 func newPoolwrapUID(uid string) *poolwrap {
 
-	p, err := NewPool(getTempBase())
+	p, err := NewPool(":memory:")
 	if err != nil {
 		panic(err)
 	}

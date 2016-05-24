@@ -46,15 +46,23 @@ func NewPool(basepath string) (*Pool, error) {
 }
 
 func NewPoolTime(basepath string, ttl time.Duration) (*Pool, error) {
-	basepath, err := filepath.Abs(basepath)
-	if err != nil {
-		return nil, err
-	}
 
-	path := strings.Split(
-		filepath.Clean(basepath),
-		string(os.PathSeparator),
-	)
+	var path []string
+
+	// support in-memory only sqlite3 databases for testing
+	if basepath == ":memory:" {
+		path = []string{":memory:"}
+	} else {
+		basepath, err := filepath.Abs(basepath)
+		if err != nil {
+			return nil, err
+		}
+
+		path = strings.Split(
+			filepath.Clean(basepath),
+			string(os.PathSeparator),
+		)
+	}
 
 	pool := &Pool{
 		base:    path,
@@ -111,19 +119,25 @@ func (p *Pool) getDB(uid string) (*dbelement, error) {
 		return dbel, nil
 	}
 
-	storageDir, filename := p.PathAndFile(uid)
+	var dbFile string
+	if len(p.base) == 1 && p.base[0] == ":memory:" {
+		dbFile = ":memory:"
+	} else {
+		storageDir, filename := p.PathAndFile(uid)
 
-	// create the sub-directory tree if required
-	if _, err := os.Stat(storageDir); os.IsNotExist(err) {
-		//pDebug("Creating directory %s", storageDir)
-		if err := os.MkdirAll(storageDir, 0755); err != nil {
-			//pDebug("Error creating directory %s, %s", storageDir, err.Error())
-			return nil, err
+		// create the sub-directory tree if required
+		if _, err := os.Stat(storageDir); os.IsNotExist(err) {
+			//pDebug("Creating directory %s", storageDir)
+			if err := os.MkdirAll(storageDir, 0755); err != nil {
+				//pDebug("Error creating directory %s, %s", storageDir, err.Error())
+				return nil, err
+			}
 		}
+
+		// TODO clean the UID of any weird characters, ie: os.PathSeparator
+		dbFile = storageDir + string(os.PathSeparator) + filename
 	}
 
-	// TODO clean the UID of any weird characters, ie: os.PathSeparator
-	dbFile := storageDir + string(os.PathSeparator) + filename
 	db, err := NewDB(dbFile)
 	if err != nil {
 		return nil, err
