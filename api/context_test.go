@@ -324,6 +324,23 @@ func TestContextInfoCollectionsCache(t *testing.T) {
 	req, _ := http.NewRequest("PUT", "/1.5/"+uid+"/storage/bookmarks/bso2", body)
 	req.Header.Add("Content-Type", "application/json")
 	sendrequest(req, context)
+
+	// need some data in the cache
+	cId0, _ := context.Dispatch.GetCollectionId(uid, "bookmarks")
+	cId1, _ := context.Dispatch.GetCollectionId(uid, "meta")
+
+	{
+		payload := "boom"
+		_, err := context.Dispatch.PutBSO(uid, cId0, "test0", &payload, nil, nil)
+		if !assert.NoError(err) {
+			return
+		}
+		_, err = context.Dispatch.PutBSO(uid, cId1, "test1", &payload, nil, nil)
+		if !assert.NoError(err) {
+			return
+		}
+	}
+
 	r := request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
 	assert.Equal("MISS", r.Header().Get("X-Weave-Cache"))
 
@@ -350,6 +367,7 @@ func TestContextInfoCollectionsCache(t *testing.T) {
 
 		r = request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
 		assert.Equal("MISS", r.Header().Get("X-Weave-Cache"))
+
 		r = request("GET", "http://test/1.5/"+uid+"/info/collections", nil, context)
 		assert.Equal("HIT", r.Header().Get("X-Weave-Cache"))
 	}

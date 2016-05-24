@@ -50,26 +50,28 @@ func init() {
 		log.Fatal("Config.Error: PORT invalid")
 	}
 
-	if _, err := os.Stat(Config.DataDir); os.IsNotExist(err) {
-		log.Fatal("Config Error: DATA_DIR does not exist")
-	}
+	if Config.DataDir != ":memory:" {
+		if _, err := os.Stat(Config.DataDir); os.IsNotExist(err) {
+			log.Fatal("Config Error: DATA_DIR does not exist")
+		}
 
-	stat, err := os.Stat(Config.DataDir)
-	if os.IsNotExist(err) {
-		log.Fatal("Config Error: DATA_DIR does not exist")
-	}
-	if !stat.IsDir() {
-		log.Fatal("Config Error: DATA_DIR is not a directory")
-	}
+		stat, err := os.Stat(Config.DataDir)
+		if os.IsNotExist(err) {
+			log.Fatal("Config Error: DATA_DIR does not exist")
+		}
+		if !stat.IsDir() {
+			log.Fatal("Config Error: DATA_DIR is not a directory")
+		}
 
-	Config.DataDir = filepath.Clean(Config.DataDir)
-	testfile := Config.DataDir + string(os.PathSeparator) + "test.writable"
-	f, err := os.Create(testfile)
-	if err != nil {
-		log.Fatal("Config Error: DATA_DIR is not writable")
-	} else {
-		f.Close()
-		os.Remove(testfile)
+		Config.DataDir = filepath.Clean(Config.DataDir)
+		testfile := Config.DataDir + string(os.PathSeparator) + "test.writable"
+		f, err := os.Create(testfile)
+		if err != nil {
+			log.Fatal("Config Error: DATA_DIR is not writable")
+		} else {
+			f.Close()
+			os.Remove(testfile)
+		}
 	}
 
 	switch Config.Log.Level {
