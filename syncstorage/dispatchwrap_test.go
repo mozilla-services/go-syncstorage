@@ -11,7 +11,7 @@ func newDispatchwrap() *dispatchwrap {
 }
 func newDispatchwrapUID(uid string) *dispatchwrap {
 
-	d, err := NewDispatch(4, getTempBase(), time.Minute)
+	d, err := NewDispatch(4, ":memory:", time.Minute)
 	if err != nil {
 		panic(err)
 	}

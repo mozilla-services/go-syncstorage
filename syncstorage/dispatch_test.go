@@ -10,7 +10,7 @@ import (
 func TestDispatchIndex(t *testing.T) {
 	assert := assert.New(t)
 
-	d, _ := NewDispatch(4, getTempBase(), time.Millisecond*10)
+	d, _ := NewDispatch(4, ":memory:", time.Millisecond*10)
 
 	// brute forced some uids to get index 0, 1, 2, 3 for the
 	// dispatch ring of pools
@@ -24,7 +24,7 @@ func TestDispatchIndex(t *testing.T) {
 
 func TestDispatchWorks(t *testing.T) {
 	assert := assert.New(t)
-	d, err := NewDispatch(4, getTempBase(), time.Millisecond*10)
+	d, err := NewDispatch(4, ":memory:", time.Millisecond*10)
 
 	if !assert.NoError(err) {
 		return
@@ -52,7 +52,7 @@ func TestDispatchWorks(t *testing.T) {
 }
 
 func BenchmarkDispatchIndex(b *testing.B) {
-	d, _ := NewDispatch(4, getTempBase(), time.Millisecond*10)
+	d, _ := NewDispatch(4, ":memory:", time.Millisecond*10)
 
 	for i := 0; i < b.N; i++ {
 		d.Index("a uid goes here")
