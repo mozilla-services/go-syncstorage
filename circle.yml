@@ -66,7 +66,7 @@ test:
     - >
         docker run
         --net=host
-        mostlygeek/server-syncstorage:latest
+        mozilla/server-syncstorage:latest
         test_endpoint "http://127.0.0.1:8888#secret"
 
 deployment:
