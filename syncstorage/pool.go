@@ -39,6 +39,7 @@ type Pool struct {
 
 	// used to stop the purge
 	stopCh chan struct{}
+	stopWG sync.WaitGroup
 }
 
 func NewPool(basepath string) (*Pool, error) {
@@ -156,7 +157,7 @@ func (p *Pool) getDB(uid string) (*dbelement, error) {
 
 // Cleanup removes all entries from the pool that have been
 // idle longer than pool.ttl
-func (p *Pool) Cleanup() {
+func (p *Pool) cleanup() {
 	p.Lock()
 	defer p.Unlock()
 
@@ -215,12 +216,19 @@ func (p *Pool) Start() {
 		return
 	}
 
+	// for waiting til all goroutines to start
+	var startWG sync.WaitGroup
+
 	p.stopCh = make(chan struct{})
+	startWG.Add(1)
+	p.stopWG.Add(1)
 	go func() {
+		startWG.Done()
+		defer p.stopWG.Done()
 		for {
 			select {
 			case <-time.After(p.ttl):
-				p.Cleanup()
+				p.cleanup()
 			case <-p.stopCh:
 				return
 			}
@@ -228,25 +236,36 @@ func (p *Pool) Start() {
 	}()
 
 	// run a goroutine to purge expired records from the database
+	startWG.Add(1)
+	p.stopWG.Add(1)
 	go func() {
-		for dbel := range p.purgeCh {
-			if dbel.BeenPurged() {
-				continue
+		startWG.Done()
+		defer p.stopWG.Done()
+		for {
+			select {
+			case <-p.stopCh:
+				return
+			case dbel := <-p.purgeCh:
+				if dbel.BeenPurged() {
+					continue
+				}
+
+				results, err := dbel.purge()
+
+				if err != nil {
+					log.WithFields(log.Fields{
+						"uid": dbel.uid,
+						"err": errors.Cause(err).Error(),
+					}).Errorf("Purge Error for %s, %s", dbel.uid, err.Error())
+					continue
+				}
+
+				log.WithFields(results.Fields()).Infof("Purged Expired BSOs for uid:%s", dbel.uid)
 			}
-
-			results, err := dbel.purge()
-
-			if err != nil {
-				log.WithFields(log.Fields{
-					"uid": dbel.uid,
-					"err": errors.Cause(err).Error(),
-				}).Errorf("Purge Error for %s, %s", dbel.uid, err.Error())
-				continue
-			}
-
-			log.WithFields(results.Fields()).Infof("Purged Expired BSOs for uid:%s", dbel.uid)
 		}
 	}()
+
+	startWG.Wait()
 }
 
 // Stop the cleanup goroutine
@@ -257,11 +276,10 @@ func (p *Pool) Stop() {
 	if p.stopCh != nil {
 		close(p.stopCh)
 		p.stopCh = nil
-	}
 
-	if p.purgeCh != nil {
+		p.stopWG.Wait()
 		close(p.purgeCh)
-		p.stopCh = nil
+		p.purgeCh = nil
 	}
 }
 

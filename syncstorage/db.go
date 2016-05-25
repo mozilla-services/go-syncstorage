@@ -341,7 +341,7 @@ func (d *DB) DeleteEverything() (err error) {
 	// delete all BSO data and keep the other metadata around
 	dml := `
 		DELETE FROM BSO;
-		INSERT INTO KeyValues (Key, Value) VALUES ("DELETE_EVERYTHING_DATE", ?);
+		INSERT OR REPLACE INTO KeyValues (Key, Value) VALUES ("DELETE_EVERYTHING_DATE", ?);
 		VACUUM;
 		`
 	_, err = d.db.Exec(dml, time.Now().Format(time.RFC3339))
@@ -360,7 +360,7 @@ func (d *DB) InfoCollections() (map[string]int, error) {
 	d.Lock()
 	defer d.Unlock()
 
-	rows, err := d.db.Query("SELECT Name,Modified FROM Collections ORDER BY Id")
+	rows, err := d.db.Query("SELECT Name,Modified FROM Collections WHERE Modified != 0")
 	if err != nil {
 		return nil, err
 	}

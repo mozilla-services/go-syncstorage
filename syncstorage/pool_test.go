@@ -91,16 +91,16 @@ func TestPoolCleanup(t *testing.T) {
 
 	// wait 40ms, t=75ms
 	time.Sleep(time.Millisecond * 40)
-	p.Cleanup() // should remove "uid1"
+	p.cleanup() // should remove "uid1"
 
 	assert.Equal(1, len(p.purgeCh))
 
 	// wait 50ms, t=125ms, uid2 expired at 75ms
 	time.Sleep(time.Millisecond * 50)
-	p.Cleanup()
+	p.cleanup()
 
 	// why 3? purgeCh contains: uid1, uid1, uid2
-	// because Cleanup() doesn't know what's in the queue
+	// because cleanup() doesn't know what's in the queue
 	// and will the same elements again
 	assert.Equal(3, len(p.purgeCh))
 }
@@ -155,13 +155,13 @@ func TestPoolCleanupSkipUsed(t *testing.T) {
 	db.Use()
 	time.Sleep(time.Millisecond * 20)
 
-	p.Cleanup()
+	p.cleanup()
 	assert.Equal(2, len(p.purgeCh))
 	// in purgeCh are testused-1, and testused-3
 
 	// make sure it cleaned up now
 	db.Release()
-	p.Cleanup()
+	p.cleanup()
 
 	assert.Equal(5, len(p.purgeCh))
 
@@ -181,32 +181,15 @@ func TestPoolCleanupStop(t *testing.T) {
 	}
 	t.Parallel()
 	assert := assert.New(t)
-	// make sure pool.Stop() stops cleanup
 
-	// pool cleans up with 20ms TTL
-	ttl := time.Millisecond * 10
-	p, _ := NewPoolTime(":memory:", ttl)
+	p, _ := NewPool(":memory:")
 	p.Start()
-	p.getDB("uid1")
-	assert.Equal(1, p.lru.Len())
-	assert.Equal(1, len(p.dbs))
-	// wait enough time for cleanup to run
-	time.Sleep(ttl * 3)
+	assert.NotNil(p.stopCh)
+	assert.NotNil(p.purgeCh)
+
 	p.Stop()
-
-	assert.Equal(0, p.lru.Len())
-	assert.Equal(0, len(p.dbs))
-
-	// add it again
-	p.getDB("uid1")
-	assert.Equal(1, p.lru.Len())
-	assert.Equal(1, len(p.dbs))
-	// wait for cleanup
-	time.Sleep(time.Millisecond * 20)
-
-	// should still be there
-	assert.Equal(1, p.lru.Len())
-	assert.Equal(1, len(p.dbs))
+	assert.Nil(p.stopCh)
+	assert.Nil(p.purgeCh)
 }
 
 func TestPoolPathAndFile(t *testing.T) {
