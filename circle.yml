@@ -47,7 +47,7 @@ dependencies:
         awk '{print $1}' |
         tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
 
-    - docker pull mostlygeek/server-syncstorage:latest
+    - docker pull mozilla/server-syncstorage:latest
 
 test:
   override:
