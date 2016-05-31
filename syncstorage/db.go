@@ -911,8 +911,8 @@ func (d *DB) getBSO(tx dbTx, cId int, bId string) (*BSO, error) {
 
 	b := &BSO{Id: bId}
 
-	query := "SELECT SortIndex, Payload, Modified, TTL FROM BSO WHERE CollectionId=? and Id=?"
-	err := tx.QueryRow(query, cId, bId).Scan(&b.SortIndex, &b.Payload, &b.Modified, &b.TTL)
+	query := "SELECT SortIndex, Payload, Modified, TTL FROM BSO WHERE CollectionId=? and Id=? and TTL > ?"
+	err := tx.QueryRow(query, cId, bId, Now()).Scan(&b.SortIndex, &b.Payload, &b.Modified, &b.TTL)
 
 	if err != nil {
 		if err == sql.ErrNoRows {

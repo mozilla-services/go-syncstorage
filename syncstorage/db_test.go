@@ -156,7 +156,7 @@ func TestPrivateUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	cId := 1
 	bId := "testBSO"
-	modified := 0
+	modified := Now()
 	payload := "initial value"
 	sortIndex := 1
 	ttl := 3600 * 1000
@@ -217,7 +217,7 @@ func TestPrivateUpdateBSOModifiedNotChangedOnTTLTouch(t *testing.T) {
 	payload := "hello"
 	sortIndex := 1
 	ttl := 10
-	modified := 3
+	modified := Now() - 100
 
 	err := db.insertBSO(tx, cId, bId, modified, payload, sortIndex, ttl)
 	if !assert.NoError(err) {
@@ -225,7 +225,7 @@ func TestPrivateUpdateBSOModifiedNotChangedOnTTLTouch(t *testing.T) {
 	}
 
 	ttl = 15
-	updateModified := 5
+	updateModified := Now()
 	err = db.updateBSO(tx, cId, bId, updateModified, nil, nil, &ttl)
 	if !assert.NoError(err) {
 		return
@@ -235,7 +235,11 @@ func TestPrivateUpdateBSOModifiedNotChangedOnTTLTouch(t *testing.T) {
 	if !assert.NoError(err) || !assert.NotNil(bso) {
 		return
 	}
+
+	// ttl has changed
 	assert.Equal(ttl+updateModified, bso.TTL)
+
+	// modified has not changed
 	assert.Equal(modified, bso.Modified)
 }
 

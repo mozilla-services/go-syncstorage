@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -25,7 +26,7 @@ var Config struct {
 	Port     int
 	Secrets  []string
 	DataDir  string
-	TTL      int `envconfig:"default=300"`
+	TTL      int `envconfig:"default=300"` // seconds to wait before closing a user's api handler
 
 	MaxOpenFiles int `envconfig:"default=64"`
 }
@@ -38,7 +39,7 @@ var (
 	Port     int
 	DataDir  string
 	Secrets  []string
-	TTL      int
+	TTL      time.Duration
 )
 
 func init() {
@@ -94,5 +95,5 @@ func init() {
 	Port = Config.Port
 	Secrets = Config.Secrets
 	DataDir = Config.DataDir
-	TTL = Config.TTL
+	TTL = time.Duration(Config.TTL) * time.Second
 }
