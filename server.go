@@ -9,9 +9,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/facebookgo/httpdown"
 
-	"github.com/mostlygeek/go-syncstorage/api"
 	"github.com/mostlygeek/go-syncstorage/config"
-	"github.com/mostlygeek/go-syncstorage/syncstorage"
+	"github.com/mostlygeek/go-syncstorage/web"
 )
 
 func init() {
@@ -30,37 +29,30 @@ func init() {
 }
 
 func main() {
-	numPools := uint16(8)
-	dispatch, err := syncstorage.NewDispatch(
-		numPools, config.DataDir, time.Duration(config.TTL)*time.Second)
 
-	if err != nil {
-		log.Fatal(err)
-	}
+	var router http.Handler
 
-	context, err := api.NewContext(config.Secrets, dispatch)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// The base functionality is the sync 1.5 api + legacy weave hacks
+	poolHandler := web.NewSyncPoolHandler(config.DataDir, 1, config.TTL)
+	router = web.NewWeaveHandler(poolHandler)
 
-	router := api.NewRouterFromContext(context)
+	// All sync 1.5 access requires Hawk Authorization
+	router = web.NewHawkHandler(router, config.Secrets)
 
-	if config.Log.Mozlog {
-		log.SetFormatter(&api.MozlogFormatter{
-			Hostname: config.Hostname,
-			Pid:      os.Getpid(),
-		})
-	}
-
-	// wrap everything in the LogHandler to get all
-	// the necessary information for mozlog fields
-	// timings, status, etc.
-	router = api.LogHandler(router)
+	// Log all the things
+	router = web.NewLogHandler(router)
 
 	listenOn := config.Host + ":" + strconv.Itoa(config.Port)
 	server := &http.Server{
 		Addr:    listenOn,
 		Handler: router,
+	}
+
+	if config.Log.Mozlog {
+		log.SetFormatter(&web.MozlogFormatter{
+			Hostname: config.Hostname,
+			Pid:      os.Getpid(),
+		})
 	}
 
 	hd := &httpdown.HTTP{
@@ -79,12 +71,10 @@ func main() {
 		"TTL":  config.TTL,
 	}).Info("HTTP Listening at " + listenOn)
 
-	err = httpdown.ListenAndServe(server, hd)
+	err := httpdown.ListenAndServe(server, hd)
 	if err != nil {
 		log.Error(err.Error())
 	}
 
-	// start closing all the database connections
-	dispatch.Shutdown()
-
+	poolHandler.StopHTTP()
 }
