@@ -11,8 +11,8 @@ import (
 
 	"github.com/mostlygeek/go-syncstorage/syncstorage"
 	"github.com/mostlygeek/go-syncstorage/token"
-	"github.com/mozilla-services/hawk-go"
 	"github.com/stretchr/testify/assert"
+	"go.mozilla.org/hawk"
 )
 
 // tokenrequest generates an *http.Request with Hawk authentication

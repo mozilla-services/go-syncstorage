@@ -51,8 +51,8 @@ dependencies:
 
 test:
   override:
-    - cd "$B" && go vet ./token ./syncstorage ./api
-    - cd "$B" && go test -v ./token ./syncstorage ./api
+    - cd "$B" && go vet ./token ./syncstorage ./web
+    - cd "$B" && go test -v ./token ./syncstorage ./web
     - >
         docker run
         --net=host

@@ -1,8 +1,8 @@
 vendors:
 - path: github.com/Sirupsen/logrus
-  rev: 081307d9bc1364753142d5962fc1d795c742baaf
+  rev: f3cfb454f4c209e6668c95216c4744b8fddb2356
 - path: github.com/allegro/bigcache
-  rev: 662723b6a7d4a136649111e3c6728e6215c096df
+  rev: 7b000bdb362a2dad08c6e7abf5b0315b6aabc9cf
 - path: github.com/coocood/freecache
   rev: 1aa53c26cb85c33eef6d832305447982e95f844c
 - path: github.com/davecgh/go-spew
@@ -22,26 +22,28 @@ vendors:
 - path: github.com/facebookgo/subset
   rev: 8dac2c3c48703541e481feddf22975953d4ff842
 - path: github.com/gorilla/context
-  rev: a8d44e7d8e4d532b6a27a02dd82abb31cc1b01bd
+  rev: aed02d124ae4a0e94fea4541c8effd05bf0c8296
 - path: github.com/gorilla/mux
-  rev: 0eeaf8392f5b04950925b8a69fe70f110fa7cbfc
+  rev: bd09be08ed4377796d312df0a45314e11b8f5dc1
 - path: github.com/mattn/go-sqlite3
-  rev: 467f50b0c026317ad28fc2c0a08aab6f755cfc7a
+  rev: 38ee283dabf11c9cbdb968eebd79b1fa7acbabe6
 - path: github.com/mostlygeek/go-debug
   rev: a000784b6a2ed85c1c86924c6c638031587ea070
-- path: github.com/mozilla-services/hawk-go
-  rev: 42aae07a9c710693b9b19137526ee59907e3a856
+- path: github.com/pkg/errors
+  rev: 431554f80b8ecf5058547f6c65b87fad81d90b03
 - path: github.com/pmezard/go-difflib
   rev: 792786c7400a136282c1664665ae0a8db921c6c2
 - path: github.com/spaolacci/murmur3
   rev: 0d12bf811670bf6a1a63828dfbd003eded177fce
 - path: github.com/stretchr/testify
-  rev: c5d7a69bf8a2c9c374798160849c071093e41dd1
+  rev: 8d64eb7173c7753d6419fd4a9caf057398611364
 - path: github.com/vrischmann/envconfig
-  rev: f8d392b1c03126ca4489a873e8ea8284ac7435f3
+  rev: 9e6e1c4d3b73427d03118518603bb904d9c55236
+- path: go.mozilla.org/hawk
+  rev: b9704677ebefdeb77a3c0167e15b852d08d5ad98
 - path: golang.org/x/crypto
-  rev: 7b428712abe956d0e9e1e9a01e163fb6c7171438
+  rev: 5bcd134fee4dd1475da17714aac19c0aa0142e2f
 - path: golang.org/x/sys
-  rev: f64b50fbea64174967a8882830d621a18ee1548e
+  rev: 076b546753157f758b316e59bcb51e6807c04057
 - path: gopkg.in/check.v1
   rev: 4f90aeace3a26ad7021961c297b22c42160c7b25
