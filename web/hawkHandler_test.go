@@ -89,16 +89,16 @@ func testtoken(secret string, uid uint64) token.Token {
 	return tok
 }
 
-func TestHawkAuthGET(t *testing.T) {
-
+func TestHawkUidMismatchFails(t *testing.T) {
 	var uid uint64 = 12345
 
 	hawkH := NewHawkHandler(EchoHandler, []string{"sekret"})
 	tok := testtoken(hawkH.secrets[0], uid)
 
-	req, _ := hawkrequest("GET", syncurl(uid, "info/collections"), tok)
+	// provide a different UID in the sync url
+	req, _ := hawkrequest("GET", syncurl("67890", "info/collections"), tok)
 	resp := sendrequest(req, hawkH)
-	assert.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, http.StatusBadRequest, resp.Code)
 }
 
 func TestHawkMultiSecrets(t *testing.T) {
@@ -117,6 +117,18 @@ func TestHawkMultiSecrets(t *testing.T) {
 	}
 }
 
+func TestHawkAuthGET(t *testing.T) {
+
+	var uid uint64 = 12345
+
+	hawkH := NewHawkHandler(EchoHandler, []string{"sekret"})
+	tok := testtoken(hawkH.secrets[0], uid)
+
+	req, _ := hawkrequest("GET", syncurl(uid, "info/collections"), tok)
+	resp := sendrequest(req, hawkH)
+	assert.Equal(t, http.StatusOK, resp.Code)
+}
+
 // TestHawkAuthPOST tests if the payload validation
 func TestHawkAuthPOST(t *testing.T) {
 	t.Parallel()
@@ -130,7 +142,7 @@ func TestHawkAuthPOST(t *testing.T) {
 	payload := "JUST A BUNCH OF DATA"
 	body := bytes.NewBufferString(payload)
 
-	req, _ := hawkrequestbody("POST", "/anything", tok, "text/plain", body)
+	req, _ := hawkrequestbody("POST", syncurl(uid, "storage/collections/boom"), tok, "text/plain", body)
 	resp := sendrequest(req, hawkH)
 	assert.Equal(http.StatusOK, resp.Code)
 
