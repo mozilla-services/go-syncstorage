@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -73,11 +75,9 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if tokenError != nil {
-		if log.GetLevel() == log.DebugLevel {
-			log.WithFields(log.Fields{
-				"err": tokenError.Error(),
-			}).Debug("Hawk token error")
-		}
+		log.WithFields(log.Fields{
+			"err": tokenError.Error(),
+		}).Info("Hawk token error")
 
 		http.Error(w,
 			fmt.Sprintf("Invalid token: %s", tokenError.Error()),
@@ -97,7 +97,17 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 4: Validate the payload hash if it exists
+	// Step 4: Make sure token UID matches path UID for sync paths
+	if strings.HasPrefix(r.URL.Path, "/1.5/") {
+		expecteUID := strconv.FormatUint(parsedToken.Payload.Uid, 10)
+		pathUID := extractUID(r.URL.Path)
+		if expecteUID != pathUID {
+			http.Error(w, "Sync URL UID != Token UID", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Step 5: Validate the payload hash if it exists
 	if auth.Hash != nil {
 		if r.Header.Get("Content-Type") == "" {
 			http.Error(w, "Content-Type missing", http.StatusBadRequest)
@@ -121,7 +131,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Step 5: *woot*, pass it on
+	// Step 6: *woot*, pass it on
 	h.handler.ServeHTTP(w, r)
 }
 
