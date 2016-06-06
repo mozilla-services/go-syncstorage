@@ -39,6 +39,9 @@ func main() {
 	// All sync 1.5 access requires Hawk Authorization
 	router = web.NewHawkHandler(router, config.Secrets)
 
+	// Serve non sync 1.5 endpoints
+	router = web.NewInfoHandler(router)
+
 	// Log all the things
 	router = web.NewLogHandler(router)
 

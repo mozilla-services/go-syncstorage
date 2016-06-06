@@ -234,3 +234,11 @@ func AcceptHeaderOk(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 }
+
+// OKResponse writes a 200 response with a simple string body
+func OKResponse(w http.ResponseWriter, s string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, s)
+}
