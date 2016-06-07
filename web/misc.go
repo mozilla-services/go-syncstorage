@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
@@ -188,7 +189,7 @@ func JSON(w http.ResponseWriter, r *http.Request, val interface{}) {
 // JsonNewline returns data as newline separated or as a single
 // json array
 func JsonNewline(w http.ResponseWriter, r *http.Request, val interface{}) {
-	if r.Header.Get("Accept") == "application/newlines" {
+	if strings.Contains(r.Header.Get("Accept"), "application/newlines") {
 		NewLine(w, r, val)
 	} else {
 		JSON(w, r, val)
@@ -221,18 +222,36 @@ func ConvertTimestamp(ts string) (int, error) {
 // AcceptHeaderOk checks the Accept header is
 // application/json or application/newlines. If not, it will write an error and
 // return false
+var (
+	rewriteAccept = []string{"*/*", "application/*", "*/json"}
+)
+
 func AcceptHeaderOk(w http.ResponseWriter, r *http.Request) bool {
 	accept := r.Header.Get("Accept")
-	switch {
-	case accept == "":
+
+	if accept == "" {
 		r.Header.Set("Accept", "application/json")
 		return true
-	case accept != "application/json" && accept != "application/newlines":
-		http.Error(w, http.StatusText(http.StatusNotAcceptable), http.StatusNotAcceptable)
-		return false
-	default:
+	}
+
+	if strings.Contains(accept, "application/json") ||
+		strings.Contains(accept, "application/newlines") {
 		return true
 	}
+
+	for _, rewrite := range rewriteAccept {
+		if strings.Contains(accept, rewrite) {
+			r.Header.Set("Accept", "application/json")
+			return true
+		}
+	}
+
+	// everything else is an error
+	http.Error(w,
+		http.StatusText(http.StatusNotAcceptable),
+		http.StatusNotAcceptable)
+
+	return false
 }
 
 // OKResponse writes a 200 response with a simple string body
