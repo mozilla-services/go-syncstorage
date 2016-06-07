@@ -59,6 +59,9 @@ type handlerPool struct {
 	lrumap     map[string]*list.Element // to find *list.Element by key
 	ttl        time.Duration
 	stopSignal chan bool
+
+	// garbage collection cycle time ms
+	gcCycleMax int
 }
 
 func newHandlerPool(basepath string, ttl time.Duration) *handlerPool {
@@ -89,6 +92,7 @@ func newHandlerPool(basepath string, ttl time.Duration) *handlerPool {
 		lrumap:     make(map[string]*list.Element),
 		ttl:        ttl,
 		stopSignal: make(chan bool),
+		gcCycleMax: 10000, // 10K ms = 10s
 	}
 
 	return pool
@@ -102,7 +106,7 @@ func (p *handlerPool) startGarbageCollector() {
 		for {
 
 			// smooth out cleanup of handlers over a period of time
-			toWait := time.Duration(rand.Intn(8)+2) * time.Second
+			toWait := time.Duration(1000+rand.Intn(p.gcCycleMax)) * time.Millisecond
 			numElements := p.lru.Len()
 
 			// max cleanup of 10% ~ 20%
