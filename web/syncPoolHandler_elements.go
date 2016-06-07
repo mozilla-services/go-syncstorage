@@ -59,6 +59,9 @@ type handlerPool struct {
 	lrumap     map[string]*list.Element // to find *list.Element by key
 	ttl        time.Duration
 	stopSignal chan bool
+
+	// garbage collection cycle time ms
+	gcCycleMax int
 }
 
 func newHandlerPool(basepath string, ttl time.Duration) *handlerPool {
@@ -89,23 +92,42 @@ func newHandlerPool(basepath string, ttl time.Duration) *handlerPool {
 		lrumap:     make(map[string]*list.Element),
 		ttl:        ttl,
 		stopSignal: make(chan bool),
+		gcCycleMax: 10000, // 10K ms = 10s
 	}
 
 	return pool
 }
 
 func (p *handlerPool) startGarbageCollector() {
+
+	// a goroutine that triggers a cleanup cycle
+	// every few seconds.
 	go func() {
 		for {
 
-			// add a little fuzzing to the time so not all the
-			// cleanup happens at the same time
-			fuzzfactor := rand.Int63n(15) // 1x => 1.5x ttl
-			fuzzttl := time.Duration(int64(p.ttl) * fuzzfactor / 10)
+			// smooth out cleanup of handlers over a period of time
+			toWait := time.Duration(1000+rand.Intn(p.gcCycleMax)) * time.Millisecond
+			numElements := p.lru.Len()
+
+			// max cleanup of 10% ~ 20%
+			maxClean := 1 + numElements/10 + rand.Intn(1+numElements/10)
 
 			select {
-			case <-time.After(fuzzttl):
-				p.cleanupHandlers(p.ttl)
+			case <-time.After(toWait):
+
+				if p.lru.Len() == 0 {
+					continue
+				}
+
+				if log.GetLevel() == log.DebugLevel {
+					log.WithFields(log.Fields{
+						"waited":       toWait,
+						"max_to_clean": maxClean,
+						"num_handlers": len(p.elements),
+					}).Debug("syncPoolHandler.GarbageCollect")
+				}
+
+				p.cleanupHandlers(p.ttl, maxClean)
 			case <-p.stopSignal:
 				return
 			}
@@ -113,12 +135,15 @@ func (p *handlerPool) startGarbageCollector() {
 	}()
 }
 
-func (p *handlerPool) cleanupHandlers(ttl time.Duration) {
+func (p *handlerPool) cleanupHandlers(ttl time.Duration, maxClean int) {
+	numCleaned := 0
 	lruElement := p.lru.Back()
-	for lruElement != nil {
+	for lruElement != nil && numCleaned <= maxClean {
 		element := lruElement.Value.(*poolElement)
+
+		// abort if there is nothing to do
 		if element.lastUsed() <= ttl {
-			continue
+			return
 		}
 
 		element.handler.StopHTTP()
@@ -131,13 +156,14 @@ func (p *handlerPool) cleanupHandlers(ttl time.Duration) {
 		p.Unlock()
 
 		lruElement = next
+		numCleaned++
 	}
 }
 
 // stopHandlers stops all handlers from servicing HTTP requests
 func (p *handlerPool) stopHandlers() {
 	close(p.stopSignal)
-	p.cleanupHandlers(-1)
+	p.cleanupHandlers(-1, p.lru.Len())
 }
 
 func (p *handlerPool) getElement(uid string) (*poolElement, error) {

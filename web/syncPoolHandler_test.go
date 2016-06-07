@@ -126,7 +126,9 @@ func TestPoolElementGarbageCollector(t *testing.T) {
 
 	ttl := 5 * time.Millisecond
 	handler := NewSyncPoolHandler(":memory:", 1, ttl)
+
 	pool := handler.pools[0]
+	pool.gcCycleMax = 1 // ensure it happens fast (1ms)
 
 	pool.getElement(uniqueUID())
 	pool.getElement(uniqueUID())
@@ -134,6 +136,6 @@ func TestPoolElementGarbageCollector(t *testing.T) {
 	assert.Equal(2, pool.lru.Len())
 
 	pool.startGarbageCollector()
-	time.Sleep(3 * ttl)
+	time.Sleep(1500 * time.Millisecond)
 	assert.Equal(0, pool.lru.Len())
 }
