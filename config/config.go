@@ -3,7 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"time"
+	"runtime"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -19,6 +19,12 @@ type LogConfig struct {
 	Mozlog bool `envconfig:"default=false"`
 }
 
+type PoolConfig struct {
+	Num     int `envconfig:"default=0"`
+	TTL     int `envconfig:"default=500"`
+	MaxSize int `envconfig:"default=25"`
+}
+
 var Config struct {
 	Log      *LogConfig
 	Hostname string `envconfig:"optional"`
@@ -26,7 +32,7 @@ var Config struct {
 	Port     int
 	Secrets  []string
 	DataDir  string
-	TTL      int `envconfig:"default=300"` // seconds to wait before closing a user's api handler
+	Pool     *PoolConfig
 
 	// Enable the pprof web endpoint /debug/pprof/
 	EnablePprof bool `envconfig:"default=false"`
@@ -40,7 +46,7 @@ var (
 	Port        int
 	DataDir     string
 	Secrets     []string
-	TTL         time.Duration
+	Pool        *PoolConfig
 	EnablePprof bool
 )
 
@@ -87,8 +93,12 @@ func init() {
 		Config.Hostname, _ = os.Hostname()
 	}
 
-	if Config.TTL <= 0 {
-		log.Fatal("TTL must be > 0")
+	if Config.Pool.Num <= 0 {
+		Config.Pool.Num = runtime.NumCPU()
+	}
+
+	if Config.Pool.TTL <= 0 {
+		log.Fatal("POOL_TTL must be > 0")
 	}
 
 	Hostname = Config.Hostname
@@ -97,6 +107,6 @@ func init() {
 	Port = Config.Port
 	Secrets = Config.Secrets
 	DataDir = Config.DataDir
-	TTL = time.Duration(Config.TTL) * time.Second
+	Pool = Config.Pool
 	EnablePprof = Config.EnablePprof
 }

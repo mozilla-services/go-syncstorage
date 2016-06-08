@@ -33,7 +33,12 @@ func main() {
 	var router http.Handler
 
 	// The base functionality is the sync 1.5 api + legacy weave hacks
-	poolHandler := web.NewSyncPoolHandler(config.DataDir, 1, config.TTL)
+	poolHandler := web.NewSyncPoolHandler(&web.SyncPoolConfig{
+		Basepath:    config.DataDir,
+		NumPools:    config.Pool.Num,
+		TTL:         time.Duration(config.Pool.TTL) * time.Second,
+		MaxPoolSize: config.Pool.MaxSize,
+	})
 	router = web.NewWeaveHandler(poolHandler)
 
 	// All sync 1.5 access requires Hawk Authorization
@@ -74,9 +79,11 @@ func main() {
 	}
 
 	log.WithFields(log.Fields{
-		"addr": listenOn,
-		"PID":  os.Getpid(),
-		"TTL":  config.TTL,
+		"addr":          listenOn,
+		"PID":           os.Getpid(),
+		"POOL_NUM":      config.Pool.Num,
+		"POOL_MAX_SIZE": config.Pool.MaxSize,
+		"POOL_TTL":      config.Pool.TTL,
 	}).Info("HTTP Listening at " + listenOn)
 
 	err := httpdown.ListenAndServe(server, hd)

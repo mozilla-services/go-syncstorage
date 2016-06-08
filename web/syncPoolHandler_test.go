@@ -8,6 +8,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func testSyncPoolConfig() *SyncPoolConfig {
+	return &SyncPoolConfig{
+		Basepath:    ":memory:",
+		NumPools:    1,
+		TTL:         5 * time.Minute,
+		MaxPoolSize: 10,
+	}
+}
+
 func TestSyncPoolHandlerStatusConflict(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -17,7 +26,7 @@ func TestSyncPoolHandlerStatusConflict(t *testing.T) {
 	assert := assert.New(t)
 
 	uid := uniqueUID()
-	handler := NewSyncPoolHandler(":memory:", 1, time.Hour)
+	handler := NewSyncPoolHandler(testSyncPoolConfig())
 
 	el, err := handler.pools[0].getElement(uid)
 	if !assert.NoError(err) {
@@ -40,7 +49,7 @@ func TestSyncPoolHandlerStatusConflict(t *testing.T) {
 
 func TestSyncPoolHandlerStop(t *testing.T) {
 	assert := assert.New(t)
-	handler := NewSyncPoolHandler(":memory:", 1, time.Hour)
+	handler := NewSyncPoolHandler(testSyncPoolConfig())
 
 	uids := []string{uniqueUID(), uniqueUID(), uniqueUID()}
 
@@ -76,7 +85,7 @@ func TestSyncPoolHandlerLRU(t *testing.T) {
 	uid1 := uniqueUID()
 	uid2 := uniqueUID()
 
-	handler := NewSyncPoolHandler(":memory:", 1, time.Hour)
+	handler := NewSyncPoolHandler(testSyncPoolConfig())
 	pool := handler.pools[0]
 
 	pool.getElement(uid0)
@@ -105,7 +114,7 @@ func TestSyncPoolHandlerLRU(t *testing.T) {
 func TestPoolElementLastUsed(t *testing.T) {
 	assert := assert.New(t)
 
-	handler := NewSyncPoolHandler(":memory:", 1, time.Hour)
+	handler := NewSyncPoolHandler(testSyncPoolConfig())
 	pool := handler.pools[0]
 
 	uid := uniqueUID()
@@ -125,7 +134,12 @@ func TestPoolElementGarbageCollector(t *testing.T) {
 	assert := assert.New(t)
 
 	ttl := 5 * time.Millisecond
-	handler := NewSyncPoolHandler(":memory:", 1, ttl)
+	handler := NewSyncPoolHandler(&SyncPoolConfig{
+		Basepath:    ":memory:",
+		NumPools:    1,
+		TTL:         ttl,
+		MaxPoolSize: 10,
+	})
 
 	pool := handler.pools[0]
 	pool.gcCycleMax = 1 // ensure it happens fast (1ms)
