@@ -45,6 +45,11 @@ func main() {
 	// Log all the things
 	router = web.NewLogHandler(router)
 
+	if config.EnablePprof {
+		log.Info("Enabling pprof profile at /debug/pprof/")
+		router = web.NewPprofHandler(router)
+	}
+
 	listenOn := config.Host + ":" + strconv.Itoa(config.Port)
 	server := &http.Server{
 		Addr:    listenOn,

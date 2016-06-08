@@ -28,18 +28,20 @@ var Config struct {
 	DataDir  string
 	TTL      int `envconfig:"default=300"` // seconds to wait before closing a user's api handler
 
-	MaxOpenFiles int `envconfig:"default=64"`
+	// Enable the pprof web endpoint /debug/pprof/
+	EnablePprof bool `envconfig:"default=false"`
 }
 
 // so we can use config.Port and not config.Config.Port
 var (
-	Hostname string
-	Log      *LogConfig
-	Host     string
-	Port     int
-	DataDir  string
-	Secrets  []string
-	TTL      time.Duration
+	Hostname    string
+	Log         *LogConfig
+	Host        string
+	Port        int
+	DataDir     string
+	Secrets     []string
+	TTL         time.Duration
+	EnablePprof bool
 )
 
 func init() {
@@ -96,4 +98,5 @@ func init() {
 	Secrets = Config.Secrets
 	DataDir = Config.DataDir
 	TTL = time.Duration(Config.TTL) * time.Second
+	EnablePprof = Config.EnablePprof
 }
