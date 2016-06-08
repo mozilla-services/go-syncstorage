@@ -60,11 +60,14 @@ type handlerPool struct {
 	ttl        time.Duration
 	stopSignal chan bool
 
+	// the max size of the pool
+	maxPoolSize int
+
 	// garbage collection cycle time ms
 	gcCycleMax int
 }
 
-func newHandlerPool(basepath string, ttl time.Duration) *handlerPool {
+func newHandlerPool(basepath string, ttl time.Duration, maxPoolSize int) *handlerPool {
 
 	var path []string
 
@@ -86,13 +89,14 @@ func newHandlerPool(basepath string, ttl time.Duration) *handlerPool {
 	}
 
 	pool := &handlerPool{
-		base:       path,
-		elements:   make(map[string]*poolElement),
-		lru:        list.New(),
-		lrumap:     make(map[string]*list.Element),
-		ttl:        ttl,
-		stopSignal: make(chan bool),
-		gcCycleMax: 10000, // 10K ms = 10s
+		base:        path,
+		elements:    make(map[string]*poolElement),
+		lru:         list.New(),
+		lrumap:      make(map[string]*list.Element),
+		ttl:         ttl,
+		maxPoolSize: maxPoolSize,
+		stopSignal:  make(chan bool),
+		gcCycleMax:  5000, // in ms
 	}
 
 	return pool
@@ -191,6 +195,14 @@ func (p *handlerPool) getElement(uid string) (*poolElement, error) {
 
 			// TODO clean the UID of any weird characters, ie: os.PathSeparator
 			dbFile = storageDir + string(os.PathSeparator) + filename
+		}
+
+		if p.lru.Len() > p.maxPoolSize {
+			// nasty, kinda low level locking. Since p.cleanuphandlers also
+			// locks, unlock/lock here to avoid deadlocks
+			p.Unlock()
+			p.cleanupHandlers(-1, 1+p.maxPoolSize/10) // clean up ~10%
+			p.Lock()
 		}
 
 		db, err := syncstorage.NewDB(dbFile)

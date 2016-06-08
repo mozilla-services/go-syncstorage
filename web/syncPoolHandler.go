@@ -24,10 +24,26 @@ type SyncPoolHandler struct {
 	pools []*handlerPool
 }
 
-func NewSyncPoolHandler(basepath string, numPools int, ttl time.Duration) *SyncPoolHandler {
-	pools := make([]*handlerPool, numPools, numPools)
-	for i := 0; i < numPools; i++ {
-		pools[i] = newHandlerPool(basepath, ttl)
+type SyncPoolConfig struct {
+	Basepath    string
+	NumPools    int
+	TTL         time.Duration
+	MaxPoolSize int
+}
+
+func NewDefaultSyncPoolConfig(basepath string) *SyncPoolConfig {
+	return &SyncPoolConfig{
+		Basepath:    basepath,
+		NumPools:    1,
+		TTL:         5 * time.Minute,
+		MaxPoolSize: 100,
+	}
+}
+
+func NewSyncPoolHandler(config *SyncPoolConfig) *SyncPoolHandler {
+	pools := make([]*handlerPool, config.NumPools, config.NumPools)
+	for i := 0; i < config.NumPools; i++ {
+		pools[i] = newHandlerPool(config.Basepath, config.TTL, config.MaxPoolSize)
 		pools[i].startGarbageCollector()
 	}
 
