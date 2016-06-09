@@ -21,7 +21,6 @@ type LogConfig struct {
 
 type PoolConfig struct {
 	Num     int `envconfig:"default=0"`
-	TTL     int `envconfig:"default=500"`
 	MaxSize int `envconfig:"default=25"`
 }
 
@@ -95,10 +94,6 @@ func init() {
 
 	if Config.Pool.Num <= 0 {
 		Config.Pool.Num = runtime.NumCPU()
-	}
-
-	if Config.Pool.TTL <= 0 {
-		log.Fatal("POOL_TTL must be > 0")
 	}
 
 	Hostname = Config.Hostname

@@ -43,8 +43,7 @@ func NewDefaultSyncPoolConfig(basepath string) *SyncPoolConfig {
 func NewSyncPoolHandler(config *SyncPoolConfig) *SyncPoolHandler {
 	pools := make([]*handlerPool, config.NumPools, config.NumPools)
 	for i := 0; i < config.NumPools; i++ {
-		pools[i] = newHandlerPool(config.Basepath, config.TTL, config.MaxPoolSize)
-		pools[i].startGarbageCollector()
+		pools[i] = newHandlerPool(config.Basepath, config.MaxPoolSize)
 	}
 
 	server := &SyncPoolHandler{

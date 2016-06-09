@@ -36,7 +36,6 @@ func main() {
 	poolHandler := web.NewSyncPoolHandler(&web.SyncPoolConfig{
 		Basepath:    config.DataDir,
 		NumPools:    config.Pool.Num,
-		TTL:         time.Duration(config.Pool.TTL) * time.Second,
 		MaxPoolSize: config.Pool.MaxSize,
 	})
 	router = web.NewWeaveHandler(poolHandler)
@@ -83,7 +82,6 @@ func main() {
 		"PID":           os.Getpid(),
 		"POOL_NUM":      config.Pool.Num,
 		"POOL_MAX_SIZE": config.Pool.MaxSize,
-		"POOL_TTL":      config.Pool.TTL,
 	}).Info("HTTP Listening at " + listenOn)
 
 	err := httpdown.ListenAndServe(server, hd)
