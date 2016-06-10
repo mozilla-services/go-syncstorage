@@ -3,7 +3,6 @@ package web
 import (
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -12,7 +11,6 @@ func testSyncPoolConfig() *SyncPoolConfig {
 	return &SyncPoolConfig{
 		Basepath:    ":memory:",
 		NumPools:    1,
-		TTL:         5 * time.Minute,
 		MaxPoolSize: 10,
 	}
 }
@@ -111,45 +109,13 @@ func TestSyncPoolHandlerLRU(t *testing.T) {
 	assert.Equal(uid0, el.Value.(*poolElement).handler.uid)
 }
 
-func TestPoolElementLastUsed(t *testing.T) {
-	assert := assert.New(t)
-
+func TestSyncPoolCleanupHandlers(t *testing.T) {
 	handler := NewSyncPoolHandler(testSyncPoolConfig())
 	pool := handler.pools[0]
+	pool.getElement("1")
+	pool.getElement("2")
+	pool.getElement("3")
 
-	uid := uniqueUID()
-	el, _ := pool.getElement(uid)
-
-	lastUsed := el.lastUsed()
-	time.Sleep(time.Millisecond)
-
-	el, _ = pool.getElement(uid)
-	assert.NotEqual(lastUsed, el.lastUsed())
-}
-
-func TestPoolElementGarbageCollector(t *testing.T) {
-
-	t.Parallel()
-
-	assert := assert.New(t)
-
-	ttl := 5 * time.Millisecond
-	handler := NewSyncPoolHandler(&SyncPoolConfig{
-		Basepath:    ":memory:",
-		NumPools:    1,
-		TTL:         ttl,
-		MaxPoolSize: 10,
-	})
-
-	pool := handler.pools[0]
-	pool.gcCycleMax = 1 // ensure it happens fast (1ms)
-
-	pool.getElement(uniqueUID())
-	pool.getElement(uniqueUID())
-
-	assert.Equal(2, pool.lru.Len())
-
-	pool.startGarbageCollector()
-	time.Sleep(1500 * time.Millisecond)
-	assert.Equal(0, pool.lru.Len())
+	pool.cleanupHandlers(2)
+	assert.Equal(t, 1, pool.lru.Len())
 }

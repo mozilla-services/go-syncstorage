@@ -26,23 +26,8 @@ type elementState uint8
 type poolElement struct {
 	sync.Mutex
 
-	uid       string
-	handler   *SyncUserHandler
-	lastTouch time.Time
-}
-
-// touch updates the last time the poolElement was used
-func (p *poolElement) touch() {
-	p.Lock()
-	defer p.Unlock()
-	p.lastTouch = time.Now()
-}
-
-// lastUsed returns how long ago the element was used
-func (p *poolElement) lastUsed() time.Duration {
-	p.Lock()
-	defer p.Unlock()
-	return time.Now().Sub(p.lastTouch)
+	uid     string
+	handler *SyncUserHandler
 }
 
 // handlerPool has a big job. It opens DBs on demand and
@@ -55,19 +40,14 @@ type handlerPool struct {
 
 	// lru keeps a list with the recently used elements in Front and the
 	// oldest in the back
-	lru        *list.List
-	lrumap     map[string]*list.Element // to find *list.Element by key
-	ttl        time.Duration
-	stopSignal chan bool
+	lru    *list.List
+	lrumap map[string]*list.Element // to find *list.Element by key
 
 	// the max size of the pool
 	maxPoolSize int
-
-	// garbage collection cycle time ms
-	gcCycleMax int
 }
 
-func newHandlerPool(basepath string, ttl time.Duration, maxPoolSize int) *handlerPool {
+func newHandlerPool(basepath string, maxPoolSize int) *handlerPool {
 
 	var path []string
 
@@ -93,62 +73,17 @@ func newHandlerPool(basepath string, ttl time.Duration, maxPoolSize int) *handle
 		elements:    make(map[string]*poolElement),
 		lru:         list.New(),
 		lrumap:      make(map[string]*list.Element),
-		ttl:         ttl,
 		maxPoolSize: maxPoolSize,
-		stopSignal:  make(chan bool),
-		gcCycleMax:  5000, // in ms
 	}
 
 	return pool
 }
 
-func (p *handlerPool) startGarbageCollector() {
-
-	// a goroutine that triggers a cleanup cycle
-	// every few seconds.
-	go func() {
-		for {
-
-			// smooth out cleanup of handlers over a period of time
-			toWait := time.Duration(1000+rand.Intn(p.gcCycleMax)) * time.Millisecond
-			numElements := p.lru.Len()
-
-			// max cleanup of 10% ~ 20%
-			maxClean := 1 + numElements/10 + rand.Intn(1+numElements/10)
-
-			select {
-			case <-time.After(toWait):
-
-				if p.lru.Len() == 0 {
-					continue
-				}
-
-				if log.GetLevel() == log.DebugLevel {
-					log.WithFields(log.Fields{
-						"waited":       toWait,
-						"max_to_clean": maxClean,
-						"num_handlers": len(p.elements),
-					}).Debug("syncPoolHandler.GarbageCollect")
-				}
-
-				p.cleanupHandlers(p.ttl, maxClean)
-			case <-p.stopSignal:
-				return
-			}
-		}
-	}()
-}
-
-func (p *handlerPool) cleanupHandlers(ttl time.Duration, maxClean int) {
+func (p *handlerPool) cleanupHandlers(maxClean int) {
 	numCleaned := 0
 	lruElement := p.lru.Back()
-	for lruElement != nil && numCleaned <= maxClean {
+	for lruElement != nil && numCleaned < maxClean {
 		element := lruElement.Value.(*poolElement)
-
-		// abort if there is nothing to do
-		if element.lastUsed() <= ttl {
-			return
-		}
 
 		element.handler.StopHTTP()
 		next := lruElement.Prev()
@@ -166,8 +101,7 @@ func (p *handlerPool) cleanupHandlers(ttl time.Duration, maxClean int) {
 
 // stopHandlers stops all handlers from servicing HTTP requests
 func (p *handlerPool) stopHandlers() {
-	close(p.stopSignal)
-	p.cleanupHandlers(-1, p.lru.Len())
+	p.cleanupHandlers(p.lru.Len())
 }
 
 func (p *handlerPool) getElement(uid string) (*poolElement, error) {
@@ -201,7 +135,7 @@ func (p *handlerPool) getElement(uid string) (*poolElement, error) {
 			// nasty, kinda low level locking. Since p.cleanuphandlers also
 			// locks, unlock/lock here to avoid deadlocks
 			p.Unlock()
-			p.cleanupHandlers(-1, 1+p.maxPoolSize/10) // clean up ~10%
+			p.cleanupHandlers(1 + p.maxPoolSize/10) // clean up ~10%
 			p.Lock()
 		}
 
@@ -226,8 +160,6 @@ func (p *handlerPool) getElement(uid string) (*poolElement, error) {
 
 		p.lru.MoveToFront(p.lrumap[uid])
 	}
-
-	element.touch()
 
 	return element, nil
 }
