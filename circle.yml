@@ -42,11 +42,6 @@ dependencies:
 
     - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
     - cp go-syncstorage $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1
-    - >
-        sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1 |
-        awk '{print $1}' |
-        tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
-
     - docker pull mozilla/server-syncstorage:latest
 
 test:
