@@ -10,7 +10,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/mostlygeek/go-syncstorage/syncstorage"
+	"github.com/mozilla-services/go-syncstorage/syncstorage"
 	"github.com/pkg/errors"
 )
 

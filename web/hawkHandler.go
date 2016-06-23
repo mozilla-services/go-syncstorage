@@ -13,7 +13,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/allegro/bigcache"
-	"github.com/mostlygeek/go-syncstorage/token"
+	"github.com/mozilla-services/go-syncstorage/token"
 	"go.mozilla.org/hawk"
 )
 

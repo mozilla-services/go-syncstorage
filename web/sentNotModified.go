@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/mostlygeek/go-syncstorage/syncstorage"
+	"github.com/mozilla-services/go-syncstorage/syncstorage"
 )
 
 // The code below is a little weird and inelegant. Basically its purpose is

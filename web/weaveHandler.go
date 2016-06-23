@@ -3,7 +3,7 @@ package web
 import (
 	"net/http"
 
-	"github.com/mostlygeek/go-syncstorage/syncstorage"
+	"github.com/mozilla-services/go-syncstorage/syncstorage"
 )
 
 // Legacy Weave Error handling
