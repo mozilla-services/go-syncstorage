@@ -2,9 +2,7 @@ vendors:
 - path: github.com/Sirupsen/logrus
   rev: f3cfb454f4c209e6668c95216c4744b8fddb2356
 - path: github.com/allegro/bigcache
-  rev: 7b000bdb362a2dad08c6e7abf5b0315b6aabc9cf
-- path: github.com/coocood/freecache
-  rev: 1aa53c26cb85c33eef6d832305447982e95f844c
+  rev: 966b0b4789807113be5c356462bcae45af45d9d7
 - path: github.com/davecgh/go-spew
   rev: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
 - path: github.com/facebookgo/clock
@@ -24,26 +22,24 @@ vendors:
 - path: github.com/gorilla/context
   rev: aed02d124ae4a0e94fea4541c8effd05bf0c8296
 - path: github.com/gorilla/mux
-  rev: bd09be08ed4377796d312df0a45314e11b8f5dc1
+  rev: 9fa818a44c2bf1396a17f9d5a3c0f6dd39d2ff8e
 - path: github.com/mattn/go-sqlite3
   rev: 38ee283dabf11c9cbdb968eebd79b1fa7acbabe6
 - path: github.com/mostlygeek/go-debug
   rev: a000784b6a2ed85c1c86924c6c638031587ea070
 - path: github.com/pkg/errors
-  rev: 431554f80b8ecf5058547f6c65b87fad81d90b03
+  rev: cbd18b5440315aa74a17dee2e50b67675b872b49
 - path: github.com/pmezard/go-difflib
   rev: 792786c7400a136282c1664665ae0a8db921c6c2
-- path: github.com/spaolacci/murmur3
-  rev: 0d12bf811670bf6a1a63828dfbd003eded177fce
 - path: github.com/stretchr/testify
-  rev: 8d64eb7173c7753d6419fd4a9caf057398611364
+  rev: d77da356e56a7428ad25149ca77381849a6a5232
 - path: github.com/vrischmann/envconfig
   rev: 9e6e1c4d3b73427d03118518603bb904d9c55236
 - path: go.mozilla.org/hawk
   rev: b9704677ebefdeb77a3c0167e15b852d08d5ad98
 - path: golang.org/x/crypto
-  rev: 5bcd134fee4dd1475da17714aac19c0aa0142e2f
+  rev: f3241ce8505855877cc8a9717bd61a0f7c4ea83c
 - path: golang.org/x/sys
-  rev: 076b546753157f758b316e59bcb51e6807c04057
+  rev: 62bee037599929a6e9146f29d10dd5208c43507d
 - path: gopkg.in/check.v1
   rev: 4f90aeace3a26ad7021961c297b22c42160c7b25
