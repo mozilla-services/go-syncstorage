@@ -89,4 +89,4 @@ A linux binary is also available as build artifacts from [Circle CI](https://cir
 
 # License
 
-See [LICENSE](LICENSE).
+See [LICENSE](LICENSE.txt).
