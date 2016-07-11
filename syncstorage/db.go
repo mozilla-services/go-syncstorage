@@ -816,7 +816,7 @@ func (d *DB) getBSOs(
 
 	cutOffTTL := Now()
 	query := "SELECT Id, SortIndex, Payload, Modified, TTL FROM BSO "
-	where := "WHERE CollectionId=? AND Modified > ? AND TTL>=?"
+	where := "WHERE CollectionId=? AND Modified > ? AND TTL > ?"
 	values := []interface{}{cId, newer, cutOffTTL}
 
 	if len(ids) > 0 {
