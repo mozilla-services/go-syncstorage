@@ -38,15 +38,9 @@ dependencies:
 
     # build image and put its sha256 into artifacts to aid verification
     - docker build -t "app:build" .
-    - docker images --no-trunc | awk '/^app/ {print $3}' | tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt
 
     - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
     - cp go-syncstorage $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1
-    - >
-        sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1 |
-        awk '{print $1}' |
-        tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
-
     - docker pull mozilla/server-syncstorage:latest
 
 test:
@@ -83,36 +77,3 @@ deployment:
       - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
       - docker tag app:build ${DOCKERHUB_REPO}:${CIRCLE_TAG}
       - docker push ${DOCKERHUB_REPO}:${CIRCLE_TAG}
-
-# this is just for dev, uncomment for testing circleci building
-#  hub_all:
-#    branch: /.*/
-#    commands:
-#      # create a version.json
-#      - >
-#          printf '{"commit":"%s","version":"%s","source":"https://github.com/%s/%s","build":"%s"}\n'
-#          "$CIRCLE_SHA1"
-#          "$CIRCLE_TAG"
-#          "$CIRCLE_PROJECT_USERNAME"
-#          "$CIRCLE_PROJECT_REPONAME"
-#          "$CIRCLE_BUILD_URL" > version.json
-#      - cp version.json $CIRCLE_ARTIFACTS
-#
-#      # build a static binary
-#      - cd "$B" && go build --ldflags '-extldflags "-static"' .
-#
-#      # build image and put its sha256 into artifacts to aid verification
-#      - docker build -t "app:build" .
-#      - docker images --no-trunc | awk '/^app/ {print $3}' | tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt
-#
-#      - test -e $CIRCLE_ARTIFACTS/bin || mkdir -p $CIRCLE_ARTIFACTS/bin
-#      - cp go-syncstorage $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1
-#      - >
-#          sha256sum $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1 |
-#          awk '{print $1}' |
-#          tee $CIRCLE_ARTIFACTS/bin/go-syncstorage-linux-amd64-$CIRCLE_SHA1-shasum256.txt
-#
-#      - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
-#      - docker tag app:build ${DOCKERHUB_REPO}:unstable
-#      - docker push ${DOCKERHUB_REPO}:unstable
-#

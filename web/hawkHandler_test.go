@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mostlygeek/go-syncstorage/syncstorage"
-	"github.com/mostlygeek/go-syncstorage/token"
+	"github.com/mozilla-services/go-syncstorage/syncstorage"
+	"github.com/mozilla-services/go-syncstorage/token"
 	"github.com/stretchr/testify/assert"
 	"go.mozilla.org/hawk"
 )

@@ -9,8 +9,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/facebookgo/httpdown"
 
-	"github.com/mostlygeek/go-syncstorage/config"
-	"github.com/mostlygeek/go-syncstorage/web"
+	"github.com/mozilla-services/go-syncstorage/config"
+	"github.com/mozilla-services/go-syncstorage/web"
 )
 
 func init() {

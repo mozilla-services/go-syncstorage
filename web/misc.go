@@ -10,7 +10,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
-	"github.com/mostlygeek/go-syncstorage/syncstorage"
+	"github.com/mozilla-services/go-syncstorage/syncstorage"
 	"github.com/pkg/errors"
 )
 

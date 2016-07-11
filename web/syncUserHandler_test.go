@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/mostlygeek/go-syncstorage/syncstorage"
+	"github.com/mozilla-services/go-syncstorage/syncstorage"
 	"github.com/stretchr/testify/assert"
 )
 
