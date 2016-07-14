@@ -47,7 +47,9 @@ func main() {
 	router = web.NewInfoHandler(router)
 
 	// Log all the things
-	router = web.NewLogHandler(router)
+	if config.Log.DisableHTTP != true {
+		router = web.NewLogHandler(router)
+	}
 
 	if config.EnablePprof {
 		log.Info("Enabling pprof profile at /debug/pprof/")

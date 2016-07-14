@@ -17,6 +17,9 @@ type LogConfig struct {
 
 	// use mozlog format
 	Mozlog bool `envconfig:"default=false"`
+
+	// Disable HTTP Logging
+	DisableHTTP bool `envconfig:"default=false"`
 }
 
 type PoolConfig struct {
@@ -47,6 +50,8 @@ var (
 	Secrets     []string
 	Pool        *PoolConfig
 	EnablePprof bool
+
+	DisableHTTPLogs bool
 )
 
 func init() {

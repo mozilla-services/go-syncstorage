@@ -39,6 +39,7 @@ The server has a few knobs that can be tweaked.
 | `SECRETS` | Comma separated list of shared secrets. Secrets are tried in order and allows for secret rotation without downtime. |
 | `LOG_LEVEL`| Log verbosity, allowed: `fatal`,`error`,`warn`,`debug`,`info`|
 | `LOG_MOZLOG` | Can be `true` or `false`. Outputs logs in [mozlog](https://github.com/mozilla-services/Dockerflow/blob/master/docs/mozlog.md) format. |
+| `LOG_DISABLE_HTTP` | Can be `true` or `false`. Disables logging of HTTP requests. |
 | `HOSTNAME` | Set a hostname value for mozlog output |
 
 ## Advanced Configuration
