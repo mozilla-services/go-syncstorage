@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/mozilla-services/go-syncstorage/syncstorage"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -82,4 +83,26 @@ func TestAcceptHeaderOk(t *testing.T) {
 		assert.Equal(t, http.StatusNotAcceptable, w.Code)
 	}
 
+}
+
+func BenchmarkNewLine(b *testing.B) {
+	writer := httptest.NewRecorder()
+
+	bso := syncstorage.BSO{
+		Id:       "BSO_id",
+		Modified: 1000020,
+		Payload: `Just some whatever ordinary playload. This just needs to be
+		          of a small length to test things out`,
+		SortIndex: 11,
+	}
+
+	data := make([]syncstorage.BSO, 100, 100)
+	for i := 0; i < len(data); i++ {
+		data[i] = bso // copy it a few times
+	}
+
+	for i := 0; i < b.N; i++ {
+		NewLine(writer, nil, data)
+		writer.Body.Reset() // clean it out
+	}
 }
