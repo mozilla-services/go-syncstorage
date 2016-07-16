@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -144,35 +145,61 @@ func InternalError(w http.ResponseWriter, r *http.Request, err error) {
 		"method": r.Method,
 		"path":   r.URL.Path,
 	}).Errorf("HTTP Error: %s", err.Error())
-	JSONError(w, err.Error(), http.StatusInternalServerError)
+
+	switch w.Header().Get("Content-Type") {
+	case "application/newlines":
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	case "":
+		fallthrough
+	case "application/json":
+		JSONError(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // NewLine prints out new line \n separated JSON objects instead of a
 // single JSON array of objects
 func NewLine(w http.ResponseWriter, r *http.Request, val interface{}) {
-	var vals []json.RawMessage
-	// make sure we can convert all of it to JSON before
-	// trying to make it all newline JSON
-	js, err := json.Marshal(val)
-	if err != nil {
-		InternalError(w, r, err)
-		return
-	}
+	if valR := reflect.ValueOf(val); valR.Kind() == reflect.Slice || valR.Kind() == reflect.Array {
+		w.Header().Set("Content-Type", "application/newlines")
+		for i := 0; i < valR.Len(); i++ {
+			if !valR.Index(i).CanInterface() {
+				continue
+			}
 
-	w.Header().Set("Content-Type", "application/newlines")
+			someValue := valR.Index(i).Interface()
+			var (
+				raw []byte
+				err error
+			)
 
-	// array of objects?
-	newlineChar := []byte("\n")
-	err = json.Unmarshal(js, &vals)
-	if err != nil { // not an array
-		w.Write(js)
-		w.Write(newlineChar)
-	} else {
-		for _, raw := range vals {
+			if jM, ok := someValue.(json.Marshaler); ok {
+				// if someValue implements json.Marshaler it's faster (~2x)
+				// to call it directly than go through json.Marshal
+				raw, err = jM.MarshalJSON()
+			} else {
+				raw, err = json.Marshal(someValue)
+			}
+
+			if err != nil {
+				InternalError(w, r, errors.Wrap(err, "web.NewLine could not marshal an item"))
+				return
+			}
+
+			// write it all into a buffer since we might error
 			w.Write(raw)
-			w.Write(newlineChar)
+			w.Write([]byte("\n"))
+		}
+	} else {
+		js, err := json.Marshal(val)
+		if err != nil {
+			InternalError(w, r, errors.Wrap(err, "web.NewLine could not marshal the object"))
+			return
 		}
 
+		w.Header().Set("Content-Type", "application/newlines")
+		w.Write(js)
+		w.Write([]byte("\n"))
 	}
 }
 
@@ -183,6 +210,7 @@ func JSON(w http.ResponseWriter, r *http.Request, val interface{}) {
 	} else {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(js)
+		w.Write([]byte("\n"))
 	}
 }
 
