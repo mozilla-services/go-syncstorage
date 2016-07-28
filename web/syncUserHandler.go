@@ -80,6 +80,20 @@ func NewSyncUserHandler(uid string, db *syncstorage.DB) *SyncUserHandler {
 	storage.HandleFunc("/{collection}/{bsoId}", server.hBsoPUT).Methods("PUT")
 	storage.HandleFunc("/{collection}/{bsoId}", server.hBsoDELETE).Methods("DELETE")
 
+	// Purge Expired BSOs
+	numPurged, err := db.PurgeExpired()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"uid": uid,
+			"err": err.Error(),
+		}).Error("NewSyncUserHandler Purge - Fail")
+	} else {
+		log.WithFields(log.Fields{
+			"uid":         uid,
+			"bsos_purged": numPurged,
+		}).Info("NewSyncUserHandler Purge - OK")
+	}
+
 	return server
 }
 
@@ -135,20 +149,6 @@ func (s *SyncUserHandler) StopHTTP() {
 	}
 
 	s.StoppableHandler.StopHTTP()
-
-	numPurged, err := s.db.PurgeExpired()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"uid": s.uid,
-			"err": err.Error(),
-		}).Error("SyncUserHandler.StopHTTP - Fail")
-	} else {
-		log.WithFields(log.Fields{
-			"uid":         s.uid,
-			"bsos_purged": numPurged,
-		}).Info("SyncUserHandler.StopHTTP - OK")
-	}
-
 	s.db.Close()
 }
 
