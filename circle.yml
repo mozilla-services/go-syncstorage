@@ -77,3 +77,11 @@ deployment:
       - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
       - docker tag app:build ${DOCKERHUB_REPO}:${CIRCLE_TAG}
       - docker push ${DOCKERHUB_REPO}:${CIRCLE_TAG}
+
+  # push any releases candidate branches to DockerHub
+  hub_release_candidates:
+    branch: /rc_.*/
+    commands:
+      - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
+      - docker tag app:build ${DOCKERHUB_REPO}:${CIRCLE_BRANCH}
+      - docker push ${DOCKERHUB_REPO}:${CIRCLE_BRANCH}
