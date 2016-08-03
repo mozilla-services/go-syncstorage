@@ -316,14 +316,8 @@ func (d *DB) DeleteCollection(cId int) (err error) {
 	}
 
 	dmlB := "DELETE FROM BSO WHERE CollectionId=?"
-	dmlC := "DELETE FROM Collections WHERE Id=?"
 
 	if _, err := tx.Exec(dmlB, cId); err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if _, err := tx.Exec(dmlC, cId); err != nil {
 		tx.Rollback()
 		return err
 	}

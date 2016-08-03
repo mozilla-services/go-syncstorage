@@ -591,17 +591,12 @@ func TestDeleteCollection(t *testing.T) {
 
 		// make sure it was deleted
 		if assert.Nil(err) {
-
 			// make sure BSOs are deleted
 			for _, bId := range bIds {
 				b, err := db.GetBSO(cId, bId)
 				assert.Exactly(ErrNotFound, err)
 				assert.Nil(b)
 			}
-
-			id, err := db.GetCollectionId(cName)
-			assert.Equal(0, id)
-			assert.Exactly(ErrNotFound, err)
 		}
 	}
 }
