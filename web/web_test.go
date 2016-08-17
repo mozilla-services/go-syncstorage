@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/mozilla-services/go-syncstorage/token"
 )
 
 func init() {
@@ -82,12 +83,26 @@ func requestheaders(method, urlStr string, body io.Reader, header http.Header, h
 
 	req, err := http.NewRequest(method, urlStr, body)
 	req.Header = header
-
 	if err != nil {
 		panic(err)
 	}
 
-	return sendrequest(req, h)
+	// add the session data in
+	// I should have used int64 from the beginning... ¯\_(ツ)_/¯
+	uid64, err := strconv.ParseUint(extractUID(urlStr), 10, 64)
+	if err != nil {
+		panic(err)
+	}
+
+	session := &Session{
+		Token: token.TokenPayload{
+			Uid: uid64,
+		},
+	}
+	reqCtx := req.WithContext(
+		NewSessionContext(req.Context(), session))
+
+	return sendrequest(reqCtx, h)
 }
 
 func sendrequest(req *http.Request, h http.Handler) *httptest.ResponseRecorder {

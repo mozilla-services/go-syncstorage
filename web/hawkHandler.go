@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -97,11 +96,14 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session := &Session{
+		Token: parsedToken.Payload,
+	}
+
 	// Step 4: Make sure token UID matches path UID for sync paths
 	if strings.HasPrefix(r.URL.Path, "/1.5/") {
-		expecteUID := strconv.FormatUint(parsedToken.Payload.Uid, 10)
 		pathUID := extractUID(r.URL.Path)
-		if expecteUID != pathUID {
+		if session.Token.UidString() != pathUID {
 			http.Error(w, "Sync URL UID != Token UID", http.StatusBadRequest)
 			return
 		}
@@ -132,7 +134,8 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 6: *woot*, pass it on
-	h.handler.ServeHTTP(w, r)
+	reqCtx := r.WithContext(NewSessionContext(r.Context(), session))
+	h.handler.ServeHTTP(w, reqCtx)
 }
 
 func (h *HawkHandler) hawkNonceNotFound(nonce string, t time.Time, creds *hawk.Credentials) bool {

@@ -74,7 +74,10 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		err     error
 	)
 
-	uid = extractUID(req.URL.Path)
+	if session, ok := SessionFromContext(req.Context()); ok {
+		uid = session.Token.UidString()
+	}
+
 	if uid == "" {
 		http.Error(w, "Invalid sync path", http.StatusBadRequest)
 		return

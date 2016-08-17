@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/hkdf"
@@ -35,6 +36,10 @@ type TokenPayload struct {
 	Uid     uint64  `json:"uid"`
 	Node    string  `json:"node"`
 	Expires float64 `json:"expires"`
+}
+
+func (t *TokenPayload) UidString() string {
+	return strconv.FormatUint(t.Uid, 10)
 }
 
 type Token struct {

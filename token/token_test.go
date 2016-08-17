@@ -10,6 +10,8 @@ package token
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_NewToken(t *testing.T) {
@@ -52,8 +54,6 @@ func Test_ParseToken(t *testing.T) {
 	if len(generatedToken.DerivedSecret) == 0 {
 		t.Error("generatedToken.DerivedSecret is empty")
 	}
-
-	//
 
 	parsedToken, err := ParseToken([]byte("thisisasecret"), generatedToken.Token)
 	if err != nil {
@@ -105,4 +105,14 @@ func Test_TokenExpired(t *testing.T) {
 		}
 	}
 
+}
+
+func TestTokenPayload(t *testing.T) {
+	payload := TokenPayload{
+		Uid:     1234,
+		Node:    "http://node.mozilla.org",
+		Expires: 1452807004.454294,
+	}
+
+	assert.Equal(t, "1234", payload.UidString())
 }

@@ -7,10 +7,26 @@ machine:
     A: "$GWS/src/github.com/$CIRCLE_PROJECT_USERNAME"
     B: "$A/$CIRCLE_PROJECT_REPONAME"
 
+    # Use to install Custom golang
+    GODIST: "go1.7.linux-amd64.tar.gz"
+    GODIST_HASH: "702ad90f705365227e902b42d91dd1a40e48ca7f67a2f4b2fd052aaa4295cd95"
+
   services:
     - docker
 
+  # install custom golang
+  post:
+    - mkdir -p download
+    - test -e download/$GODIST || curl -o download/$GODIST https://storage.googleapis.com/golang/$GODIST
+    # verify it
+    - echo "$GODIST_HASH  download/$GODIST" | sha256sum -c
+    - sudo rm -rf /usr/local/go
+    - sudo tar -C /usr/local -xzf download/$GODIST
+
 dependencies:
+  cache_directories:
+    - ~/download
+
   override:
     # ported from https://discuss.circleci.com/t/overriding-go-inference-in-the-dependencies-phase/660
     # put the source in $GOPATH
