@@ -506,7 +506,7 @@ func (s *SyncUserHandler) hCollectionGET(w http.ResponseWriter, r *http.Request)
 
 func (s *SyncUserHandler) hCollectionPOST(w http.ResponseWriter, r *http.Request) {
 	// accept text/plain from old (broken) clients
-	ct := r.Header.Get("Content-Type")
+	ct := getMediaType(r.Header.Get("Content-Type"))
 	if ct != "application/json" && ct != "text/plain" && ct != "application/newlines" {
 		sendRequestProblem(w, r, http.StatusUnsupportedMediaType, errors.Errorf("Not acceptable Content-Type: %s", ct))
 		return
@@ -890,7 +890,7 @@ func (s *SyncUserHandler) hBsoPUT(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// accept text/plain from old (broken) clients
-	ct := r.Header.Get("Content-Type")
+	ct := getMediaType(r.Header.Get("Content-Type"))
 	if ct != "application/json" && ct != "text/plain" && ct != "application/newlines" {
 		sendRequestProblem(w, r, http.StatusUnsupportedMediaType, errors.Errorf("Not acceptable Content-Type: %s", ct))
 		return

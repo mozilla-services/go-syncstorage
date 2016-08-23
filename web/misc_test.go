@@ -104,7 +104,14 @@ func TestJSONError(t *testing.T) {
 		assert.Equal(http.StatusNotAcceptable, w.Code)
 		assert.Equal(`{"err":" this \" is a \" tough\n\t\t  string for json. ''\n\t\t"}`, w.Body.String())
 	}
+}
 
+func TestGetMediaType(t *testing.T) {
+	assert := assert.New(t)
+	assert.Equal("text/plain", getMediaType("text/plain"))
+	assert.Equal("application/json", getMediaType("application/json"))
+	assert.Equal("application/json", getMediaType("application/json; a=b ; c=d"))
+	assert.Equal("", getMediaType("this is invalid:"))
 }
 
 func BenchmarkNewLine(b *testing.B) {
