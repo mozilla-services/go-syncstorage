@@ -85,6 +85,28 @@ func TestAcceptHeaderOk(t *testing.T) {
 
 }
 
+func TestJSONError(t *testing.T) {
+	assert := assert.New(t)
+
+	{
+		w := httptest.NewRecorder()
+		JSONError(w, "testing", http.StatusBadRequest)
+		assert.Equal(http.StatusBadRequest, w.Code)
+		assert.Equal(`{"err":"testing"}`, w.Body.String())
+	}
+
+	{ // make sure string is properly encoded
+		w := httptest.NewRecorder()
+		message := ` this " is a " tough
+		  string for json. ''
+		`
+		JSONError(w, message, http.StatusNotAcceptable)
+		assert.Equal(http.StatusNotAcceptable, w.Code)
+		assert.Equal(`{"err":" this \" is a \" tough\n\t\t  string for json. ''\n\t\t"}`, w.Body.String())
+	}
+
+}
+
 func BenchmarkNewLine(b *testing.B) {
 	writer := httptest.NewRecorder()
 

@@ -22,6 +22,8 @@ type SyncPoolHandler struct {
 	// use multiple pools to spread lock
 	// contention for parallel requests
 	pools []*handlerPool
+
+	userHandlerConfig *SyncUserHandlerConfig
 }
 
 type SyncPoolConfig struct {
@@ -40,14 +42,19 @@ func NewDefaultSyncPoolConfig(basepath string) *SyncPoolConfig {
 	}
 }
 
-func NewSyncPoolHandler(config *SyncPoolConfig) *SyncPoolHandler {
+func NewSyncPoolHandler(config *SyncPoolConfig, userHandlerConfig *SyncUserHandlerConfig) *SyncPoolHandler {
 	pools := make([]*handlerPool, config.NumPools, config.NumPools)
 	for i := 0; i < config.NumPools; i++ {
 		pools[i] = newHandlerPool(config.Basepath, config.MaxPoolSize)
 	}
 
+	if userHandlerConfig == nil {
+		userHandlerConfig = NewDefaultSyncUserHandlerConfig()
+	}
+
 	server := &SyncPoolHandler{
-		pools: pools,
+		pools:             pools,
+		userHandlerConfig: userHandlerConfig,
 	}
 
 	return server

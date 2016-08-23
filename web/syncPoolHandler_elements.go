@@ -146,7 +146,7 @@ func (p *handlerPool) getElement(uid string) (*poolElement, error) {
 
 		element = &poolElement{
 			uid:     uid,
-			handler: NewSyncUserHandler(uid, db),
+			handler: NewSyncUserHandler(uid, db, nil),
 		}
 
 		p.elements[uid] = element

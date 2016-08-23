@@ -15,17 +15,24 @@ const (
 	// old legacy stuff, used to keep compatibility with python/old clients
 	// https://github.com/mozilla-services/server-syncstorage/blob/fd3c8b90278cb9944cb224964af6e6dae19c9263/syncstorage/tweens.py#L17-L21
 
-	WEAVE_UNKNOWN_ERROR  = "0"
-	WEAVE_ILLEGAL_METH   = "1"  // Illegal method/protocol
-	WEAVE_MALFORMED_JSON = "6"  // Json parse failure
-	WEAVE_INVALID_WBO    = "8"  // Invalid Weave Basic Object
-	WEAVE_OVER_QUOTA     = "14" // User over quota
+	WEAVE_UNKNOWN_ERROR       = "0"
+	WEAVE_ILLEGAL_METH        = "1"  // Illegal method/protocol
+	WEAVE_MALFORMED_JSON      = "6"  // Json parse failure
+	WEAVE_INVALID_WBO         = "8"  // Invalid Weave Basic Object
+	WEAVE_OVER_QUOTA          = "14" // User over quota
+	WEAVE_SIZE_LIMIT_EXCEEDED = "17" // Batch X-Weave-* headers too large
 )
 
 func WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 	w.Write([]byte(WEAVE_INVALID_WBO))
+}
+
+func WeaveSizeLimitExceeded(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte(WEAVE_SIZE_LIMIT_EXCEEDED))
 }
 
 // WeaveHandler is a convenient and messy place to capture

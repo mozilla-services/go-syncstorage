@@ -24,7 +24,7 @@ func TestSyncPoolHandlerStatusConflict(t *testing.T) {
 	assert := assert.New(t)
 
 	uid := uniqueUID()
-	handler := NewSyncPoolHandler(testSyncPoolConfig())
+	handler := NewSyncPoolHandler(testSyncPoolConfig(), nil)
 
 	el, err := handler.pools[0].getElement(uid)
 	if !assert.NoError(err) {
@@ -47,7 +47,7 @@ func TestSyncPoolHandlerStatusConflict(t *testing.T) {
 
 func TestSyncPoolHandlerStop(t *testing.T) {
 	assert := assert.New(t)
-	handler := NewSyncPoolHandler(testSyncPoolConfig())
+	handler := NewSyncPoolHandler(testSyncPoolConfig(), nil)
 
 	uids := []string{uniqueUID(), uniqueUID(), uniqueUID()}
 
@@ -83,7 +83,7 @@ func TestSyncPoolHandlerLRU(t *testing.T) {
 	uid1 := uniqueUID()
 	uid2 := uniqueUID()
 
-	handler := NewSyncPoolHandler(testSyncPoolConfig())
+	handler := NewSyncPoolHandler(testSyncPoolConfig(), nil)
 	pool := handler.pools[0]
 
 	pool.getElement(uid0)
@@ -110,7 +110,7 @@ func TestSyncPoolHandlerLRU(t *testing.T) {
 }
 
 func TestSyncPoolCleanupHandlers(t *testing.T) {
-	handler := NewSyncPoolHandler(testSyncPoolConfig())
+	handler := NewSyncPoolHandler(testSyncPoolConfig(), nil)
 	pool := handler.pools[0]
 	pool.getElement("1")
 	pool.getElement("2")

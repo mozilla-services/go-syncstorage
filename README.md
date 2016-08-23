@@ -41,6 +41,13 @@ The server has a few knobs that can be tweaked.
 | `LOG_MOZLOG` | Can be `true` or `false`. Outputs logs in [mozlog](https://github.com/mozilla-services/Dockerflow/blob/master/docs/mozlog.md) format. |
 | `LOG_DISABLE_HTTP` | Can be `true` or `false`. Disables logging of HTTP requests. |
 | `HOSTNAME` | Set a hostname value for mozlog output |
+| `LIMIT_MAX_REQUESTS_BYTES` | The maximum size in bytes of the overall HTTP request body that will be accepted by the server. |
+| `LIMIT_MAX_BSO_GET_LIMIT` |  Max BSOs that can be returned per GET request. Default: 2500. |
+| `LIMIT_MAX_POST_BYTES` |  Maximum size of a POST request. Default: 2097152 (2MB). |
+| `LIMIT_MAX_POST_RECORDS` |  Maximum number of BSOs per POST request. Default 100. |
+| `LIMIT_MAX_TOTAL_BYTES` |  Maximum total size of a POST batch job. Default: 26,214,400 (20MB). |
+| `LIMIT_MAX_TOTAL_RECORDS` | Maximum total BSOs in a POST batch job. Default 1000. |
+| `LIMIT_MAX_BATCH_TTL` | Maximum TTL for a batch to remain uncommitted in seconds. Default 7200 (2 hours). |
 
 ## Advanced Configuration
 Things that probably shouldn't be touched:

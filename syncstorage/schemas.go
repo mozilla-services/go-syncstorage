@@ -21,7 +21,7 @@ const SCHEMA_0 = `
 	);
 
 	CREATE TABLE Collections (
-	  -- storage an integer to save some space
+	  -- store as an integer to save some space
 	  Id		INTEGER PRIMARY KEY ASC AUTOINCREMENT,
 	  Name      VARCHAR(32) UNIQUE,
 
@@ -42,6 +42,14 @@ const SCHEMA_0 = `
 		(11, "addons"),
 		-- forces new collections to start at 100
 		(99, "-push-");
+
+	-- stores batch uploads. BSOS should be text/newline of BSO json blobs
+	CREATE TABLE Batches (
+		Id				INTEGER PRIMARY KEY ASC AUTOINCREMENT,
+		CollectionId	INTEGER NOT NULL,
+		Modified		INTEGER NOT NULL,
+		BSOS			TEXT NOT NULL DEFAULT ''
+	);
 
 	CREATE TABLE KeyValues (
 		Key VARCHAR(32) NOT NULL,

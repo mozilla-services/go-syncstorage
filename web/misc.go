@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -36,9 +37,77 @@ func extractUID(path string) string {
 // used to massage post results into JSON
 // the client expects
 type PostResults struct {
-	Modified string              `json:"modified"`
-	Success  []string            `json:"success"`
-	Failed   map[string][]string `json:"failed"`
+	Batch    int
+	Modified int
+	Success  []string
+	Failed   map[string][]string
+}
+
+// MarshalJSON manually creates the JSON string since the modified needs to be
+// converted in the python (ugh) timeformat required for sync 1.5. Which means no quotes
+func (p *PostResults) MarshalJSON() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	buf.WriteString(`{"modified":`)
+	buf.WriteString(syncstorage.ModifiedToString(p.Modified))
+	buf.WriteString(",")
+	if len(p.Success) == 0 {
+		buf.WriteString(`"success":[]`)
+	} else {
+		buf.WriteString(`"success":`)
+		data, err := json.Marshal(p.Success)
+		if err != nil {
+			return nil, err
+		}
+		_, err = buf.Write(data)
+		if err != nil {
+			return nil, errors.Wrap(err, "Could not encode PostResults.Success")
+		}
+	}
+
+	buf.WriteString(",")
+	if len(p.Failed) == 0 {
+		buf.WriteString(`"failed":{}`)
+	} else {
+		buf.WriteString(`"failed":`)
+		data, err := json.Marshal(p.Failed)
+		if err != nil {
+			return nil, err
+		}
+		_, err = buf.Write(data)
+		if err != nil {
+			return nil, errors.Wrap(err, "Could not encode PostResults.Failed")
+		}
+	}
+
+	if p.Batch > 0 {
+		buf.WriteString(`,"batch":`)
+		buf.WriteString(strconv.Itoa(p.Batch))
+	}
+
+	buf.WriteString("}")
+
+	return buf.Bytes(), nil
+}
+
+// UnmarshalJSON reverses custom formatting from MarshalJSON
+func (p *PostResults) UnmarshalJSON(data []byte) error {
+	var tmp struct {
+		Modified float64
+		Batch    int
+		Success  []string
+		Failed   map[string][]string
+	}
+
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return err
+	}
+
+	p.Modified = int(tmp.Modified * 1000)
+	p.Batch = tmp.Batch
+	p.Success = tmp.Success
+	p.Failed = tmp.Failed
+	return nil
 }
 
 type parseError struct {
@@ -288,4 +357,27 @@ func OKResponse(w http.ResponseWriter, s string) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, s)
+}
+
+// sendRequestProblem logs the problem with the client's request
+// and responds with a json payload of the error. Client side these
+// are usually invisible so this helps with debugging
+func sendRequestProblem(w http.ResponseWriter, req *http.Request, responseCode int, reason error) {
+	var causeMessage string
+	if cause := errors.Cause(reason); cause != nil && cause != reason {
+		causeMessage = fmt.Sprintf("%v", cause)
+	} else {
+		causeMessage = "n/a"
+	}
+
+	log.WithFields(log.Fields{
+		"method":    req.Method,
+		"path":      req.URL.Path,
+		"ua":        req.UserAgent(),
+		"http_code": responseCode,
+		"error":     reason.Error(),
+		"cause":     causeMessage,
+	}).Warning("HTTP Request Problem")
+
+	JSONError(w, reason.Error(), responseCode)
 }

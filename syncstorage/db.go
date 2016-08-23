@@ -459,9 +459,9 @@ func (d *DB) InfoCollectionCounts() (map[string]int, error) {
 type PostBSOInput []*PutBSOInput
 type PutBSOInput struct {
 	Id        string  `json:"id"`
-	Payload   *string `json:"payload"`
-	TTL       *int    `json:"ttl"`
-	SortIndex *int    `json:"sortindex"`
+	Payload   *string `json:"payload,omitempty"`
+	TTL       *int    `json:"ttl,omitempty"`
+	SortIndex *int    `json:"sortindex,omitempty"`
 }
 
 func NewPutBSOInput(id string, payload *string, sortIndex, ttl *int) *PutBSOInput {
@@ -905,7 +905,7 @@ func (d *DB) getBSO(tx dbTx, cId int, bId string) (*BSO, error) {
 
 	b := &BSO{Id: bId}
 
-	query := "SELECT SortIndex, Payload, Modified, TTL FROM BSO WHERE CollectionId=? and Id=? and TTL > ?"
+	query := "SELECT SortIndex, Payload, Modified, TTL FROM BSO WHERE CollectionId=? and Id=? and TTL >= ?"
 	err := tx.QueryRow(query, cId, bId, Now()).Scan(&b.SortIndex, &b.Payload, &b.Modified, &b.TTL)
 
 	if err != nil {

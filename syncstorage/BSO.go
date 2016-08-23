@@ -1,9 +1,19 @@
 package syncstorage
 
 import (
+	"bytes"
 	"encoding/json"
-	"fmt"
+	"strconv"
+	"sync"
 )
+
+// use a buffer pool to reduce memory allocations
+// since we'll be encoding a lot of BSOs
+var bsoBufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
 
 // ref: https://docs.services.mozilla.com/storage/apis-1.5.html#basic-storage-object
 type BSO struct {
@@ -19,25 +29,36 @@ type BSO struct {
 // api defines as the correct format. meh.
 func (b BSO) MarshalJSON() ([]byte, error) {
 
-	var id, payload string
-
-	// turn milliseconds into seconds with two decimal places
-	modified := float64(b.Modified) / 1000
-
-	// convert strings using json.Marshal to properly escape/quote thing
-	if v, err := json.Marshal(b.Id); err == nil {
-		id = string(v)
+	buf := bsoBufferPool.Get().(*bytes.Buffer)
+	buf.WriteString(`{"id":`)
+	if encoded, err := json.Marshal(b.Id); err == nil {
+		buf.Write(encoded)
 	} else {
+		buf.Reset()
+		bsoBufferPool.Put(buf)
 		return nil, err
 	}
 
-	if v, err := json.Marshal(b.Payload); err == nil {
-		payload = string(v)
+	buf.WriteString(`,"modified":`)
+	buf.WriteString(ModifiedToString(b.Modified))
+
+	buf.WriteString(`,"payload":`)
+	if encoded, err := json.Marshal(b.Payload); err == nil {
+		buf.Write(encoded)
 	} else {
+		buf.Reset()
+		bsoBufferPool.Put(buf)
 		return nil, err
 	}
 
-	j := fmt.Sprintf(`{"id":%s,"modified":%.02f,"payload":%s}`, id, modified, payload)
-	return []byte(j), nil
+	if b.SortIndex != 0 {
+		buf.WriteString(`,"sortindex":`)
+		buf.WriteString(strconv.Itoa(b.SortIndex))
+	}
 
+	buf.WriteString("}")
+	data := buf.Bytes()
+	buf.Reset()
+	bsoBufferPool.Put(buf)
+	return data, nil
 }

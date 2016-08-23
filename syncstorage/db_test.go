@@ -1004,7 +1004,7 @@ func TestUsageStats(t *testing.T) {
 			if assert.NoError(err) {
 
 				// numbers pulled from previous tests
-				assert.Equal(8, pageStats.Total)   // total pages in database
+				assert.Equal(9, pageStats.Total)   // total pages in database
 				assert.Equal(0, pageStats.Free)    // unused pages (from delete)
 				assert.Equal(4096, pageStats.Size) // bytes/page
 			}
@@ -1055,7 +1055,7 @@ func TestOptimize(t *testing.T) {
 			assert.Equal(3, purged)
 			stats, err := db.Usage()
 			if assert.NoError(err) {
-				assert.Equal(27, stats.FreePercent()) // we know this from a previous test ;)
+				assert.Equal(25, stats.FreePercent()) // we know this from a previous test ;)
 				vac, err := db.Optimize(20)
 				assert.NoError(err)
 				assert.True(vac)
