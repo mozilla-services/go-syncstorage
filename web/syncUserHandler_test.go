@@ -146,6 +146,20 @@ func TestSyncUserHandlerPOST(t *testing.T) {
 		assert.Equal(bso.Payload, "updated payload") // updated
 		assert.Equal(3, bso.SortIndex)               // updated
 	}
+
+	{ // ref: issue #108 - handling of Content-Type like application/json;charset=utf-8
+		body := bytes.NewBufferString(`[
+			{"id":"bsoa", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+			{"id":"bsob", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+			{"id":"bsoc", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
+		]`)
+
+		// POST new data
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json;charset=utf-8")
+		resp := requestheaders("POST", url, body, header, handler)
+		assert.Equal(http.StatusOK, resp.Code)
+	}
 }
 
 // TestSyncUserHandlerPOSTBatch tests that a batch can be created, appended to and commited

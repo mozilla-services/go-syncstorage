@@ -27,7 +27,7 @@ func RequestToPostBSOInput(r *http.Request) (
 	// a list of all the raw json encoded BSOs
 	var raw []json.RawMessage
 
-	if ct := r.Header.Get("Content-Type"); ct == "application/json" || ct == "text/plain" {
+	if ct := getMediaType(r.Header.Get("Content-Type")); ct == "application/json" || ct == "text/plain" {
 		decoder := json.NewDecoder(r.Body)
 		err := decoder.Decode(&raw)
 		if err != nil {

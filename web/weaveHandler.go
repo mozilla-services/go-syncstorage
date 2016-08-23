@@ -106,7 +106,7 @@ func (w *weaveWriter) WriteHeader(statusCode int) {
 	// Matches python server's behaviour: https://git.io/vVvTt
 	// for passing test_that_404_responses_have_a_json_body python
 	// functional test
-	if statusCode == http.StatusNotFound && w.Header().Get("Content-Type") != "application/json" {
+	if statusCode == http.StatusNotFound && getMediaType(w.Header().Get("Content-Type")) != "application/json" {
 		w.w.Header().Set("Content-Type", "application/json")
 		w.w.WriteHeader(statusCode)
 		w.w.Write([]byte(WEAVE_UNKNOWN_ERROR))

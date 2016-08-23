@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -215,7 +216,7 @@ func InternalError(w http.ResponseWriter, r *http.Request, err error) {
 		"path":   r.URL.Path,
 	}).Errorf("HTTP Error: %s", err.Error())
 
-	switch w.Header().Get("Content-Type") {
+	switch getMediaType(w.Header().Get("Content-Type")) {
 	case "application/newlines":
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -380,4 +381,12 @@ func sendRequestProblem(w http.ResponseWriter, req *http.Request, responseCode i
 	}).Warning("HTTP Request Problem")
 
 	JSONError(w, reason.Error(), responseCode)
+}
+
+// getMediaType extracts the mediatype portion from the http request header Content-Type
+// it returns a blank string on error. It also discards the paramters. This is enough
+// for working with sync clients
+func getMediaType(contentType string) (mediatype string) {
+	mediatype, _, _ = mime.ParseMediaType(contentType)
+	return
 }
