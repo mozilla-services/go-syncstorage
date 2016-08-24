@@ -67,8 +67,18 @@ func RequestToPostBSOInput(r *http.Request) (
 // ReadNewlineDelimitedJSON takes newline separate JSON and produces
 // produces an array of json.RawMessage
 func ReadNewlineJSON(data io.Reader) []json.RawMessage {
+
 	raw := []json.RawMessage{}
+
+	// make a buffer that is 275KB for the scanner
+	// why 257KB?
+	// - 256 KB for BSO payload max size
+	// -   1 KB for json bits, key names, and other values
+	size := 257 * 1024
+	buf := make([]byte, size, size)
+
 	scanner := bufio.NewScanner(data)
+	scanner.Buffer(buf, size)
 	for scanner.Scan() {
 		bsoBytes := scanner.Bytes()
 
@@ -77,7 +87,10 @@ func ReadNewlineJSON(data io.Reader) []json.RawMessage {
 			continue
 		}
 
-		raw = append(raw, bsoBytes)
+		// make a copy since scanner.Bytes() does not allocate
+		c := make([]byte, len(bsoBytes), len(bsoBytes))
+		copy(c, bsoBytes)
+		raw = append(raw, c)
 	}
 
 	return raw
