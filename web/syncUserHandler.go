@@ -548,7 +548,7 @@ func (s *SyncUserHandler) hCollectionPOSTClassic(collectionId int, w http.Respon
 
 	bsoToBeProcessed, results, err := RequestToPostBSOInput(r)
 	if err != nil {
-		WeaveInvalidWBOError(w, r)
+		WeaveInvalidWBOError(w, r, errors.Wrap(err, "Failed turning POST body into BSO work list"))
 		return
 	}
 
@@ -601,7 +601,8 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 				}
 
 				if intVal > max {
-					WeaveSizeLimitExceeded(w, r)
+					WeaveSizeLimitExceeded(w, r,
+						errors.Errorf("Limit %s exceed. %d/%d", headerName, intVal, max))
 					return
 				}
 			} else {
@@ -614,14 +615,16 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 
 	// CHECK the POST size, if possible from client supplied data
 	if r.ContentLength > 0 && r.ContentLength > int64(s.config.MaxPOSTBytes) {
-		WeaveSizeLimitExceeded(w, r)
+		WeaveSizeLimitExceeded(w, r,
+			errors.Errorf("MaxPOSTBytes exceeded in request.ContentLength(%d) > %d",
+				r.ContentLength, s.config.MaxPOSTBytes))
 		return
 	}
 
 	// EXTRACT actual data to check
 	bsoToBeProcessed, results, err := RequestToPostBSOInput(r)
 	if err != nil {
-		WeaveInvalidWBOError(w, r)
+		WeaveInvalidWBOError(w, r, errors.Wrap(err, "Failed turning POST body into BSO work list"))
 		return
 	}
 
@@ -711,14 +714,11 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 		rawJSON := ReadNewlineJSON(bytes.NewBufferString(batchRecord.BSOS))
 
 		// CHECK final data before committing it to the database
-		if len(rawJSON) > s.config.MaxTotalRecords {
-			log.WithFields(log.Fields{
-				"uid":       s.uid,
-				"now":       syncstorage.Now(),
-				"bso_count": len(rawJSON),
-			}).Error("Batch has too many BSOs to commit")
+		numInBatch := len(rawJSON)
+		if numInBatch > s.config.MaxTotalRecords {
 			s.db.BatchRemove(batchIdInt)
-			WeaveSizeLimitExceeded(w, r)
+			WeaveSizeLimitExceeded(w, r,
+				errors.Errorf("Too many BSOs (%d) in Batch(%d)", numInBatch, batchIdInt))
 			return
 		}
 
@@ -743,13 +743,11 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 
 			sum := sum + len(*bso.Payload)
 			if sum > s.config.MaxTotalBytes {
-				log.WithFields(log.Fields{
-					"uid":       s.uid,
-					"now":       syncstorage.Now(),
-					"bso_count": len(rawJSON),
-				}).Error("Batch size exceeded MaxTotalBytes limit")
 				s.db.BatchRemove(batchIdInt)
-				WeaveSizeLimitExceeded(w, r)
+				WeaveSizeLimitExceeded(w, r,
+					errors.Errorf("Batch size(%d) exceeded MaxTotalBytes limit(%d)",
+						sum, s.config.MaxTotalBytes))
+
 				return
 			}
 		}
@@ -934,7 +932,7 @@ func (s *SyncUserHandler) hBsoPUT(w http.ResponseWriter, r *http.Request) {
 
 	var bso syncstorage.PutBSOInput
 	if err := parseIntoBSO(body, &bso); err != nil {
-		WeaveInvalidWBOError(w, r)
+		WeaveInvalidWBOError(w, r, errors.Wrap(err, "Could not parse body into BSO"))
 		return
 	}
 
