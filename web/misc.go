@@ -364,6 +364,11 @@ func OKResponse(w http.ResponseWriter, s string) {
 // and responds with a json payload of the error. Client side these
 // are usually invisible so this helps with debugging
 func sendRequestProblem(w http.ResponseWriter, req *http.Request, responseCode int, reason error) {
+	logRequestProblem(req, responseCode, reason)
+	JSONError(w, reason.Error(), responseCode)
+}
+
+func logRequestProblem(req *http.Request, responseCode int, reason error) {
 	var causeMessage string
 	if cause := errors.Cause(reason); cause != nil && cause != reason {
 		causeMessage = fmt.Sprintf("%v", cause)
@@ -379,8 +384,14 @@ func sendRequestProblem(w http.ResponseWriter, req *http.Request, responseCode i
 		"error":     reason.Error(),
 		"cause":     causeMessage,
 	}).Warning("HTTP Request Problem")
+}
 
-	JSONError(w, reason.Error(), responseCode)
+// getMediaType extracts the mediatype portion from the http request header Content-Type
+// it returns a blank string on error. It also discards the paramters. This is enough
+// for working with sync clients
+func getMediaType(contentType string) (mediatype string) {
+	mediatype, _, _ = mime.ParseMediaType(contentType)
+	return
 }
 
 // getMediaType extracts the mediatype portion from the http request header Content-Type
