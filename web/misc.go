@@ -393,11 +393,3 @@ func getMediaType(contentType string) (mediatype string) {
 	mediatype, _, _ = mime.ParseMediaType(contentType)
 	return
 }
-
-// getMediaType extracts the mediatype portion from the http request header Content-Type
-// it returns a blank string on error. It also discards the paramters. This is enough
-// for working with sync clients
-func getMediaType(contentType string) (mediatype string) {
-	mediatype, _, _ = mime.ParseMediaType(contentType)
-	return
-}
