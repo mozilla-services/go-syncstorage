@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/mozilla-services/go-syncstorage/syncstorage"
 	"github.com/pkg/errors"
@@ -64,21 +65,29 @@ func RequestToPostBSOInput(r *http.Request) (
 	return bsoToBeProcessed, results, nil
 }
 
+const (
+	// why 257KB?
+	// - 256 KB for BSO payload max size
+	// -   1 KB for json bits, key names, and other values
+	scannerTokenSize = 257 * 1024
+)
+
+var scannerPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, scannerTokenSize, scannerTokenSize)
+	},
+}
+
 // ReadNewlineDelimitedJSON takes newline separate JSON and produces
 // produces an array of json.RawMessage
 func ReadNewlineJSON(data io.Reader) []json.RawMessage {
 
 	raw := []json.RawMessage{}
 
-	// make a buffer that is 275KB for the scanner
-	// why 257KB?
-	// - 256 KB for BSO payload max size
-	// -   1 KB for json bits, key names, and other values
-	size := 257 * 1024
-	buf := make([]byte, size, size)
+	buf := scannerPool.Get().([]byte)
 
 	scanner := bufio.NewScanner(data)
-	scanner.Buffer(buf, size)
+	scanner.Buffer(buf, scannerTokenSize)
 	for scanner.Scan() {
 		bsoBytes := scanner.Bytes()
 
@@ -93,6 +102,7 @@ func ReadNewlineJSON(data io.Reader) []json.RawMessage {
 		raw = append(raw, c)
 	}
 
+	scannerPool.Put(buf)
 	return raw
 }
 
