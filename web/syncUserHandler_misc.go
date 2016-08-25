@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -116,4 +117,22 @@ func GetBatchIdAndCommit(r *http.Request) (batchFound bool, batchId string, batc
 	_, batchCommit = r.URL.Query()["commit"]
 
 	return
+}
+
+// Why the conversion from a prefixed string to an int and back?
+// This is match the python implementation for a batchId that is
+// guaranteed to be treated like a string.
+// ref: https://github.com/mozilla-services/server-syncstorage/commit/3694262132ec47f60e0ce9c9e4645f23969ece13
+
+// batchIdInt converts the string batchid back into an integer
+func batchIdInt(batchId string) (int, error) {
+	if len(batchId) < 2 {
+		return 0, errors.New("Batch ID too short")
+	}
+	return strconv.Atoi(batchId[1:])
+}
+
+// batchIdString converts the internal batchId int into a string
+func batchIdString(batchId int) string {
+	return "b" + strconv.Itoa(batchId)
 }

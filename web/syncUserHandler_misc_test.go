@@ -28,7 +28,7 @@ func TestPostResultJSONMarshaller(t *testing.T) {
 
 	{ // make sure non zero values encode correctly
 		x := &PostResults{
-			Batch:    1,
+			Batch:    batchIdString(1),
 			Modified: 12345678,
 			Success:  []string{"bso0", "bso1"},
 			Failed: map[string][]string{
@@ -42,7 +42,7 @@ func TestPostResultJSONMarshaller(t *testing.T) {
 			return
 		}
 
-		assert.Equal(`{"modified":12345.68,"success":["bso0","bso1"],"failed":{"bso2":["a","b","c"],"bso3":["d","e","f"]},"batch":1}`, string(b))
+		assert.Equal(`{"modified":12345.68,"success":["bso0","bso1"],"failed":{"bso2":["a","b","c"],"bso3":["d","e","f"]},"batch":"b1"}`, string(b))
 
 	}
 }
@@ -110,4 +110,25 @@ func BenchmarkReadNewlineJSON(b *testing.B) {
 		ReadNewlineJSON(reader)
 		reader.Seek(0, io.SeekStart)
 	}
+}
+
+func TestBatchIdInt(t *testing.T) {
+	assert := assert.New(t)
+
+	_, err := batchIdInt("1")
+	assert.NotNil(err)
+
+	n, err := batchIdInt("abc")
+	assert.Equal(0, n)
+	assert.NotNil(err)
+
+	n, err = batchIdInt("a1")
+	assert.Equal(1, n)
+	assert.Nil(err)
+}
+
+func TestBatchIdString(t *testing.T) {
+	assert.Equal(t, "b-1", batchIdString(-1))
+	assert.Equal(t, "b0", batchIdString(0))
+	assert.Equal(t, "b123", batchIdString(123))
 }
