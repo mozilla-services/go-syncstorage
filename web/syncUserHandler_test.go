@@ -181,41 +181,89 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 	]`)
 
 	uid := "123456"
-
-	db, _ := syncstorage.NewDB(":memory:")
-	handler := NewSyncUserHandler(uid, db, nil)
 	collection := "testcol"
-
 	url := syncurl(uid, "storage/"+collection)
 	header := make(http.Header)
 	header.Add("Content-Type", "application/json")
 
-	respCreate := requestheaders("POST", url+"?batch=true", bodyCreate, header, handler)
-	if !assert.Equal(http.StatusOK, respCreate.Code, respCreate.Body.String()) {
-		return
+	{ // test common flow
+		db, _ := syncstorage.NewDB(":memory:")
+		handler := NewSyncUserHandler(uid, db, nil)
+
+		respCreate := requestheaders("POST", url+"?batch=true", bodyCreate, header, handler)
+		if !assert.Equal(http.StatusOK, respCreate.Code, respCreate.Body.String()) {
+			return
+		}
+		var createResults PostResults
+		if err := json.Unmarshal(respCreate.Body.Bytes(), &createResults); !assert.NoError(err) {
+			return
+		}
+
+		assert.Equal(batchIdString(1), createResults.Batch) // clean db, always gets 1
+		batchIdString := createResults.Batch
+
+		respAppend := requestheaders("POST", url+"?batch="+batchIdString, bodyAppend, header, handler)
+		assert.Equal(http.StatusOK, respAppend.Code, respAppend.Body.String())
+
+		respCommit := requestheaders("POST", url+"?commit=1&batch="+batchIdString, bodyCommit, header, handler)
+		assert.Equal(http.StatusOK, respCommit.Code, respCommit.Body.String())
+
+		cId, _ := db.GetCollectionId(collection)
+		for bIdNum := 0; bIdNum <= 5; bIdNum++ {
+			bId := "bso" + strconv.Itoa(bIdNum)
+			_, err := db.GetBSO(cId, bId)
+			assert.NoError(err, "Could not find bso: %s", bId)
+		}
+
+		// make sure the batch is no longer in the db
+		batchIdInt, _ := batchIdInt(createResults.Batch)
+		_, errMissing := db.BatchLoad(batchIdInt, cId)
+		assert.Equal(syncstorage.ErrBatchNotFound, errMissing)
 	}
-	var createResults PostResults
-	if err := json.Unmarshal(respCreate.Body.Bytes(), &createResults); !assert.NoError(err) {
-		return
+
+	{ // test commit=1&batch=true
+		db, _ := syncstorage.NewDB(":memory:")
+		handler := NewSyncUserHandler(uid, db, nil)
+
+		bodyCreate := bytes.NewBufferString(`[
+			{"id":"bso0", "payload": "bso0"},
+			{"id":"bso1", "payload": "bso1"},
+			{"id":"bso2", "payload": "bso2"}
+		]`)
+
+		respCreate := requestheaders("POST", url+"?batch=true&commit=1", bodyCreate, header, handler)
+		if !assert.Equal(http.StatusOK, respCreate.Code, respCreate.Body.String()) {
+			return
+		}
 	}
 
-	assert.Equal(1, createResults.Batch) // clean db, always gets 1
-	batchIdString := strconv.Itoa(createResults.Batch)
+	{ // test batch=true and an empty commit
+		db, _ := syncstorage.NewDB(":memory:")
+		handler := NewSyncUserHandler(uid, db, nil)
 
-	respAppend := requestheaders("POST", url+"?batch="+batchIdString, bodyAppend, header, handler)
-	assert.Equal(http.StatusOK, respAppend.Code, respAppend.Body.String())
+		bodyCreate := bytes.NewBufferString(`[
+			{"id":"bso0", "payload": "bso0"},
+			{"id":"bso1", "payload": "bso1"},
+			{"id":"bso2", "payload": "bso2"}
+		]`)
 
-	respCommit := requestheaders("POST", url+"?commit=1&batch="+batchIdString, bodyCommit, header, handler)
-	assert.Equal(http.StatusOK, respCommit.Code, respCommit.Body.String())
+		respCreate := requestheaders("POST", url+"?batch=true", bodyCreate, header, handler)
+		if !assert.Equal(http.StatusOK, respCreate.Code, respCreate.Body.String()) {
+			return
+		}
 
-	cId, _ := db.GetCollectionId(collection)
-	for bIdNum := 0; bIdNum <= 5; bIdNum++ {
-		bId := "bso" + strconv.Itoa(bIdNum)
-		_, err := db.GetBSO(cId, bId)
-		assert.NoError(err, "Could not find bso: %s", bId)
+		var createResults PostResults
+		if err := json.Unmarshal(respCreate.Body.Bytes(), &createResults); !assert.NoError(err) {
+			return
+		}
+
+		assert.Equal(batchIdString(1), createResults.Batch) // clean db, always gets 1
+		batchIdString := createResults.Batch
+		body := bytes.NewReader([]byte("[]"))
+		respCommit := requestheaders("POST", url+"?commit=1&batch="+batchIdString, body, header, handler)
+		if !assert.Equal(http.StatusOK, respCommit.Code, respCommit.Body.String()) {
+			return
+		}
+
 	}
-
-	// make sure the batch is no longer in the db
-	_, errMissing := db.BatchLoad(createResults.Batch, cId)
-	assert.Equal(syncstorage.ErrBatchNotFound, errMissing)
 }

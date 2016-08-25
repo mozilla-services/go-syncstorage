@@ -38,7 +38,7 @@ func extractUID(path string) string {
 // used to massage post results into JSON
 // the client expects
 type PostResults struct {
-	Batch    int
+	Batch    string
 	Modified int
 	Success  []string
 	Failed   map[string][]string
@@ -81,13 +81,13 @@ func (p *PostResults) MarshalJSON() ([]byte, error) {
 		}
 	}
 
-	if p.Batch > 0 {
-		buf.WriteString(`,"batch":`)
-		buf.WriteString(strconv.Itoa(p.Batch))
+	if p.Batch != "" {
+		buf.WriteString(`,"batch":"`)
+		buf.WriteString(p.Batch)
+		buf.WriteString(`"`)
 	}
 
 	buf.WriteString("}")
-
 	return buf.Bytes(), nil
 }
 
@@ -95,7 +95,7 @@ func (p *PostResults) MarshalJSON() ([]byte, error) {
 func (p *PostResults) UnmarshalJSON(data []byte) error {
 	var tmp struct {
 		Modified float64
-		Batch    int
+		Batch    string
 		Success  []string
 		Failed   map[string][]string
 	}
@@ -213,7 +213,7 @@ func InternalError(w http.ResponseWriter, r *http.Request, err error) {
 	log.WithFields(log.Fields{
 		"cause":  errors.Cause(err).Error(),
 		"method": r.Method,
-		"path":   r.URL.Path,
+		"path":   r.URL.EscapedPath() + "?" + r.URL.RawQuery,
 	}).Errorf("HTTP Error: %s", err.Error())
 
 	switch getMediaType(w.Header().Get("Content-Type")) {

@@ -614,6 +614,7 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 	}
 
 	// CHECK the POST size, if possible from client supplied data
+	// hopefully shortcut a fail if this exceeds limits
 	if r.ContentLength > 0 && r.ContentLength > int64(s.config.MaxPOSTBytes) {
 		WeaveSizeLimitExceeded(w, r,
 			errors.Errorf("MaxPOSTBytes exceeded in request.ContentLength(%d) > %d",
@@ -652,10 +653,8 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 
 	// CHECK batch id is valid for appends. Do this before loading and decoding
 	// the body to be more efficient.
-	var batchIdInt int
 	if batchId != "true" {
-		id, err := strconv.Atoi(batchId)
-
+		id, err := batchIdInt(batchId)
 		if err != nil {
 			sendRequestProblem(w, r, http.StatusBadRequest, errors.Wrap(err, "Invalid Batch ID Format"))
 			return
@@ -663,14 +662,13 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 
 		if _, err := s.db.BatchExists(id, collectionId); err != nil {
 			if err == syncstorage.ErrNotFound {
-				sendRequestProblem(w, r, http.StatusBadRequest, errors.Wrapf(err, "Batch id: %d does not exist", id))
+				sendRequestProblem(w, r, http.StatusBadRequest,
+					errors.Wrapf(err, "Batch id: %s does not exist", batchId))
 			} else {
 				InternalError(w, r, err)
 			}
 			return
 		}
-
-		batchIdInt = id
 	}
 
 	// JSON Serialize the data for storage in the DB
@@ -687,6 +685,9 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 	}
 
 	// Save either as a new batch or append to an existing batch
+	var dbBatchId int
+	//   - batchIdInt used to track the internal batchId number in the database after
+	//   - the create || append
 	if batchId == "true" {
 		newBatchId, err := s.db.BatchCreate(collectionId, buf.String())
 		if err != nil {
@@ -694,18 +695,27 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 			return
 		}
 
-		batchIdInt = newBatchId
-	} else if len(bsoToBeProcessed) > 0 {
-		err := s.db.BatchAppend(batchIdInt, collectionId, buf.String())
+		dbBatchId = newBatchId
+
+	} else {
+		id, err := batchIdInt(batchId)
 		if err != nil {
-			InternalError(w, r, errors.Wrap(err, fmt.Sprintf("Failed append to batch id:%d", batchIdInt)))
+			sendRequestProblem(w, r, http.StatusBadRequest, errors.Wrap(err, "Invalid Batch ID Format"))
 			return
 		}
 
+		if len(bsoToBeProcessed) > 0 { // append only if something to do
+			if err := s.db.BatchAppend(id, collectionId, buf.String()); err != nil {
+				InternalError(w, r, errors.Wrap(err, fmt.Sprintf("Failed append to batch id:%d", dbBatchId)))
+				return
+			}
+		}
+
+		dbBatchId = id
 	}
 
 	if batchCommit {
-		batchRecord, err := s.db.BatchLoad(batchIdInt, collectionId)
+		batchRecord, err := s.db.BatchLoad(dbBatchId, collectionId)
 		if err != nil {
 			InternalError(w, r, errors.Wrap(err, "Failed Loading Batch to commit"))
 			return
@@ -716,9 +726,9 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 		// CHECK final data before committing it to the database
 		numInBatch := len(rawJSON)
 		if numInBatch > s.config.MaxTotalRecords {
-			s.db.BatchRemove(batchIdInt)
+			s.db.BatchRemove(dbBatchId)
 			WeaveSizeLimitExceeded(w, r,
-				errors.Errorf("Too many BSOs (%d) in Batch(%d)", numInBatch, batchIdInt))
+				errors.Errorf("Too many BSOs (%d) in Batch(%d)", numInBatch, dbBatchId))
 			return
 		}
 
@@ -743,7 +753,7 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 
 			sum := sum + len(*bso.Payload)
 			if sum > s.config.MaxTotalBytes {
-				s.db.BatchRemove(batchIdInt)
+				s.db.BatchRemove(dbBatchId)
 				WeaveSizeLimitExceeded(w, r,
 					errors.Errorf("Batch size(%d) exceeded MaxTotalBytes limit(%d)",
 						sum, s.config.MaxTotalBytes))
@@ -759,7 +769,7 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 		}
 
 		// DELETE the batch from the DB
-		s.db.BatchRemove(batchIdInt)
+		s.db.BatchRemove(dbBatchId)
 
 		w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(postResults.Modified))
 		JsonNewline(w, r, &PostResults{
@@ -771,11 +781,10 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 		modified := syncstorage.Now()
 		w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(modified))
 		JsonNewline(w, r, &PostResults{
-			Batch:    batchIdInt,
+			Batch:    batchIdString(dbBatchId),
 			Modified: modified,
 		})
 	}
-
 }
 
 func (s *SyncUserHandler) hCollectionDELETE(w http.ResponseWriter, r *http.Request) {
