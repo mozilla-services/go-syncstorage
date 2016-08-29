@@ -1,10 +1,10 @@
 package web
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/mozilla-services/go-syncstorage/syncstorage"
+	"github.com/pkg/errors"
 )
 
 // The code below is a little weird and inelegant. Basically its purpose is
@@ -56,20 +56,24 @@ func extractModifiedTimestamp(r *http.Request) (ts int, headerType XModHeader, e
 func sentNotModified(w http.ResponseWriter, r *http.Request, modified int) (sentResponse bool) {
 	ts, mHeaderType, err := extractModifiedTimestamp(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		sendRequestProblem(w, r, http.StatusBadRequest, err)
+		return true
 	}
 
 	switch {
 	case mHeaderType == X_IF_MODIFIED_SINCE && modified <= ts:
-		w.Header().Set("Content-Type", "text/plain; charset=utf8")
 		w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(modified))
-		w.WriteHeader(http.StatusNotModified)
+		sendRequestProblem(w, r, http.StatusNotModified, errors.New("Not Modified"))
+
 		return true
 	case mHeaderType == X_IF_UNMODIFIED_SINCE && modified > ts:
-		w.Header().Set("Content-Type", "text/plain; charset=utf8")
 		w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(modified))
-		w.WriteHeader(http.StatusPreconditionFailed)
+		sendRequestProblem(w, r, http.StatusPreconditionFailed,
+			errors.Errorf("Condition requires %s, but modified at %s (△ %ss)",
+				syncstorage.ModifiedToString(ts),
+				syncstorage.ModifiedToString(modified),
+				syncstorage.ModifiedToString(ts-modified)))
+
 		return true
 	}
 

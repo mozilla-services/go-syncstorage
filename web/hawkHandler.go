@@ -3,8 +3,6 @@ package web
 import (
 	"bytes"
 	"crypto/sha256"
-	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -13,6 +11,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/allegro/bigcache"
 	"github.com/mozilla-services/go-syncstorage/token"
+	"github.com/pkg/errors"
 	"go.mozilla.org/hawk"
 )
 
@@ -50,12 +49,11 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	auth, err := hawk.NewAuthFromRequest(r, nil, h.hawkNonceNotFound)
 	if err != nil {
 		if e, ok := err.(hawk.AuthFormatError); ok {
-			JSONError(w,
-				fmt.Sprintf("Malformed hawk header, field: %s, err: %s", e.Field, e.Err),
-				http.StatusBadRequest)
+			sendRequestProblem(w, r, http.StatusBadRequest,
+				errors.Errorf("Hawk: Malformed hawk header, field: %s, err: %s", e.Field, e.Err))
 		} else {
 			w.Header().Set("WWW-Authenticate", "Hawk")
-			http.Error(w, err.Error(), http.StatusUnauthorized)
+			sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(err, "Hawk: Error"))
 		}
 		return
 	}
@@ -74,13 +72,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if tokenError != nil {
-		log.WithFields(log.Fields{
-			"err": tokenError.Error(),
-		}).Info("Hawk token error")
-
-		http.Error(w,
-			fmt.Sprintf("Invalid token: %s", tokenError.Error()),
-			http.StatusBadRequest)
+		sendRequestProblem(w, r, http.StatusBadRequest, errors.Wrap(tokenError, "Invalid token"))
 		return
 	} else {
 		// required to these manually so the auth.Valid()
@@ -92,7 +84,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Step 3: Make sure it's valid...
 	if err := auth.Valid(); err != nil {
 		w.Header().Set("WWW-Authenticate", "Hawk")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		sendRequestProblem(w, r, http.StatusUnauthorized, err)
 		return
 	}
 
@@ -104,7 +96,8 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/1.5/") {
 		pathUID := extractUID(r.URL.Path)
 		if session.Token.UidString() != pathUID {
-			http.Error(w, "Sync URL UID != Token UID", http.StatusBadRequest)
+			sendRequestProblem(w, r, http.StatusBadRequest,
+				errors.New("Hawk: Sync URL UID != Token UID"))
 			return
 		}
 	}
@@ -112,14 +105,16 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Step 5: Validate the payload hash if it exists
 	if auth.Hash != nil {
 		if r.Header.Get("Content-Type") == "" {
-			http.Error(w, "Content-Type missing", http.StatusBadRequest)
+			sendRequestProblem(w, r, http.StatusBadRequest,
+				errors.New("Hawk: Content-Type required"))
 			return
 		}
 
 		// read and replace io.Reader
 		content, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			http.Error(w, "Could not read request body", http.StatusInternalServerError)
+			sendRequestProblem(w, r, http.StatusBadRequest,
+				errors.Wrap(err, "Hawk: Could not read request body"))
 			return
 		}
 
@@ -128,7 +123,8 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		pHash.Sum(content)
 		if !auth.ValidHash(pHash) {
 			w.Header().Set("WWW-Authenticate", "Hawk")
-			http.Error(w, "Hawk error, payload hash invalid", http.StatusUnauthorized)
+			sendRequestProblem(w, r, http.StatusUnauthorized,
+				errors.New("Hawk: payload hash invalid"))
 			return
 		}
 	}

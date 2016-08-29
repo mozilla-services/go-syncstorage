@@ -86,7 +86,7 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if uid == "" {
-		http.Error(w, "Invalid sync path", http.StatusBadRequest)
+		sendRequestProblem(w, req, http.StatusBadRequest, errors.New("Pool: No UID"))
 		return
 	}
 
@@ -106,7 +106,8 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 				if i == conflictAttempts {
 					w.Header().Add("Retry-After", strconv.Itoa(60))
-					http.Error(w, "DB Busy", http.StatusConflict)
+					sendRequestProblem(w, req, http.StatusConflict,
+						errors.New("DB pool too busy"))
 					return
 				}
 

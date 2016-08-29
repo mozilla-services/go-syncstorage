@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"sync"
 )
@@ -32,5 +33,5 @@ func (s *StoppableHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Set("Retry-After", retryAfter)
-	http.Error(w, "Service Unvailable", http.StatusServiceUnavailable)
+	sendRequestProblem(w, req, http.StatusServiceUnavailable, errors.New("HTTP handler stopped"))
 }
