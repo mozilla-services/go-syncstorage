@@ -332,8 +332,9 @@ func AcceptHeaderOk(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 
-	if strings.Contains(accept, "application/json") ||
-		strings.Contains(accept, "application/newlines") {
+	mediatype := getMediaType(accept)
+
+	if mediatype == "application/json" || mediatype == "application/newlines" {
 		return true
 	}
 
@@ -345,9 +346,8 @@ func AcceptHeaderOk(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	// everything else is an error
-	http.Error(w,
-		http.StatusText(http.StatusNotAcceptable),
-		http.StatusNotAcceptable)
+	sendRequestProblem(w, r, http.StatusNotAcceptable,
+		errors.Errorf("Unsupported Accept header: %s", accept))
 
 	return false
 }
