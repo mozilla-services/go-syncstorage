@@ -20,6 +20,9 @@ const SCHEMA_0 = `
 	  PRIMARY KEY (CollectionId, Id)
 	);
 
+    -- speeds up search immensely. See issue #116
+	CREATE INDEX search_newer ON BSO (CollectionId,Modified);
+
 	CREATE TABLE Collections (
 	  -- store as an integer to save some space
 	  Id		INTEGER PRIMARY KEY ASC AUTOINCREMENT,
