@@ -168,6 +168,23 @@ func TestHawkNonceCheckFunc(t *testing.T) {
 	assert.False(hawkH.hawkNonceNotFound("t2", ts, creds1))
 }
 
+func TestHawkReplayNonce(t *testing.T) {
+	assert := assert.New(t)
+	hawkH := NewHawkHandler(EchoHandler, []string{"sekret"})
+
+	var uid uint64 = 12345
+
+	tok := testtoken(hawkH.secrets[0], uid)
+	req1, _ := hawkrequest("GET", syncurl(uid, "info/collections"), tok)
+	resp1 := sendrequest(req1, hawkH)
+	assert.Equal(http.StatusOK, resp1.Code)
+
+	resp2 := sendrequest(req1, hawkH)
+	assert.Equal(http.StatusUnauthorized, resp2.Code)
+	assert.Contains(resp2.Body.String(), "Hawk: Replay nonce=")
+
+}
+
 func TestHawkAuthNonceRequest(t *testing.T) {
 	hawkH := NewHawkHandler(EchoHandler, []string{"sekret"})
 
