@@ -51,9 +51,18 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if e, ok := err.(hawk.AuthFormatError); ok {
 			sendRequestProblem(w, r, http.StatusBadRequest,
 				errors.Errorf("Hawk: Malformed hawk header, field: %s, err: %s", e.Field, e.Err))
-		} else {
+		} else if authError, ok := err.(hawk.AuthError); ok {
 			w.Header().Set("WWW-Authenticate", "Hawk")
-			sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(err, "Hawk: Error"))
+			switch authError {
+			case hawk.ErrReplay: // log the replay'd nonce
+				authInfo, _ := hawk.ParseRequestHeader(r.Header.Get("Authorization"))
+				sendRequestProblem(w, r, http.StatusUnauthorized,
+					errors.Errorf("Hawk: Replay nonce=%s", authInfo.Nonce))
+			default:
+				sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(err, "Hawk: AuthError"))
+			}
+		} else {
+			sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(err, "Hawk: Unknown Error"))
 		}
 		return
 	}
@@ -72,7 +81,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if tokenError != nil {
-		sendRequestProblem(w, r, http.StatusBadRequest, errors.Wrap(tokenError, "Invalid token"))
+		sendRequestProblem(w, r, http.StatusBadRequest, errors.Wrap(tokenError, "Hawk: Invalid token"))
 		return
 	} else {
 		// required to these manually so the auth.Valid()
@@ -84,7 +93,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Step 3: Make sure it's valid...
 	if err := auth.Valid(); err != nil {
 		w.Header().Set("WWW-Authenticate", "Hawk")
-		sendRequestProblem(w, r, http.StatusUnauthorized, err)
+		sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(err, "Hawk: auth invalid"))
 		return
 	}
 
@@ -97,7 +106,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		pathUID := extractUID(r.URL.Path)
 		if session.Token.UidString() != pathUID {
 			sendRequestProblem(w, r, http.StatusBadRequest,
-				errors.New("Hawk: Sync URL UID != Token UID"))
+				errors.New("Hawk Sync URL UID != Token UID"))
 			return
 		}
 	}
