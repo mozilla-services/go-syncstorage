@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"testing"
@@ -34,11 +35,12 @@ func TestSyncUserHandlerInfoConfiguration(t *testing.T) {
 
 	// make sure values propagate from the configuration
 	config := &SyncUserHandlerConfig{
-		MaxPOSTBytes:    1,
-		MaxPOSTRecords:  2,
-		MaxTotalBytes:   3,
-		MaxTotalRecords: 4,
-		MaxRequestBytes: 5,
+		MaxPOSTBytes:          1,
+		MaxPOSTRecords:        2,
+		MaxTotalBytes:         3,
+		MaxTotalRecords:       4,
+		MaxRequestBytes:       5,
+		MaxRecordPayloadBytes: 6,
 	}
 
 	handler := NewSyncUserHandler(uid, db, config)
@@ -63,6 +65,9 @@ func TestSyncUserHandlerInfoConfiguration(t *testing.T) {
 		}
 		if val, ok := jdata["max_request_bytes"]; assert.True(ok, "max_request_bytes") {
 			assert.Equal(val, config.MaxRequestBytes)
+		}
+		if val, ok := jdata["max_record_payload_bytes"]; assert.True(ok, "max_record_payload_bytes") {
+			assert.Equal(val, config.MaxRecordPayloadBytes)
 		}
 	}
 }
@@ -159,6 +164,35 @@ func TestSyncUserHandlerPOST(t *testing.T) {
 		header.Add("Content-Type", "application/json;charset=utf-8")
 		resp := requestheaders("POST", url, body, header, handler)
 		assert.Equal(http.StatusOK, resp.Code)
+	}
+
+	{ // test error when payload is too large
+		body := bytes.NewBufferString(`[
+			{"id":"bsoA", "payload": "1234567890"},
+			{"id":"bsoB", "payload": "12345"}
+		]`)
+
+		// make a small acceptable payload
+		config := NewDefaultSyncUserHandlerConfig()
+		config.MaxRecordPayloadBytes = 5
+
+		handler := NewSyncUserHandler(uid, db, config)
+		url := syncurl(uid, "storage/bookmarks")
+
+		resp := requestheaders("POST", url, body, header, handler)
+		assert.Equal(http.StatusOK, resp.Code)
+
+		var results PostResults
+		err := json.Unmarshal(resp.Body.Bytes(), &results)
+		if !assert.NoError(err) {
+			return
+		}
+
+		assert.Len(results.Success, 1)
+		if assert.Len(results.Failed, 1) {
+			assert.Equal("Payload too large", results.Failed["bsoA"][0])
+		}
+
 	}
 }
 
@@ -266,4 +300,56 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 		}
 
 	}
+}
+
+func TestSyncUserHandlerPUT(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+
+	uid := "123456"
+
+	db, _ := syncstorage.NewDB(":memory:")
+	handler := NewSyncUserHandler(uid, db, nil)
+	url := syncurl(uid, "storage/bookmarks/bso0")
+	header := make(http.Header)
+	header.Add("Content-Type", "application/json")
+
+	{ // test basic create / update flow
+		body := bytes.NewBufferString(`{"payload": "1234"}`)
+		resp := requestheaders("PUT", url, body, header, handler)
+		if !assert.Equal(http.StatusOK, resp.Code) {
+			return
+		}
+
+		colId, _ := db.GetCollectionId("bookmarks")
+
+		bsoNew, _ := db.GetBSO(colId, "bso0")
+		assert.Equal("1234", bsoNew.Payload)
+
+		body2 := bytes.NewBufferString(`{"sortindex": 9, "ttl":1000}`)
+		resp2 := requestheaders("PUT", url, body2, header, handler)
+		if !assert.Equal(http.StatusOK, resp2.Code) {
+			fmt.Println(resp2.Body.String())
+			return
+		}
+
+		bsoUpdated, _ := db.GetBSO(colId, "bso0")
+		assert.Equal("1234", bsoUpdated.Payload)
+		assert.Equal(9, bsoUpdated.SortIndex)
+		assert.NotEqual(bsoNew.Modified, bsoUpdated.Modified)
+		assert.NotEqual(bsoNew.TTL, bsoUpdated.TTL)
+	}
+
+	{ // test payload too large w/ a very small limit
+		conf := NewDefaultSyncUserHandlerConfig()
+		conf.MaxRecordPayloadBytes = 3
+		handler := NewSyncUserHandler(uid, db, conf)
+
+		body := bytes.NewBufferString(`{"payload": "1234"}`)
+		resp := requestheaders("PUT", url, body, header, handler)
+		if !assert.Equal(http.StatusRequestEntityTooLarge, resp.Code) {
+			return
+		}
+	}
+
 }

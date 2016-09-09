@@ -23,25 +23,25 @@ type SyncUserHandlerConfig struct {
 	MaxBSOGetLimit int
 
 	// API Limits
-	MaxRequestBytes int
-	MaxPOSTRecords  int
-	MaxPOSTBytes    int
-	MaxTotalRecords int
-	MaxTotalBytes   int
-	MaxBatchTTL     int
+	MaxRequestBytes       int
+	MaxPOSTRecords        int
+	MaxPOSTBytes          int
+	MaxTotalRecords       int
+	MaxTotalBytes         int
+	MaxBatchTTL           int
+	MaxRecordPayloadBytes int // largest BSO payload
 }
 
 func NewDefaultSyncUserHandlerConfig() *SyncUserHandlerConfig {
 	return &SyncUserHandlerConfig{
-		// Over rides
-		MaxBSOGetLimit: 2500,
-
 		// API Limits
-		MaxRequestBytes: 2 * 1024 * 1024,
-		MaxPOSTRecords:  100,
-		MaxPOSTBytes:    2 * 1024 * 1024,
-		MaxTotalRecords: 1000,
-		MaxTotalBytes:   20 * 1024 * 1024,
+		MaxBSOGetLimit:        1000,
+		MaxRequestBytes:       2 * 1024 * 1024,
+		MaxPOSTRecords:        100,
+		MaxPOSTBytes:          2 * 1024 * 1024,
+		MaxTotalRecords:       1000,
+		MaxTotalBytes:         20 * 1024 * 1024,
+		MaxRecordPayloadBytes: 1024 * 256,
 
 		// batches older than this are likely to be purged
 		MaxBatchTTL: 2 * 60 * 60 * 1000, // 2 hours in milliseconds
@@ -335,12 +335,14 @@ func (s *SyncUserHandler) hInfoConfiguration(w http.ResponseWriter, r *http.Requ
 		"max_post_bytes":%d,
 		"max_total_records":%d,
 		"max_total_bytes":%d,
-		"max_request_bytes":%d}`,
+		"max_request_bytes":%d,
+	    "max_record_payload_bytes":%d}`,
 		s.config.MaxPOSTRecords,
 		s.config.MaxPOSTBytes,
 		s.config.MaxTotalRecords,
 		s.config.MaxTotalBytes,
 		s.config.MaxRequestBytes,
+		s.config.MaxRecordPayloadBytes,
 	)
 }
 
@@ -546,7 +548,7 @@ func (s *SyncUserHandler) hCollectionPOST(w http.ResponseWriter, r *http.Request
 // the addition of atomic commits from multiple POST requests
 func (s *SyncUserHandler) hCollectionPOSTClassic(collectionId int, w http.ResponseWriter, r *http.Request) {
 
-	bsoToBeProcessed, results, err := RequestToPostBSOInput(r)
+	bsoToBeProcessed, results, err := RequestToPostBSOInput(r, s.config.MaxRecordPayloadBytes)
 	if err != nil {
 		WeaveInvalidWBOError(w, r, errors.Wrap(err, "Failed turning POST body into BSO work list"))
 		return
@@ -623,7 +625,7 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 	}
 
 	// EXTRACT actual data to check
-	bsoToBeProcessed, results, err := RequestToPostBSOInput(r)
+	bsoToBeProcessed, results, err := RequestToPostBSOInput(r, s.config.MaxRecordPayloadBytes)
 	if err != nil {
 		WeaveInvalidWBOError(w, r, errors.Wrap(err, "Failed turning POST body into BSO work list"))
 		return
@@ -945,6 +947,13 @@ func (s *SyncUserHandler) hBsoPUT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if bso.Payload != nil && len(*bso.Payload) > s.config.MaxRecordPayloadBytes {
+		sendRequestProblem(w, r,
+			http.StatusRequestEntityTooLarge,
+			errors.New("Payload too big"))
+		return
+	}
+
 	// change bso.TTL to milliseconds (what the db uses)
 	// from seconds (what client's send)
 	if bso.TTL != nil {
@@ -955,13 +964,6 @@ func (s *SyncUserHandler) hBsoPUT(w http.ResponseWriter, r *http.Request) {
 	modified, err = s.db.PutBSO(cId, bId, bso.Payload, bso.SortIndex, bso.TTL)
 
 	if err != nil {
-		if err == syncstorage.ErrPayloadTooBig {
-			sendRequestProblem(w, r,
-				http.StatusRequestEntityTooLarge,
-				errors.Wrap(err, "Payload too big"))
-			return
-		}
-
 		JSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
