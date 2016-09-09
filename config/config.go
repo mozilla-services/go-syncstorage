@@ -24,13 +24,14 @@ type LogConfig struct {
 
 // configures limits for web/SyncUserHandler
 type UserHandlerConfig struct {
-	MaxRequestBytes int `envconfig:"default=0"`
-	MaxBSOGetLimit  int `envconfig:"default=0"`
-	MaxPOSTRecords  int `envconfig:"default=0"`
-	MaxPOSTBytes    int `envconfig:"default=0"`
-	MaxTotalRecords int `envconfig:"default=0"`
-	MaxTotalBytes   int `envconfig:"default=0"`
-	MaxBatchTTL     int `envconfig:"default=0"`
+	MaxRequestBytes       int `envconfig:"default=2097152"`
+	MaxBSOGetLimit        int `envconfig:"default=1000"`
+	MaxPOSTRecords        int `envconfig:"default=100"`
+	MaxPOSTBytes          int `envconfig:"default=2097152"`
+	MaxTotalRecords       int `envconfig:"default=1000"`
+	MaxTotalBytes         int `envconfig:"default=20971520"`
+	MaxBatchTTL           int `envconfig:"default=7200"`   // 2 hours
+	MaxRecordPayloadBytes int `envconfig:"default=262144"` // 256KB
 }
 
 type PoolConfig struct {
@@ -118,23 +119,26 @@ func init() {
 		Config.Pool.Num = runtime.NumCPU()
 	}
 
-	if Config.Limit.MaxBSOGetLimit < 0 {
-		log.Fatal("LIMIT_MAX_BSO_GET_LIMIT must be >= 0")
+	if Config.Limit.MaxBSOGetLimit < 1 {
+		log.Fatal("LIMIT_MAX_BSO_GET_LIMIT must be >= 1")
 	}
-	if Config.Limit.MaxPOSTRecords < 0 {
-		log.Fatal("LIMIT_MAX_POST_RECORDS must be >= 0")
+	if Config.Limit.MaxPOSTRecords < 1 {
+		log.Fatal("LIMIT_MAX_POST_RECORDS must be >= 1")
 	}
-	if Config.Limit.MaxPOSTBytes < 0 {
-		log.Fatal("LIMIT_MAX_MAX_POST_BYTES must be >= 0")
+	if Config.Limit.MaxPOSTBytes < 1 {
+		log.Fatal("LIMIT_MAX_MAX_POST_BYTES must be >= 1")
 	}
-	if Config.Limit.MaxTotalRecords < 0 {
-		log.Fatal("LIMIT_MAX_TOTAL_RECORDS must be >= 0")
+	if Config.Limit.MaxTotalRecords < 1 {
+		log.Fatal("LIMIT_MAX_TOTAL_RECORDS must be >= 1")
 	}
-	if Config.Limit.MaxTotalBytes < 0 {
-		log.Fatal("LIMIT_MAX_TOTAL_BYTES must be >= 0")
+	if Config.Limit.MaxTotalBytes < 1 {
+		log.Fatal("LIMIT_MAX_TOTAL_BYTES must be >= 1")
 	}
-	if Config.Limit.MaxBatchTTL < 0 {
-		log.Fatal("LIMIT_MAX_BATCH_TTL must be > 0")
+	if Config.Limit.MaxBatchTTL < 10 {
+		log.Fatal("LIMIT_MAX_BATCH_TTL must be >= 10")
+	}
+	if Config.Limit.MaxRecordPayloadBytes < 1 {
+		log.Fatal("LIMIT_MAX_RECORD_PAYLOAD_BYTES must be >= 1")
 	}
 
 	Hostname = Config.Hostname

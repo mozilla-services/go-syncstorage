@@ -32,8 +32,6 @@ var (
 	ErrInvalidLimit  = errors.New("Invalid LIMIT")
 	ErrInvalidOffset = errors.New("Invalid OFFSET")
 	ErrInvalidNewer  = errors.New("Invalid NEWER than")
-
-	ErrPayloadTooBig = errors.New("BSO payload too big")
 )
 
 // dbTx allows passing of sql.DB or sql.Tx
@@ -51,14 +49,8 @@ const (
 	SORT_OLDEST
 	SORT_INDEX
 
-	// absolute maximum records getBSOs can return
-	LIMIT_MAX = 1000
-
 	// Keep BSO for 1 year
 	DEFAULT_BSO_TTL = 365 * 24 * 60 * 60 * 1000
-
-	// max BSO size
-	MAX_BSO_PAYLOAD_SIZE = 1024 * 256
 )
 
 type CollectionInfo struct {
@@ -725,11 +717,6 @@ func (d *DB) putBSO(tx dbTx,
 		return
 	}
 
-	if payload != nil && len(*payload) >= (MAX_BSO_PAYLOAD_SIZE) {
-		err = ErrPayloadTooBig
-		return
-	}
-
 	exists, err := d.bsoExists(tx, cId, bId)
 	if err != nil {
 		return
@@ -832,10 +819,6 @@ func (d *DB) getBSOs(
 		orderBy = "ORDER BY Modified DESC "
 	} else if sort == SORT_OLDEST {
 		orderBy = "ORDER BY Modified ASC "
-	}
-
-	if limit == 0 || limit > LIMIT_MAX {
-		limit = LIMIT_MAX
 	}
 
 	limitStmt := "LIMIT ?"

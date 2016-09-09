@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"testing"
@@ -81,6 +82,68 @@ func TestReadNewlineJSON(t *testing.T) {
 		if !assert.Nil(parseErr, "invalid json for id:"+strconv.Itoa(i)) {
 			fmt.Println(string(rawBSO))
 			return
+		}
+	}
+}
+
+func TestRequestToPostBSOInput(t *testing.T) {
+	assert := assert.New(t)
+	uid := "123456"
+	url := syncurl(uid, "storage/bookmarks")
+
+	{ // test everything ok application/json
+		body := bytes.NewBufferString(`[
+		{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000},
+		{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
+	]`)
+		req, _ := http.NewRequest("POST", url, body)
+		req.Header.Add("Content-Type", "application/json")
+		pInput, pResults, err := RequestToPostBSOInput(req, 256*1024)
+		if assert.NoError(err) {
+			if assert.NotNil(pInput) {
+				assert.Equal(2, len(pInput))
+			}
+			if assert.NotNil(pResults) {
+				assert.Equal(0, len(pResults.Failed))
+			}
+		}
+	}
+
+	{ // test everything ok application/newline
+		body := bytes.NewBufferString(`
+		{"id":"bso1", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
+		{"id":"bso2", "payload": "initial payload", "sortindex": 1, "ttl": 2100000}
+		`)
+		req, _ := http.NewRequest("POST", url, body)
+		req.Header.Add("Content-Type", "application/newline")
+		pInput, pResults, err := RequestToPostBSOInput(req, 256*1024)
+		if assert.NoError(err) {
+			if assert.NotNil(pInput) {
+				assert.Equal(2, len(pInput))
+			}
+			if assert.NotNil(pResults) {
+				assert.Equal(0, len(pResults.Failed))
+			}
+		}
+	}
+
+	{ // test fail on too large body
+		body := bytes.NewBufferString(`
+		{"id":"bso1", "payload": "12345678"}
+		{"id":"bso2", "payload": "12345"}
+		`)
+
+		req, _ := http.NewRequest("POST", url, body)
+		req.Header.Add("Content-Type", "application/newline")
+		pInput, pResults, err := RequestToPostBSOInput(req, 5)
+		if assert.NoError(err) {
+			if assert.NotNil(pInput) {
+				assert.Equal(1, len(pInput))
+			}
+			if assert.NotNil(pResults) {
+				assert.Equal(1, len(pResults.Failed))
+				assert.Equal(1, len(pResults.Failed["bso1"])) //fail is for bso1
+			}
 		}
 	}
 }

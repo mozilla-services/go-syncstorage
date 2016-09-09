@@ -16,7 +16,7 @@ import (
 
 // RequestToPostBSOInput extracts and unmarshals request.Body into a syncstorage.PostBSOInput. It
 // returns a PostResults as well since it also validates BSOs
-func RequestToPostBSOInput(r *http.Request) (
+func RequestToPostBSOInput(r *http.Request, maxPayloadSize int) (
 	syncstorage.PostBSOInput,
 	*syncstorage.PostResults,
 	error,
@@ -42,7 +42,11 @@ func RequestToPostBSOInput(r *http.Request) (
 	for _, rawJSON := range raw {
 		var b syncstorage.PutBSOInput
 		if parseErr := parseIntoBSO(rawJSON, &b); parseErr == nil {
-			bsoToBeProcessed = append(bsoToBeProcessed, &b)
+			if b.Payload != nil && len(*b.Payload) > maxPayloadSize {
+				results.AddFailure(b.Id, "Payload too large")
+			} else {
+				bsoToBeProcessed = append(bsoToBeProcessed, &b)
+			}
 		} else {
 			// couldn't parse a BSO into something real
 			// abort immediately
