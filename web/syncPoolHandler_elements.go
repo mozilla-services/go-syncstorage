@@ -55,15 +55,16 @@ func newHandlerPool(basepath string, maxPoolSize int) *handlerPool {
 	if basepath == ":memory:" {
 		path = []string{":memory:"}
 	} else {
-		basepath, err := filepath.Abs(basepath)
+		newBasePath, err := filepath.Abs(basepath)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"err": err.Error(),
-			}).Panic("Could not create hawk cache")
+				"err":      err.Error(),
+				"basepath": basepath,
+			}).Panic("Could not determine absolute basepath")
 		}
 
 		path = strings.Split(
-			filepath.Clean(basepath),
+			filepath.Clean(newBasePath),
 			string(os.PathSeparator),
 		)
 	}
