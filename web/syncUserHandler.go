@@ -189,6 +189,12 @@ func (s *SyncUserHandler) StopHTTP() {
 
 	s.StoppableHandler.StopHTTP()
 	s.db.Close()
+
+	// when shutting down a server it is nice to see
+	// this in the error output
+	log.WithFields(log.Fields{
+		"uid": s.uid,
+	}).Info("syncUserHandler stopped")
 }
 
 // getcid looks up a collection by name and returns its id. If it doesn't
