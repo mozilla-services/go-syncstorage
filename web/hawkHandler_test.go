@@ -168,6 +168,44 @@ func TestHawkNonceCheckFunc(t *testing.T) {
 	assert.False(hawkH.hawkNonceNotFound("t2", ts, creds1))
 }
 
+func TestHawkBloomRotate(t *testing.T) {
+	assert := assert.New(t)
+	hawkH := NewHawkHandler(EchoHandler, []string{"sekret"})
+
+	// use a very short halflife to not wait so long
+	// by default it is 30 seconds, to allow for 1 minute validity
+	// of hawk nonces
+	halfLife := 10 * time.Millisecond
+
+	hawkH.bloomHalflife = halfLife
+	creds := &hawk.Credentials{ID: "bacon"}
+
+	// test several rotations through
+	for i := 0; i < 3; i++ {
+		ts := time.Now()
+
+		assert.True(hawkH.hawkNonceNotFound("nonce", ts, creds), "Expected nonce not to be found")
+
+		time.Sleep(halfLife + time.Millisecond) // force a rotation
+		assert.False(hawkH.hawkNonceNotFound("nonce", ts, creds), "Expected nonce to be found")
+
+		time.Sleep(halfLife + time.Millisecond) // force another rotation
+		assert.True(hawkH.hawkNonceNotFound("nonce", ts, creds), "Expected nonce to be gone")
+
+		assert.False(hawkH.hawkNonceNotFound("nonce", ts, creds), "Expected nonce to be found")
+	}
+}
+
+func BenchmarkHawkNonceNotFound(b *testing.B) {
+	hawkH := NewHawkHandler(EchoHandler, []string{"sekret"})
+	creds := &hawk.Credentials{ID: "bacon"}
+	ts := time.Now()
+
+	for i := 0; i < b.N; i++ {
+		hawkH.hawkNonceNotFound("nonce", ts, creds)
+	}
+}
+
 func TestHawkReplayNonce(t *testing.T) {
 	assert := assert.New(t)
 	hawkH := NewHawkHandler(EchoHandler, []string{"sekret"})
