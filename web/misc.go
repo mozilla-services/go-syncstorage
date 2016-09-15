@@ -204,29 +204,20 @@ func extractBsoId(r *http.Request) (bId string, ok bool) {
 func extractBsoIdFail(w http.ResponseWriter, r *http.Request) (bId string, ok bool) {
 	bId, ok = extractBsoId(r)
 	if !ok {
-		JSONError(w, "Invalid bso ID", http.StatusNotFound)
+		sendRequestProblem(w, r, http.StatusNotFound,
+			errors.New("Could not extract bso id from URL"))
 	}
 	return
 }
 
 // InternalError produces an HTTP 500 error, basically means a bug in the system
 func InternalError(w http.ResponseWriter, r *http.Request, err error) {
-
 	log.WithFields(log.Fields{
 		"cause":  errors.Cause(err).Error(),
 		"method": r.Method,
 		"path":   r.URL.EscapedPath() + "?" + r.URL.RawQuery,
 	}).Errorf("HTTP Error: %s", err.Error())
-
-	switch getMediaType(w.Header().Get("Content-Type")) {
-	case "application/newlines":
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-	case "":
-		fallthrough
-	case "application/json":
-		JSONError(w, err.Error(), http.StatusInternalServerError)
-	}
+	sendRequestProblem(w, r, http.StatusInternalServerError, err)
 }
 
 // NewLine prints out new line \n separated JSON objects instead of a

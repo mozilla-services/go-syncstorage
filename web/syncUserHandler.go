@@ -970,7 +970,7 @@ func (s *SyncUserHandler) hBsoPUT(w http.ResponseWriter, r *http.Request) {
 	modified, err = s.db.PutBSO(cId, bId, bso.Payload, bso.SortIndex, bso.TTL)
 
 	if err != nil {
-		JSONError(w, err.Error(), http.StatusBadRequest)
+		sendRequestProblem(w, r, http.StatusBadRequest, err)
 		return
 	}
 	m := syncstorage.ModifiedToString(modified)
@@ -994,7 +994,7 @@ func (s *SyncUserHandler) hBsoDELETE(w http.ResponseWriter, r *http.Request) {
 
 	cId, err = s.getcid(r, false)
 	if err == syncstorage.ErrNotFound {
-		JSONError(w, "Collection Not Found", http.StatusNotFound)
+		sendRequestProblem(w, r, http.StatusNotAcceptable, errors.Wrap(err, "Could not find collection"))
 		return
 	}
 
@@ -1003,7 +1003,7 @@ func (s *SyncUserHandler) hBsoDELETE(w http.ResponseWriter, r *http.Request) {
 	bso, err := s.db.GetBSO(cId, bId)
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
-			JSONError(w, fmt.Sprintf("BSO id: %s Not Found", bId), http.StatusNotFound)
+			sendRequestProblem(w, r, http.StatusNotFound, errors.Errorf("BSO id: %s Not Found", bId))
 		} else {
 			InternalError(w, r, err)
 		}
