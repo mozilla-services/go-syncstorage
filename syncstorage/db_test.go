@@ -1,6 +1,7 @@
 package syncstorage
 
 import (
+	"database/sql"
 	"math/rand"
 	"os"
 	"strconv"
@@ -12,7 +13,7 @@ import (
 )
 
 func getTestDB() (*DB, error) {
-	db, err := NewDB(":memory:")
+	db, err := NewDB(":memory:", nil)
 
 	if err != nil {
 		return nil, err
@@ -26,9 +27,28 @@ func removeTestDB(d *DB) error {
 }
 
 func TestNewDB(t *testing.T) {
-	db, err := getTestDB()
-	assert.NoError(t, err)
-	defer removeTestDB(db)
+	assert := assert.New(t)
+	{
+		db, err := NewDB(":memory:", nil)
+		assert.NoError(err)
+		removeTestDB(db)
+	}
+
+	{
+		for _, testSize := range []int{0, -1, -100, 1, 100} {
+			db, err := NewDB(":memory:", &Config{CacheSize: testSize})
+			if !assert.NoError(err) {
+				return
+			}
+
+			var cachesize sql.NullInt64
+			err = db.db.QueryRow("PRAGMA cache_size;").Scan(&cachesize)
+			if assert.NoError(err) && assert.True(cachesize.Valid) {
+				assert.Equal(testSize, int(cachesize.Int64))
+			}
+		}
+	}
+
 }
 
 // TestStaticCollectionId ensures common collection

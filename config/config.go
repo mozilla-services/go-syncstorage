@@ -39,6 +39,10 @@ type PoolConfig struct {
 	MaxSize int `envconfig:"default=25"`
 }
 
+type SqliteConfig struct {
+	CacheSize int `envconfig:"default=0"`
+}
+
 var Config struct {
 	Log      *LogConfig
 	Hostname string `envconfig:"optional"`
@@ -47,6 +51,7 @@ var Config struct {
 	Secrets  []string
 	DataDir  string
 	Pool     *PoolConfig
+	Sqlite   *SqliteConfig
 
 	// Enable the pprof web endpoint /debug/pprof/
 	EnablePprof bool `envconfig:"default=false"`
@@ -65,6 +70,7 @@ var (
 	DataDir     string
 	Secrets     []string
 	Pool        *PoolConfig
+	Sqlite      *SqliteConfig
 	EnablePprof bool
 
 	Limit *UserHandlerConfig
@@ -150,4 +156,5 @@ func init() {
 	Pool = Config.Pool
 	EnablePprof = Config.EnablePprof
 	Limit = Config.Limit
+	Sqlite = Config.Sqlite
 }

@@ -2,7 +2,6 @@ package syncstorage
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 
 	_ "github.com/mattn/go-sqlite3"
 	. "github.com/mostlygeek/go-debug"
@@ -127,14 +127,30 @@ type DB struct {
 	db *sql.DB
 }
 
-func (d *DB) Open() (err error) {
+type Config struct {
+	CacheSize int
+}
+
+func (d *DB) OpenWithConfig(conf *Config) (err error) {
 	d.db, err = sql.Open("sqlite3", d.Path)
 
 	if err != nil {
 		return
 	}
 
-	// initialize and or update tables if required
+	if conf != nil {
+		if log.GetLevel() == log.DebugLevel {
+			log.WithFields(log.Fields{
+				"cache_size": conf.CacheSize,
+			}).Debug("db config")
+		}
+
+		// not sure why substitution doesn't work here
+		// with PRAGMA values
+		if _, err := d.db.Exec("PRAGMA cache_size=" + strconv.Itoa(conf.CacheSize)); err != nil {
+			return errors.Wrap(err, "DB error: Could not set cache_size")
+		}
+	}
 
 	// Initialize Schema 0 if it doesn't exist
 	sqlCheck := "SELECT name from sqlite_master WHERE type='table' AND name=?"
@@ -165,6 +181,10 @@ func (d *DB) Open() (err error) {
 	return nil
 }
 
+func (d *DB) Open() (err error) {
+	return d.OpenWithConfig(nil)
+}
+
 func (d *DB) Close() {
 	if d.db != nil {
 		dbDebug("Closing: %s", d.Path)
@@ -172,12 +192,10 @@ func (d *DB) Close() {
 	}
 }
 
-func NewDB(path string) (*DB, error) {
-	/* TODO: I'd be good to do some input validation */
-
+func NewDB(path string, conf *Config) (*DB, error) {
 	d := &DB{Path: path}
 
-	if err := d.Open(); err != nil {
+	if err := d.OpenWithConfig(conf); err != nil {
 		return nil, err
 	}
 

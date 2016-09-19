@@ -8,6 +8,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/mozilla-services/go-syncstorage/syncstorage"
 	"github.com/pkg/errors"
 )
 
@@ -31,6 +32,8 @@ type SyncPoolConfig struct {
 	NumPools    int
 	TTL         time.Duration
 	MaxPoolSize int
+
+	DBConfig *syncstorage.Config
 }
 
 func NewDefaultSyncPoolConfig(basepath string) *SyncPoolConfig {
@@ -39,13 +42,17 @@ func NewDefaultSyncPoolConfig(basepath string) *SyncPoolConfig {
 		NumPools:    1,
 		TTL:         5 * time.Minute,
 		MaxPoolSize: 100,
+		DBConfig:    &syncstorage.Config{CacheSize: 0},
 	}
 }
 
 func NewSyncPoolHandler(config *SyncPoolConfig, userHandlerConfig *SyncUserHandlerConfig) *SyncPoolHandler {
 	pools := make([]*handlerPool, config.NumPools, config.NumPools)
 	for i := 0; i < config.NumPools; i++ {
-		pools[i] = newHandlerPool(config.Basepath, config.MaxPoolSize)
+		pools[i] = newHandlerPool(
+			config.Basepath,
+			config.MaxPoolSize,
+			config.DBConfig)
 	}
 
 	if userHandlerConfig == nil {

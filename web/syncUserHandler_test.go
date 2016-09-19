@@ -15,7 +15,7 @@ import (
 func TestSyncUserHandlerStopPurgeClose(t *testing.T) {
 	assert := assert.New(t)
 	uid := uniqueUID()
-	db, _ := syncstorage.NewDB(":memory:")
+	db, _ := syncstorage.NewDB(":memory:", nil)
 	handler := NewSyncUserHandler(uid, db, nil)
 
 	handler.StopHTTP()
@@ -31,7 +31,7 @@ func TestSyncUserHandlerInfoConfiguration(t *testing.T) {
 
 	assert := assert.New(t)
 	uid := uniqueUID()
-	db, _ := syncstorage.NewDB(":memory:")
+	db, _ := syncstorage.NewDB(":memory:", nil)
 
 	// make sure values propagate from the configuration
 	config := &SyncUserHandlerConfig{
@@ -79,7 +79,7 @@ func TestSyncUserHandlerPOST(t *testing.T) {
 
 	uid := "123456"
 
-	db, _ := syncstorage.NewDB(":memory:")
+	db, _ := syncstorage.NewDB(":memory:", nil)
 	handler := NewSyncUserHandler(uid, db, nil)
 	url := syncurl(uid, "storage/bookmarks")
 
@@ -221,7 +221,7 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 	header.Add("Content-Type", "application/json")
 
 	{ // test common flow
-		db, _ := syncstorage.NewDB(":memory:")
+		db, _ := syncstorage.NewDB(":memory:", nil)
 		handler := NewSyncUserHandler(uid, db, nil)
 
 		respCreate := requestheaders("POST", url+"?batch=true", bodyCreate, header, handler)
@@ -256,7 +256,7 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 	}
 
 	{ // test commit=1&batch=true
-		db, _ := syncstorage.NewDB(":memory:")
+		db, _ := syncstorage.NewDB(":memory:", nil)
 		handler := NewSyncUserHandler(uid, db, nil)
 
 		bodyCreate := bytes.NewBufferString(`[
@@ -272,7 +272,7 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 	}
 
 	{ // test batch=true and an empty commit
-		db, _ := syncstorage.NewDB(":memory:")
+		db, _ := syncstorage.NewDB(":memory:", nil)
 		handler := NewSyncUserHandler(uid, db, nil)
 
 		bodyCreate := bytes.NewBufferString(`[
@@ -308,7 +308,7 @@ func TestSyncUserHandlerPUT(t *testing.T) {
 
 	uid := "123456"
 
-	db, _ := syncstorage.NewDB(":memory:")
+	db, _ := syncstorage.NewDB(":memory:", nil)
 	handler := NewSyncUserHandler(uid, db, nil)
 	url := syncurl(uid, "storage/bookmarks/bso0")
 	header := make(http.Header)

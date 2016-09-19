@@ -11,6 +11,7 @@ import (
 	"github.com/facebookgo/httpdown"
 
 	"github.com/mozilla-services/go-syncstorage/config"
+	"github.com/mozilla-services/go-syncstorage/syncstorage"
 	"github.com/mozilla-services/go-syncstorage/web"
 )
 
@@ -48,6 +49,7 @@ func main() {
 		Basepath:    config.DataDir,
 		NumPools:    config.Pool.Num,
 		MaxPoolSize: config.Pool.MaxSize,
+		DBConfig:    &syncstorage.Config{config.Sqlite.CacheSize},
 	}, syncLimitConfig)
 	router = web.NewWeaveHandler(poolHandler)
 
@@ -103,6 +105,7 @@ func main() {
 		"LIMIT_MAX_REQUEST_BYTES":        syncLimitConfig.MaxRequestBytes,
 		"LIMIT_MAX_BATCH_TTL":            fmt.Sprintf("%d seconds", syncLimitConfig.MaxBatchTTL/1000),
 		"LIMIT_MAX_RECORD_PAYLOAD_BYTES": syncLimitConfig.MaxRecordPayloadBytes,
+		"SQLITE3_CACHE_SIZE":             config.Sqlite.CacheSize,
 	}).Info("HTTP Listening at " + listenOn)
 
 	err := httpdown.ListenAndServe(server, hd)
