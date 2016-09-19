@@ -67,6 +67,13 @@ When a pool reaches `POOL_SIZE` number of open files it will close the least rec
 
 Tweaking these values from default won't provide significant performance gains in production. However, a `POOL_NUM=1` and `POOL_SIZE=1` is useful for testing the overhead of opening and closing databases files.
 
+### Sqlite3 Tweaks 
+
+| Env. Var | Info |
+|---|---|
+| `SQLITE3_CACHE_SIZE` | Sets sqlite's internal cache size for each open DB. Busy servers open/close the db files often so a smaller cache size may be more efficient. Follows the [PRAGMA cache_size](https://www.sqlite.org/pragma.html#pragma_cache_size) rules. Positive integers are number of pages to cache, negative numbers are KB of RAM to use for cache. Default 0 (no cache)|
+
+
 ## Data Storage
 
 When deploying choose the EXT4 filesystem. EXT4 is an extent based filesystem and may help improve performance for magnetic storage media.

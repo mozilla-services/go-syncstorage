@@ -45,9 +45,12 @@ type handlerPool struct {
 
 	// the max size of the pool
 	maxPoolSize int
+
+	// the DB Configuration
+	dbConfig *syncstorage.Config
 }
 
-func newHandlerPool(basepath string, maxPoolSize int) *handlerPool {
+func newHandlerPool(basepath string, maxPoolSize int, dbConfig *syncstorage.Config) *handlerPool {
 
 	var path []string
 
@@ -75,6 +78,7 @@ func newHandlerPool(basepath string, maxPoolSize int) *handlerPool {
 		lru:         list.New(),
 		lrumap:      make(map[string]*list.Element),
 		maxPoolSize: maxPoolSize,
+		dbConfig:    dbConfig,
 	}
 
 	return pool
@@ -140,7 +144,7 @@ func (p *handlerPool) getElement(uid string) (*poolElement, error) {
 			p.Lock()
 		}
 
-		db, err := syncstorage.NewDB(dbFile)
+		db, err := syncstorage.NewDB(dbFile, p.dbConfig)
 		if err != nil {
 			return nil, errors.Wrap(err, "Could not create DB")
 		}
