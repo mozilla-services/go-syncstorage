@@ -154,13 +154,6 @@ func TestHawkNonceCheckFunc(t *testing.T) {
 	assert := assert.New(t)
 	hawkH := NewHawkHandler(EchoHandler, []string{"sekret"})
 
-	// check ts within 1min
-	creds0 := &hawk.Credentials{ID: "hello"}
-	ts1 := time.Now().Add(61 * time.Second)
-	assert.False(hawkH.hawkNonceNotFound("t0", ts1, creds0))
-	ts2 := time.Now().Add(-61 * time.Second)
-	assert.False(hawkH.hawkNonceNotFound("t1", ts2, creds0))
-
 	// check replay
 	creds1 := &hawk.Credentials{ID: "bacon"}
 	ts := time.Now()
