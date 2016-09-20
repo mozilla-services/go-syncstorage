@@ -117,7 +117,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		pathUID := extractUID(r.URL.Path)
 		if session.Token.UidString() != pathUID {
 			sendRequestProblem(w, r, http.StatusBadRequest,
-				errors.New("Hawk Sync URL UID != Token UID"))
+				errors.Errorf("Hawk: UID in URL (%s) != Token UID (%s)", pathUID, session.Token.UidString()))
 			return
 		}
 	}
