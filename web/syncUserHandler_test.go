@@ -27,6 +27,50 @@ func TestSyncUserHandlerStopPurgeClose(t *testing.T) {
 	assert.NotEqual("", resp.Header().Get("Retry-After"))
 }
 
+func TestSyncUserHandlerInfoCollections(t *testing.T) {
+	assert := assert.New(t)
+
+	uid := "123456"
+
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	handler := NewSyncUserHandler(uid, db, nil)
+	collections := []string{
+		"clients",
+		"crypto",
+		"forms",
+		"history",
+		"keys",
+		"meta",
+		"bookmarks",
+		"prefs",
+		"tabs",
+		"passwords",
+		"addons",
+	}
+	for _, cName := range collections {
+		cId, _ := db.GetCollectionId(cName)
+		db.TouchCollection(cId, cId*1000) // turn the cId into milliseconds
+	}
+
+	resp := request("GET", syncurl(uid, "info/collections"), nil, handler)
+	assert.Equal(http.StatusOK, resp.Code)
+	results := make(map[string]float32)
+	if err := json.Unmarshal(resp.Body.Bytes(), &results); !assert.NoError(err) {
+		return
+	}
+
+	for cName, modified := range results {
+		cId, err := db.GetCollectionId(cName)
+		if !assert.NoError(err) {
+			return
+		}
+
+		// after conversion to the sync modified format, should be equal
+		assert.Equal(float32(cId), modified)
+	}
+
+}
+
 func TestSyncUserHandlerInfoConfiguration(t *testing.T) {
 
 	assert := assert.New(t)
