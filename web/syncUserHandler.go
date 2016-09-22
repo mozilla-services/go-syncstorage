@@ -275,7 +275,17 @@ func (s *SyncUserHandler) hInfoCollections(w http.ResponseWriter, r *http.Reques
 
 		m := syncstorage.ModifiedToString(modified)
 		w.Header().Set("X-Last-Modified", m)
-		JsonNewline(w, r, info)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, "{")
+		num := len(info)
+		for name, modified := range info {
+			fmt.Fprintf(w, `"%s":%s`, name, syncstorage.ModifiedToString(modified))
+			num--
+			if num != 0 {
+				fmt.Fprint(w, ",")
+			}
+		}
+		fmt.Fprint(w, "}")
 	}
 }
 
