@@ -59,6 +59,9 @@ var Config struct {
 	// SyncUserHandler limits / configuration
 	// available as LIMIT_x
 	Limit *UserHandlerConfig
+
+	// cache size in MB for /info/collections cache
+	InfoCacheSize int `envconfig:"default=0"`
 }
 
 // so we can use config.Port and not config.Config.Port
@@ -76,6 +79,8 @@ var (
 	Limit *UserHandlerConfig
 
 	DisableHTTPLogs bool
+
+	InfoCacheSize int
 )
 
 func init() {
@@ -147,6 +152,10 @@ func init() {
 		log.Fatal("LIMIT_MAX_RECORD_PAYLOAD_BYTES must be >= 1")
 	}
 
+	if Config.InfoCacheSize < 0 {
+		log.Fatal("INFO_CACHE_SIZE must be >= 0")
+	}
+
 	Hostname = Config.Hostname
 	Log = Config.Log
 	Host = Config.Host
@@ -157,4 +166,5 @@ func init() {
 	EnablePprof = Config.EnablePprof
 	Limit = Config.Limit
 	Sqlite = Config.Sqlite
+	InfoCacheSize = Config.InfoCacheSize
 }

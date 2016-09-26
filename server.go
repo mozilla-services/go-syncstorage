@@ -32,8 +32,6 @@ func init() {
 
 func main() {
 
-	var router http.Handler
-
 	syncLimitConfig := web.NewDefaultSyncUserHandlerConfig()
 	syncLimitConfig.MaxRequestBytes = config.Limit.MaxRequestBytes
 	syncLimitConfig.MaxBSOGetLimit = config.Limit.MaxBSOGetLimit
@@ -44,14 +42,23 @@ func main() {
 	syncLimitConfig.MaxBatchTTL = config.Limit.MaxBatchTTL * 1000
 	syncLimitConfig.MaxRecordPayloadBytes = config.Limit.MaxRecordPayloadBytes
 
-	// The base functionality is the sync 1.5 api + legacy weave hacks
+	// The base functionality is the sync 1.5 api
 	poolHandler := web.NewSyncPoolHandler(&web.SyncPoolConfig{
 		Basepath:    config.DataDir,
 		NumPools:    config.Pool.Num,
 		MaxPoolSize: config.Pool.MaxSize,
 		DBConfig:    &syncstorage.Config{config.Sqlite.CacheSize},
 	}, syncLimitConfig)
-	router = web.NewWeaveHandler(poolHandler)
+
+	var router http.Handler
+	router = poolHandler
+
+	if config.InfoCacheSize > 0 {
+		router = web.NewCacheHandler(router, web.CacheConfig{MaxCacheSize: config.InfoCacheSize})
+	}
+
+	// legacy weave hacks
+	router = web.NewWeaveHandler(router)
 
 	// All sync 1.5 access requires Hawk Authorization
 	router = web.NewHawkHandler(router, config.Secrets)
@@ -106,6 +113,7 @@ func main() {
 		"LIMIT_MAX_BATCH_TTL":            fmt.Sprintf("%d seconds", syncLimitConfig.MaxBatchTTL/1000),
 		"LIMIT_MAX_RECORD_PAYLOAD_BYTES": syncLimitConfig.MaxRecordPayloadBytes,
 		"SQLITE3_CACHE_SIZE":             config.Sqlite.CacheSize,
+		"INFO_CACHE_SIZE":                config.InfoCacheSize,
 	}).Info("HTTP Listening at " + listenOn)
 
 	err := httpdown.ListenAndServe(server, hd)
