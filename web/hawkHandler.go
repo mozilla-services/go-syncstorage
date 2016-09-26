@@ -116,7 +116,11 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/1.5/") {
 		pathUID := extractUID(r.URL.Path)
 		if session.Token.UidString() != pathUID {
-			sendRequestProblem(w, r, http.StatusBadRequest,
+			// Ref: https://bugzilla.mozilla.org/show_bug.cgi?id=1304137
+			// a strange series of events can cause clients to use a token that doesn't
+			// match the URL. Sending a 401 should cause clients to abort, fetch a new token
+			// and regenerate the correct URL
+			sendRequestProblem(w, r, http.StatusUnauthorized,
 				errors.Errorf("Hawk: UID in URL (%s) != Token UID (%s)", pathUID, session.Token.UidString()))
 			return
 		}

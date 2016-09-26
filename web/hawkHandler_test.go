@@ -98,7 +98,7 @@ func TestHawkUidMismatchFails(t *testing.T) {
 	// provide a different UID in the sync url
 	req, _ := hawkrequest("GET", syncurl("67890", "info/collections"), tok)
 	resp := sendrequest(req, hawkH)
-	assert.Equal(t, http.StatusBadRequest, resp.Code)
+	assert.Equal(t, http.StatusUnauthorized, resp.Code)
 }
 
 func TestHawkMultiSecrets(t *testing.T) {
