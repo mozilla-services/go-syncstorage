@@ -20,6 +20,8 @@ const (
 type SyncPoolHandler struct {
 	StoppableHandler
 
+	config *SyncPoolConfig
+
 	// use multiple pools to spread lock
 	// contention for parallel requests
 	pools []*handlerPool
@@ -32,6 +34,7 @@ type SyncPoolConfig struct {
 	NumPools    int
 	TTL         time.Duration
 	MaxPoolSize int
+	VacuumKB    int
 
 	DBConfig *syncstorage.Config
 }
@@ -42,6 +45,7 @@ func NewDefaultSyncPoolConfig(basepath string) *SyncPoolConfig {
 		NumPools:    1,
 		TTL:         5 * time.Minute,
 		MaxPoolSize: 100,
+		VacuumKB:    0, // disabled by default
 		DBConfig:    &syncstorage.Config{CacheSize: 0},
 	}
 }
@@ -60,6 +64,7 @@ func NewSyncPoolHandler(config *SyncPoolConfig, userHandlerConfig *SyncUserHandl
 	}
 
 	server := &SyncPoolHandler{
+		config:            config,
 		pools:             pools,
 		userHandlerConfig: userHandlerConfig,
 	}
@@ -83,9 +88,10 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var (
-		uid     string
-		element *poolElement
-		err     error
+		uid        string
+		element    *poolElement
+		newElement bool
+		err        error
 	)
 
 	if session, ok := SessionFromContext(req.Context()); ok {
@@ -102,7 +108,7 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// if a request comes in while an element is being
 	// cleaned up/closing, we retry a few times before failing
 	for i := 1; i <= conflictAttempts; i++ {
-		element, err = s.pools[poolId].getElement(uid)
+		element, newElement, err = s.pools[poolId].getElement(uid)
 		if err != nil {
 			if err == errElementStopped {
 
@@ -126,6 +132,10 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		} else {
 			break
 		}
+	}
+
+	if newElement {
+		element.handler.TidyUp(s.config.VacuumKB)
 	}
 
 	// pass it on

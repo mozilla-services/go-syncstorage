@@ -690,14 +690,21 @@ func (d *DB) Optimize(thresholdPercent int) (ItHappened bool, err error) {
 		return
 	}
 
-	d.Lock()
-	defer d.Unlock()
-
 	if stats.FreePercent() >= thresholdPercent {
-		_, err = d.db.Exec("VACUUM")
+		err = d.Vacuum()
 		ItHappened = true
 	}
 
+	return
+}
+
+// Vacuum recovers free disk pages and reduces fragmentation of the
+// data on disk. This could take a long time depending on the size
+// of the database
+func (d *DB) Vacuum() (err error) {
+	d.Lock()
+	defer d.Unlock()
+	_, err = d.db.Exec("VACUUM")
 	return
 }
 

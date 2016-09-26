@@ -109,7 +109,9 @@ func (p *handlerPool) stopHandlers() {
 	p.cleanupHandlers(p.lru.Len())
 }
 
-func (p *handlerPool) getElement(uid string) (*poolElement, error) {
+// getElement returns the requested poolElement and if it had to create a new one
+// to fulfill the request
+func (p *handlerPool) getElement(uid string) (*poolElement, bool, error) {
 	var (
 		element *poolElement
 		ok      bool
@@ -118,6 +120,8 @@ func (p *handlerPool) getElement(uid string) (*poolElement, error) {
 
 	p.Lock()
 	defer p.Unlock()
+
+	elementCreated := false
 
 	if element, ok = p.elements[uid]; !ok {
 		if len(p.base) == 1 && p.base[0] == ":memory:" {
@@ -128,7 +132,7 @@ func (p *handlerPool) getElement(uid string) (*poolElement, error) {
 			// create the sub-directory tree if required
 			if _, err := os.Stat(storageDir); os.IsNotExist(err) {
 				if err := os.MkdirAll(storageDir, 0755); err != nil {
-					return nil, errors.Wrap(err, "Could not create datadir")
+					return nil, false, errors.Wrap(err, "Could not create datadir")
 				}
 			}
 
@@ -146,7 +150,7 @@ func (p *handlerPool) getElement(uid string) (*poolElement, error) {
 
 		db, err := syncstorage.NewDB(dbFile, p.dbConfig)
 		if err != nil {
-			return nil, errors.Wrap(err, "Could not create DB")
+			return nil, false, errors.Wrap(err, "Could not create DB")
 		}
 
 		element = &poolElement{
@@ -154,19 +158,21 @@ func (p *handlerPool) getElement(uid string) (*poolElement, error) {
 			handler: NewSyncUserHandler(uid, db, nil),
 		}
 
+		elementCreated = true
+
 		p.elements[uid] = element
 
 		listElement := p.lru.PushFront(element)
 		p.lrumap[uid] = listElement
 	} else {
 		if element.handler.IsStopped() {
-			return nil, errElementStopped
+			return nil, false, errElementStopped
 		}
 
 		p.lru.MoveToFront(p.lrumap[uid])
 	}
 
-	return element, nil
+	return element, elementCreated, nil
 }
 
 // TwoLevelPath creates a reverse sub-directory path structure

@@ -108,32 +108,68 @@ func NewSyncUserHandler(uid string, db *syncstorage.DB, config *SyncUserHandlerC
 	storage.HandleFunc("/{collection}/{bsoId}", server.hBsoPUT).Methods("PUT")
 	storage.HandleFunc("/{collection}/{bsoId}", server.hBsoDELETE).Methods("DELETE")
 
+	return server
+}
+
+// TidyUp will purge expired BSOs and Batches. When the database has exceeded
+// vacuumKB (in kilobytes) it will be optimized. This could
+// potentially be a long operation as the database vacuumed needs to rewrite
+// the entire database file
+func (s *SyncUserHandler) TidyUp(vacuumKB int) (timestamp time.Duration, err error) {
 	// Purge Expired BSOs
-	numBSOPurged, err := db.PurgeExpired()
+	start := time.Now()
+
+	numBSOPurged, err := s.db.PurgeExpired()
 	if err != nil {
 		log.WithFields(log.Fields{
-			"uid": uid,
+			"uid": s.uid,
 			"err": err.Error(),
 		}).Error("NewSyncUserHandler - Error purging expired BSOs")
+		return
 	}
 
-	numBatchesPurged, err := db.BatchPurge(config.MaxBatchTTL)
+	numBatchesPurged, err := s.db.BatchPurge(s.config.MaxBatchTTL)
 	if err != nil {
 		log.WithFields(log.Fields{
-			"uid": uid,
+			"uid": s.uid,
 			"err": err.Error(),
 		}).Error("NewSyncUserHandler - Error purging expired Batches")
+		return
 	}
 
-	if err == nil {
+	log.WithFields(log.Fields{
+		"uid":            s.uid,
+		"bsos_purged":    numBSOPurged,
+		"batches_purged": numBatchesPurged,
+		"t":              (time.Since(start).Nanoseconds() / 1000 / 1000),
+	}).Info("NewSyncUserHandler - Purge OK")
+
+	usage, err := s.db.Usage()
+	if err != nil {
 		log.WithFields(log.Fields{
-			"uid":            uid,
-			"bsos_purged":    numBSOPurged,
-			"batches_purged": numBatchesPurged,
-		}).Info("NewSyncUserHandler - Purge OK")
+			"uid": s.uid,
+			"err": err.Error(),
+		}).Error("NewSyncUserHandler - Error retrieving usage")
+		return
 	}
 
-	return server
+	if vacuumKB > 0 && (usage.Free*usage.Size/1024) >= vacuumKB {
+		if err = s.db.Vacuum(); err != nil {
+			log.WithFields(log.Fields{
+				"uid": s.uid,
+				"err": err.Error(),
+			}).Error("NewSyncUserHandler - Error Vacuuming DB")
+			return
+		} else {
+			log.WithFields(log.Fields{
+				"uid": s.uid,
+				"t":   (time.Since(start).Nanoseconds() / 1000 / 1000),
+			}).Info("NewSyncUserHandler - Vacuum OK")
+		}
+	}
+
+	timestamp = time.Since(start)
+	return
 }
 
 func (s *SyncUserHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {

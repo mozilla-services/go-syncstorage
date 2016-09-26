@@ -57,6 +57,7 @@ Things that probably shouldn't be touched:
 |---|---|
 | `POOL_NUM` | Number of DB pools. Defaults to number of CPUs.  |
 | `POOL_SIZE` | Number of open DB files per pool. Defaults to `25`.  |
+| `POOL_VACUUM_KB` | Threshold of free space in kilobytes to trigger a database vacuum. Defaults to `0` (disabled). |
 
 go-syncstorage limits the number of open SQLite database files to keep memory usage constant. This allows a small server to handle thousands of users for a small performance hit.
 
@@ -67,6 +68,8 @@ A low level lock is used in each pool when opening and closing files. Having a l
 When a pool reaches `POOL_SIZE` number of open files it will close the least recently used database. Having a larger `POOL_SIZE` reduces open/close disk IO. It also increases memory usage.
 
 Tweaking these values from default won't provide significant performance gains in production. However, a `POOL_NUM=1` and `POOL_SIZE=1` is useful for testing the overhead of opening and closing databases files.
+
+The `POOL_VACUUM_KB` variable should be enabled with caution. It can cause very high IO if a threshold is too low and users have large databases. This may cause erratic performance. It may be more optimal to schedule a downtime and manually vacuum individual databases to recover space.
 
 ### Sqlite3 Tweaks 
 

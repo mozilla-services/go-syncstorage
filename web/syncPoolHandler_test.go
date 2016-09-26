@@ -26,7 +26,7 @@ func TestSyncPoolHandlerStatusConflict(t *testing.T) {
 	uid := uniqueUID()
 	handler := NewSyncPoolHandler(testSyncPoolConfig(), nil)
 
-	el, err := handler.pools[0].getElement(uid)
+	el, _, err := handler.pools[0].getElement(uid)
 	if !assert.NoError(err) {
 		return
 	}

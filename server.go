@@ -47,6 +47,7 @@ func main() {
 		Basepath:    config.DataDir,
 		NumPools:    config.Pool.Num,
 		MaxPoolSize: config.Pool.MaxSize,
+		VacuumKB:    config.Pool.VacuumKB,
 		DBConfig:    &syncstorage.Config{config.Sqlite.CacheSize},
 	}, syncLimitConfig)
 
@@ -104,6 +105,7 @@ func main() {
 		"PID":                            os.Getpid(),
 		"POOL_NUM":                       config.Pool.Num,
 		"POOL_MAX_SIZE":                  config.Pool.MaxSize,
+		"POOL_VACUUM_KB":                 config.Pool.VacuumKB,
 		"LIMIT_MAX_BSO_GET_LIMIT":        syncLimitConfig.MaxBSOGetLimit,
 		"LIMIT_MAX_POST_RECORDS":         syncLimitConfig.MaxPOSTRecords,
 		"LIMIT_MAX_POST_BYTES":           syncLimitConfig.MaxPOSTBytes,

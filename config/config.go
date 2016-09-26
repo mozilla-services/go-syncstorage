@@ -35,8 +35,9 @@ type UserHandlerConfig struct {
 }
 
 type PoolConfig struct {
-	Num     int `envconfig:"default=0"`
-	MaxSize int `envconfig:"default=25"`
+	Num      int `envconfig:"default=0"`
+	MaxSize  int `envconfig:"default=25"`
+	VacuumKB int `envconfig:"default=0"`
 }
 
 type SqliteConfig struct {
@@ -154,6 +155,10 @@ func init() {
 
 	if Config.InfoCacheSize < 0 {
 		log.Fatal("INFO_CACHE_SIZE must be >= 0")
+	}
+
+	if Config.Pool.VacuumKB < 0 {
+		log.Fatal("POOL_VACUUM_KB must be >= 0")
 	}
 
 	Hostname = Config.Hostname

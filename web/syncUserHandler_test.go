@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/mozilla-services/go-syncstorage/syncstorage"
 	"github.com/stretchr/testify/assert"
@@ -396,4 +398,68 @@ func TestSyncUserHandlerPUT(t *testing.T) {
 		}
 	}
 
+}
+
+func TestSyncUserHandlerTidyUp(t *testing.T) {
+	assert := assert.New(t)
+
+	// stuff some data in first
+	uid := uniqueUID()
+	db, _ := syncstorage.NewDB(":memory:", nil)
+
+	config := NewDefaultSyncUserHandlerConfig()
+	config.MaxBatchTTL = 1
+
+	handler := NewSyncUserHandler(uid, db, config)
+	_ = handler
+
+	cId := 1
+	bId := "bso0"
+
+	payload := "hi"
+	ttl := 1
+
+	// remember the size a new db
+	usageOrig, _ := db.Usage()
+
+	_, err := db.PutBSO(cId, bId, &payload, nil, &ttl)
+	if !assert.NoError(err) {
+		return
+	}
+
+	// put in some large data to make sure the vacuum threshold triggers
+	batchId, err := db.BatchCreate(cId, strings.Repeat("1234567890", 5*4*1024))
+	if !assert.NoError(err) {
+		return
+	}
+
+	time.Sleep(time.Millisecond * 10)
+
+	// What's actually being tested... Test that TidyUp will clean up the
+	// BSO, Batch and Vacuum the database. Set to 1KB vacuum threshold
+	_, err = handler.TidyUp(1)
+
+	if !assert.NoError(err) {
+		return
+	}
+
+	// make sure the BSO was purged
+	_, err = db.GetBSO(cId, bId)
+	if !assert.Equal(syncstorage.ErrNotFound, err) {
+		return
+	}
+
+	// make sure the batch was purged
+	exists, err := db.BatchExists(batchId, cId)
+	if !assert.NoError(err) && !assert.False(exists) {
+		return
+	}
+
+	usage, err := db.Usage()
+	if !assert.NoError(err) {
+		return
+	}
+
+	assert.Equal(usageOrig.Total, usage.Total, "Expected size to be back to original")
+	assert.Equal(0, usage.Free)
 }
