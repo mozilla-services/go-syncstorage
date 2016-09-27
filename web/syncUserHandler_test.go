@@ -403,63 +403,86 @@ func TestSyncUserHandlerPUT(t *testing.T) {
 func TestSyncUserHandlerTidyUp(t *testing.T) {
 	assert := assert.New(t)
 
-	// stuff some data in first
-	uid := uniqueUID()
-	db, _ := syncstorage.NewDB(":memory:", nil)
+	{ // test skipping of purging works
+		db, _ := syncstorage.NewDB(":memory:", nil)
+		config := NewDefaultSyncUserHandlerConfig()
+		config.MaxBatchTTL = 1
+		handler := NewSyncUserHandler(uniqueUID(), db, config)
 
-	config := NewDefaultSyncUserHandlerConfig()
-	config.MaxBatchTTL = 1
+		// no one in a clean db will always clean up
+		skipped, _, err := handler.TidyUp(time.Nanosecond, 1)
+		if !assert.NoError(err) || !assert.False(skipped) {
+			return
+		}
 
-	handler := NewSyncUserHandler(uid, db, config)
-	_ = handler
+		// it hasn't been 10ms since the last cleanup.. so should skip
+		skipped, _, err = handler.TidyUp(5*time.Millisecond, 1)
+		if !assert.NoError(err) || !assert.True(skipped) {
+			return
+		}
 
-	cId := 1
-	bId := "bso0"
-
-	payload := "hi"
-	ttl := 1
-
-	// remember the size a new db
-	usageOrig, _ := db.Usage()
-
-	_, err := db.PutBSO(cId, bId, &payload, nil, &ttl)
-	if !assert.NoError(err) {
-		return
+		// enough time has past, the purge should happen
+		time.Sleep(10 * time.Millisecond)
+		skipped, _, err = handler.TidyUp(5*time.Millisecond, 1)
+		if !assert.NoError(err) || !assert.False(skipped) {
+			return
+		}
 	}
 
-	// put in some large data to make sure the vacuum threshold triggers
-	batchId, err := db.BatchCreate(cId, strings.Repeat("1234567890", 5*4*1024))
-	if !assert.NoError(err) {
-		return
+	{ // test purging works
+		db, _ := syncstorage.NewDB(":memory:", nil)
+		config := NewDefaultSyncUserHandlerConfig()
+		config.MaxBatchTTL = 1
+		handler := NewSyncUserHandler(uniqueUID(), db, config)
+		cId := 1
+		bId := "bso0"
+
+		payload := "hi"
+		ttl := 1
+
+		// remember the size a new db
+		usageOrig, _ := db.Usage()
+
+		_, err := db.PutBSO(cId, bId, &payload, nil, &ttl)
+		if !assert.NoError(err) {
+			return
+		}
+
+		// put in some large data to make sure the vacuum threshold triggers
+		batchId, err := db.BatchCreate(cId, strings.Repeat("1234567890", 5*4*1024))
+		if !assert.NoError(err) {
+			return
+		}
+
+		time.Sleep(time.Millisecond * 10)
+
+		// What's actually being tested... Test that TidyUp will clean up the
+		// BSO, Batch and Vacuum the database. Set to 1KB vacuum threshold
+		_, _, err = handler.TidyUp(time.Nanosecond, 1)
+
+		if !assert.NoError(err) {
+			return
+		}
+
+		// make sure the BSO was purged
+		_, err = db.GetBSO(cId, bId)
+		if !assert.Equal(syncstorage.ErrNotFound, err) {
+			return
+		}
+
+		// make sure the batch was purged
+		exists, err := db.BatchExists(batchId, cId)
+		if !assert.NoError(err) && !assert.False(exists) {
+			return
+		}
+
+		usage, err := db.Usage()
+		if !assert.NoError(err) {
+			return
+		}
+
+		assert.Equal(usageOrig.Total, usage.Total, "Expected size to be back to original")
+		assert.Equal(0, usage.Free)
 	}
 
-	time.Sleep(time.Millisecond * 10)
-
-	// What's actually being tested... Test that TidyUp will clean up the
-	// BSO, Batch and Vacuum the database. Set to 1KB vacuum threshold
-	_, err = handler.TidyUp(1)
-
-	if !assert.NoError(err) {
-		return
-	}
-
-	// make sure the BSO was purged
-	_, err = db.GetBSO(cId, bId)
-	if !assert.Equal(syncstorage.ErrNotFound, err) {
-		return
-	}
-
-	// make sure the batch was purged
-	exists, err := db.BatchExists(batchId, cId)
-	if !assert.NoError(err) && !assert.False(exists) {
-		return
-	}
-
-	usage, err := db.Usage()
-	if !assert.NoError(err) {
-		return
-	}
-
-	assert.Equal(usageOrig.Total, usage.Total, "Expected size to be back to original")
-	assert.Equal(0, usage.Free)
 }

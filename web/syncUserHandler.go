@@ -115,16 +115,35 @@ func NewSyncUserHandler(uid string, db *syncstorage.DB, config *SyncUserHandlerC
 // vacuumKB (in kilobytes) it will be optimized. This could
 // potentially be a long operation as the database vacuumed needs to rewrite
 // the entire database file
-func (s *SyncUserHandler) TidyUp(vacuumKB int) (timestamp time.Duration, err error) {
+func (s *SyncUserHandler) TidyUp(purgeFrequency time.Duration, vacuumKB int) (skipped bool, took time.Duration, err error) {
 	// Purge Expired BSOs
 	start := time.Now()
+
+	lastStr, err := s.db.GetKey("LAST_PURGE")
+	if err != nil {
+		return true, time.Since(start), err
+	}
+
+	if lastStr != "" {
+		lastPurge, err := time.Parse(time.RFC3339Nano, lastStr)
+		sinceLastPurge := time.Since(lastPurge)
+
+		if err == nil && sinceLastPurge < purgeFrequency {
+			if log.GetLevel() == log.DebugLevel {
+				log.WithFields(log.Fields{
+					"purge_valid_in": purgeFrequency - sinceLastPurge,
+				}).Debug("SyncUserHandler: Skipping TidyUp")
+			}
+			return true, took, nil
+		}
+	}
 
 	numBSOPurged, err := s.db.PurgeExpired()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"uid": s.uid,
 			"err": err.Error(),
-		}).Error("NewSyncUserHandler - Error purging expired BSOs")
+		}).Error("SyncUserHandler - Error purging expired BSOs")
 		return
 	}
 
@@ -133,7 +152,7 @@ func (s *SyncUserHandler) TidyUp(vacuumKB int) (timestamp time.Duration, err err
 		log.WithFields(log.Fields{
 			"uid": s.uid,
 			"err": err.Error(),
-		}).Error("NewSyncUserHandler - Error purging expired Batches")
+		}).Error("SyncUserHandler - Error purging expired Batches")
 		return
 	}
 
@@ -142,14 +161,14 @@ func (s *SyncUserHandler) TidyUp(vacuumKB int) (timestamp time.Duration, err err
 		"bsos_purged":    numBSOPurged,
 		"batches_purged": numBatchesPurged,
 		"t":              (time.Since(start).Nanoseconds() / 1000 / 1000),
-	}).Info("NewSyncUserHandler - Purge OK")
+	}).Info("SyncUserHandler - Purge OK")
 
 	usage, err := s.db.Usage()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"uid": s.uid,
 			"err": err.Error(),
-		}).Error("NewSyncUserHandler - Error retrieving usage")
+		}).Error("SyncUserHandler - Error retrieving usage")
 		return
 	}
 
@@ -158,17 +177,27 @@ func (s *SyncUserHandler) TidyUp(vacuumKB int) (timestamp time.Duration, err err
 			log.WithFields(log.Fields{
 				"uid": s.uid,
 				"err": err.Error(),
-			}).Error("NewSyncUserHandler - Error Vacuuming DB")
+			}).Error("SyncUserHandler - Error Vacuuming DB")
 			return
 		} else {
 			log.WithFields(log.Fields{
 				"uid": s.uid,
 				"t":   (time.Since(start).Nanoseconds() / 1000 / 1000),
-			}).Info("NewSyncUserHandler - Vacuum OK")
+			}).Info("SyncUserHandler - Vacuum OK")
 		}
 	}
 
-	timestamp = time.Since(start)
+	err = s.db.SetKey("LAST_PURGE", time.Now().Format(time.RFC3339Nano))
+
+	if err != nil {
+		log.WithFields(log.Fields{
+			"uid": s.uid,
+			"err": err.Error(),
+		}).Error("SyncUserHandler - Error Setting Last Purge Key")
+		return
+	}
+
+	took = time.Since(start)
 	return
 }
 

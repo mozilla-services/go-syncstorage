@@ -135,7 +135,7 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if newElement {
-		element.handler.TidyUp(s.config.VacuumKB)
+		element.handler.TidyUp(12*time.Hour, s.config.VacuumKB)
 	}
 
 	// pass it on
