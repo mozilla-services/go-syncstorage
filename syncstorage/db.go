@@ -698,6 +698,34 @@ func (d *DB) Optimize(thresholdPercent int) (ItHappened bool, err error) {
 	return
 }
 
+// SetKey inserts or replaces a key with the value
+func (d *DB) SetKey(key, value string) error {
+	d.Lock()
+	defer d.Unlock()
+	return setKey(d.db, key, value)
+}
+
+// GetKey returns a previous key in the database
+func (d *DB) GetKey(key string) (string, error) {
+	d.Lock()
+	defer d.Unlock()
+	return getKey(d.db, key)
+}
+
+func setKey(tx dbTx, key, value string) (err error) {
+	_, err = tx.Exec(`INSERT OR REPLACE INTO KeyValues (Key, Value) VALUES (?, ?)`, key, value)
+	return
+}
+
+func getKey(tx dbTx, key string) (value string, err error) {
+	query := "SELECT Value FROM KeyValues WHERE Key=?"
+	err = tx.QueryRow(query, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return
+}
+
 // Vacuum recovers free disk pages and reduces fragmentation of the
 // data on disk. This could take a long time depending on the size
 // of the database

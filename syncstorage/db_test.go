@@ -1119,3 +1119,21 @@ func TestDeleteEverything(t *testing.T) {
 	assert.Nil(err)
 	assert.Equal(100, cTest)
 }
+
+func TestGetSetKeyValue(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := getTestDB()
+
+	value, err := db.GetKey("testing")
+	if !assert.NoError(err) || !assert.Equal("", value) {
+		return
+	}
+
+	if !assert.NoError(db.SetKey("testing", "12345")) {
+		return
+	}
+
+	if val, err := db.GetKey("testing"); assert.NoError(err) {
+		assert.Equal("12345", val)
+	}
+}
