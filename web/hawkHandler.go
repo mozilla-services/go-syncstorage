@@ -56,24 +56,29 @@ func NewHawkHandler(handler http.Handler, secrets []string) *HawkHandler {
 func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Ensure the Hawk header is OK. Use ParseRequestHeader
 	// so the token does not have to be parsed twice to extract
-	// the UID from it
+	// the UID from it.
+	//
+	// Important: Hawk errors results in StatusBadRequest (HTTP 400). A StatusUnauthorized (HTTP 401)
+	// causes clients to fetch new tokens from the tokenserver. In practice most hawk errors
+	// can not be resolved with a new token, e.g: time skew too high, nonce replay, etc.
+	// there's no sense putting unnecessary load on the token service.
 	auth, err := hawk.NewAuthFromRequest(r, nil, h.hawkNonceNotFound)
 	if err != nil {
 		if e, ok := err.(hawk.AuthFormatError); ok {
-			sendRequestProblem(w, r, http.StatusBadRequest,
+			sendRequestProblem(w, r, http.StatusForbidden,
 				errors.Errorf("Hawk: Malformed hawk header, field: %s, err: %s", e.Field, e.Err))
 		} else if authError, ok := err.(hawk.AuthError); ok {
 			w.Header().Set("WWW-Authenticate", "Hawk")
 			switch authError {
 			case hawk.ErrReplay: // log the replay'd nonce
 				authInfo, _ := hawk.ParseRequestHeader(r.Header.Get("Authorization"))
-				sendRequestProblem(w, r, http.StatusUnauthorized,
+				sendRequestProblem(w, r, http.StatusForbidden,
 					errors.Errorf("Hawk: Replay nonce=%s", authInfo.Nonce))
 			default:
-				sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(err, "Hawk: AuthError"))
+				sendRequestProblem(w, r, http.StatusForbidden, errors.Wrap(err, "Hawk: AuthError"))
 			}
 		} else {
-			sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(err, "Hawk: Unknown Error"))
+			sendRequestProblem(w, r, http.StatusForbidden, errors.Wrap(err, "Hawk: Unknown Error"))
 		}
 		return
 	}
@@ -92,7 +97,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if tokenError != nil {
-		sendRequestProblem(w, r, http.StatusBadRequest, errors.Wrap(tokenError, "Hawk: Invalid token"))
+		sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(tokenError, "Hawk: Invalid token"))
 		return
 	} else {
 		// required to these manually so the auth.Valid()
@@ -104,7 +109,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Step 3: Make sure it's valid...
 	if err := auth.Valid(); err != nil {
 		w.Header().Set("WWW-Authenticate", "Hawk")
-		sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(err, "Hawk: auth invalid"))
+		sendRequestProblem(w, r, http.StatusForbidden, errors.Wrap(err, "Hawk: auth invalid"))
 		return
 	}
 
@@ -147,7 +152,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		pHash.Sum(content)
 		if !auth.ValidHash(pHash) {
 			w.Header().Set("WWW-Authenticate", "Hawk")
-			sendRequestProblem(w, r, http.StatusUnauthorized,
+			sendRequestProblem(w, r, http.StatusForbidden,
 				errors.New("Hawk: payload hash invalid"))
 			return
 		}

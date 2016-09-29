@@ -211,7 +211,7 @@ func TestHawkReplayNonce(t *testing.T) {
 	assert.Equal(http.StatusOK, resp1.Code)
 
 	resp2 := sendrequest(req1, hawkH)
-	assert.Equal(http.StatusUnauthorized, resp2.Code)
+	assert.Equal(http.StatusForbidden, resp2.Code)
 	assert.Contains(resp2.Body.String(), "Hawk: Replay nonce=")
 
 }
