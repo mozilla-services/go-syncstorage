@@ -156,13 +156,6 @@ func (s *SyncUserHandler) TidyUp(purgeFrequency time.Duration, vacuumKB int) (sk
 		return
 	}
 
-	log.WithFields(log.Fields{
-		"uid":            s.uid,
-		"bsos_purged":    numBSOPurged,
-		"batches_purged": numBatchesPurged,
-		"t":              (time.Since(start).Nanoseconds() / 1000 / 1000),
-	}).Info("SyncUserHandler - Purge OK")
-
 	usage, err := s.db.Usage()
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -172,7 +165,16 @@ func (s *SyncUserHandler) TidyUp(purgeFrequency time.Duration, vacuumKB int) (sk
 		return
 	}
 
-	if vacuumKB > 0 && (usage.Free*usage.Size/1024) >= vacuumKB {
+	freeKB := (usage.Free * usage.Size / 1024)
+	log.WithFields(log.Fields{
+		"uid":            s.uid,
+		"bsos_purged":    numBSOPurged,
+		"batches_purged": numBatchesPurged,
+		"t":              (time.Since(start).Nanoseconds() / 1000 / 1000),
+		"free_kb":        freeKB,
+	}).Info("SyncUserHandler - Purge OK")
+
+	if vacuumKB > 0 && freeKB >= vacuumKB {
 		if err = s.db.Vacuum(); err != nil {
 			log.WithFields(log.Fields{
 				"uid": s.uid,

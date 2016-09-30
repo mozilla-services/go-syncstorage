@@ -3,6 +3,7 @@ package web
 import (
 	"crypto/sha1"
 	"encoding/binary"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -135,7 +136,10 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if newElement {
-		element.handler.TidyUp(12*time.Hour, s.config.VacuumKB)
+		// between one and two weeks. The random interval spreads
+		// the load from cleanups more evenly around
+		tidyThreshold := time.Duration(128*rand.Intn(168)) * time.Hour
+		element.handler.TidyUp(tidyThreshold, s.config.VacuumKB)
 	}
 
 	// pass it on
