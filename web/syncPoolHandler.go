@@ -138,7 +138,7 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if newElement {
 		// between one and two weeks. The random interval spreads
 		// the load from cleanups more evenly around
-		tidyThreshold := time.Duration(168*rand.Intn(168)) * time.Hour
+		tidyThreshold := time.Duration(168+rand.Intn(168)) * time.Hour
 		element.handler.TidyUp(tidyThreshold, s.config.VacuumKB)
 	}
 

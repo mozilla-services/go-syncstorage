@@ -121,14 +121,29 @@ func (s *SyncUserHandler) TidyUp(purgeFrequency time.Duration, vacuumKB int) (sk
 
 	lastStr, err := s.db.GetKey("LAST_PURGE")
 	if err != nil {
+		log.WithFields(log.Fields{
+			"uid": s.uid,
+			"err": err.Error(),
+		}).Error("SyncUserHandler - Error Fetching last purge time")
 		return true, time.Since(start), err
 	}
 
 	if lastStr != "" {
 		lastPurge, err := time.Parse(time.RFC3339Nano, lastStr)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"uid": s.uid,
+				"err": err.Error(),
+			}).Error("SyncUserHandler - Error parsing LAST_PURGE value")
+
+			// try to fix it for next time
+			s.db.SetKey("LAST_PURGE", time.Now().Format(time.RFC3339Nano))
+			return true, time.Since(start), nil
+		}
+
 		sinceLastPurge := time.Since(lastPurge)
 
-		if err == nil && sinceLastPurge < purgeFrequency {
+		if sinceLastPurge < purgeFrequency {
 			if log.GetLevel() == log.DebugLevel {
 				log.WithFields(log.Fields{
 					"purge_valid_in": purgeFrequency - sinceLastPurge,
