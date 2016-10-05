@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,7 +81,8 @@ func TestLogHandlerContext(t *testing.T) {
 
 	var uid uint64 = 12345
 	tok := testtoken(hawkHandle.secrets[0], uid)
-	req, _ := hawkrequest("GET", syncurl(uid, "info/collections"), tok)
+	req, _ := hawkrequestbody("POST", syncurl(uid, "some/endpoint"), tok, "text/plain",
+		bytes.NewBufferString(strings.Repeat("ABC", 10)))
 	resp := sendrequest(req, logHandle)
 
 	assert.Equal(http.StatusOK, resp.Code)
@@ -94,6 +96,9 @@ func TestLogHandlerContext(t *testing.T) {
 
 	assert.Equal("fxa_12345", record.Fields["fxa_uid"])
 	assert.Equal("device_12345", record.Fields["device_id"])
+
+	// make sure res_sz is correct
+	assert.Equal(float64(resp.Body.Len()), record.Fields["res_sz"]) // use float64 cause json converted
 }
 
 func TestLogHandlerMozlogFormatter(t *testing.T) {

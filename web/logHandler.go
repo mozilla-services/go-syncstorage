@@ -37,7 +37,7 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		// change the context of the request...
 		newCtx := NewSessionContext(req.Context(), &Session{})
 		req = req.WithContext(newCtx)
-		h.handler.ServeHTTP(w, req)
+		h.handler.ServeHTTP(logger, req)
 	}
 
 	took := int(time.Duration(time.Since(start).Nanoseconds()) / time.Millisecond)
