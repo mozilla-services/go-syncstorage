@@ -113,20 +113,17 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session := &Session{
-		Token: parsedToken.Payload,
-	}
-
 	// Step 4: Make sure token UID matches path UID for sync paths
 	if strings.HasPrefix(r.URL.Path, "/1.5/") {
+		tokenUid := parsedToken.Payload.UidString()
 		pathUID := extractUID(r.URL.Path)
-		if session.Token.UidString() != pathUID {
+		if tokenUid != pathUID {
 			// Ref: https://bugzilla.mozilla.org/show_bug.cgi?id=1304137
 			// a strange series of events can cause clients to use a token that doesn't
 			// match the URL. Sending a 401 should cause clients to abort, fetch a new token
 			// and regenerate the correct URL
 			sendRequestProblem(w, r, http.StatusUnauthorized,
-				errors.Errorf("Hawk: UID in URL (%s) != Token UID (%s)", pathUID, session.Token.UidString()))
+				errors.Errorf("Hawk: UID in URL (%s) != Token UID (%s)", pathUID, tokenUid))
 			return
 		}
 	}
@@ -159,8 +156,17 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 6: *woot*, pass it on
-	reqCtx := r.WithContext(NewSessionContext(r.Context(), session))
-	h.handler.ServeHTTP(w, reqCtx)
+	if session, ok := SessionFromContext(r.Context()); ok {
+		// replace the token inside
+		session.Token = parsedToken.Payload
+		h.handler.ServeHTTP(w, r)
+	} else {
+		session := &Session{
+			Token: parsedToken.Payload,
+		}
+		reqCtx := r.WithContext(NewSessionContext(r.Context(), session))
+		h.handler.ServeHTTP(w, reqCtx)
+	}
 }
 
 func (h *HawkHandler) hawkNonceNotFound(nonce string, t time.Time, creds *hawk.Credentials) bool {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -75,10 +76,12 @@ func hawkrequestbody(
 func testtoken(secret string, uid uint64) token.Token {
 	node := "https://syncnode-12345.services.mozilla.com"
 	payload := token.TokenPayload{
-		Uid:     uid,
-		Node:    node,
-		Expires: float64(syncstorage.Now()+60) / 1000,
-		Salt:    "pacific",
+		Uid:      uid,
+		Node:     node,
+		Expires:  float64(syncstorage.Now()+60) / 1000,
+		Salt:     "pacific",
+		FxaUID:   "fxa_" + strconv.FormatUint(uid, 10),
+		DeviceId: "device_" + strconv.FormatUint(uid, 10),
 	}
 
 	tok, err := token.NewToken([]byte(secret), payload)

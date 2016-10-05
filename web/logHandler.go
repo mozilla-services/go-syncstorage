@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/mozilla-services/go-syncstorage/token"
 )
 
 // NewLogHandler return a http.Handler that wraps h and logs
@@ -31,15 +30,17 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	start := time.Now()
 
-	// process it
-	h.handler.ServeHTTP(logger, req)
+	// reuse or add a session context to the request
+	if _, ok := SessionFromContext(req.Context()); ok {
+		h.handler.ServeHTTP(logger, req)
+	} else {
+		// change the context of the request...
+		newCtx := NewSessionContext(req.Context(), &Session{})
+		req = req.WithContext(newCtx)
+		h.handler.ServeHTTP(w, req)
+	}
 
 	took := int(time.Duration(time.Since(start).Nanoseconds()) / time.Millisecond)
-
-	var tokenPayload token.TokenPayload
-	if session, ok := SessionFromContext(req.Context()); ok {
-		tokenPayload = session.Token
-	}
 
 	uri := req.RequestURI
 
@@ -70,16 +71,19 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// common fields to log with every request
 	fields := logrus.Fields{
-		"agent":     req.UserAgent(),
-		"errno":     errno,
-		"method":    req.Method,
-		"path":      uri,
-		"req_sz":    req.ContentLength,
-		"res_sz":    logger.Size(),
-		"t":         took,
-		"uid":       extractUID(uri),
-		"fxa_uid":   tokenPayload.FxaUID,
-		"device_id": tokenPayload.DeviceId,
+		"agent":  req.UserAgent(),
+		"errno":  errno,
+		"method": req.Method,
+		"path":   uri,
+		"req_sz": req.ContentLength,
+		"res_sz": logger.Size(),
+		"t":      took,
+		"uid":    extractUID(uri),
+	}
+
+	if session, ok := SessionFromContext(req.Context()); ok && session.Token.Uid != 0 {
+		fields["fxa_uid"] = session.Token.FxaUID
+		fields["device_id"] = session.Token.DeviceId
 	}
 
 	h.logger.WithFields(fields).Info(logMsg)

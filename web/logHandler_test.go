@@ -24,11 +24,7 @@ func TestLogHandler(t *testing.T) {
 		Pid:      os.Getpid(),
 	}
 
-	hFunc := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte("OK"))
-	})
-
-	handler := NewLogHandler(logger, hFunc)
+	handler := NewLogHandler(logger, EchoHandler)
 	request("GET", "/1.5/12346", nil, handler)
 
 	// should be able to decode the log message
@@ -62,6 +58,42 @@ func TestLogHandler(t *testing.T) {
 	for key, test := range tests {
 		assert.Equal(test, record.Fields[key], fmt.Sprintf("Key: %s", key))
 	}
+}
+
+// TestLogHandlerContext tests that Token payload data was properly passed
+// and retained as it went through several handlers
+func TestLogHandlerContext(t *testing.T) {
+
+	assert := assert.New(t)
+	var buf bytes.Buffer
+
+	logger := logrus.New()
+	logger.Out = &buf
+	logger.Formatter = &MozlogFormatter{
+		Hostname: "test.localdomain",
+		Pid:      os.Getpid(),
+	}
+
+	// pass it through the hawk and the EchoHandler
+	hawkHandle := NewHawkHandler(EchoHandler, []string{"sekret"})
+	logHandle := NewLogHandler(logger, hawkHandle)
+
+	var uid uint64 = 12345
+	tok := testtoken(hawkHandle.secrets[0], uid)
+	req, _ := hawkrequest("GET", syncurl(uid, "info/collections"), tok)
+	resp := sendrequest(req, logHandle)
+
+	assert.Equal(http.StatusOK, resp.Code)
+
+	// make sure fxa_uid and device_id was logged correctly
+	// are passed around in the session context
+	var record mozlog
+	if err := json.Unmarshal(buf.Bytes(), &record); !assert.NoError(err) {
+		return
+	}
+
+	assert.Equal("fxa_12345", record.Fields["fxa_uid"])
+	assert.Equal("device_12345", record.Fields["device_id"])
 }
 
 func TestLogHandlerMozlogFormatter(t *testing.T) {
