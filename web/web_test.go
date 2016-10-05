@@ -1,6 +1,8 @@
 package web
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -83,20 +85,28 @@ func requestheaders(method, urlStr string, body io.Reader, header http.Header, h
 
 	req, err := http.NewRequest(method, urlStr, body)
 	req.Header = header
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", "go-tester")
+	}
 	if err != nil {
 		panic(err)
 	}
 
 	// add the session data in
 	// I should have used int64 from the beginning... ¯\_(ツ)_/¯
-	uid64, err := strconv.ParseUint(extractUID(urlStr), 10, 64)
+	uid := extractUID(urlStr)
+	uid64, err := strconv.ParseUint(uid, 10, 64)
 	if err != nil {
 		panic(err)
 	}
 
+	deviceId := fmt.Sprintf("%x", sha256.Sum256([]byte(uid)))[:8]
+
 	session := &Session{
 		Token: token.TokenPayload{
-			Uid: uid64,
+			Uid:      uid64,
+			FxaUID:   "fxa_" + extractUID(urlStr),
+			DeviceId: deviceId,
 		},
 	}
 	reqCtx := req.WithContext(

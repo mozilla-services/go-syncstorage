@@ -37,9 +37,11 @@ func Test_NewToken(t *testing.T) {
 
 func Test_ParseToken(t *testing.T) {
 	payload := TokenPayload{
-		Uid:     1234,
-		Node:    "http://node.mozilla.org",
-		Expires: 1452807004.454294,
+		Uid:      1234,
+		Node:     "http://node.mozilla.org",
+		Expires:  1452807004.454294,
+		FxaUID:   "fxa_test_uid",
+		DeviceId: "dev123",
 	}
 
 	generatedToken, err := NewToken([]byte("thisisasecret"), payload)
@@ -71,6 +73,12 @@ func Test_ParseToken(t *testing.T) {
 	}
 	if generatedToken.Payload.Expires != parsedToken.Payload.Expires {
 		t.Error("Different Payload.Expires")
+	}
+	if generatedToken.Payload.FxaUID != parsedToken.Payload.FxaUID {
+		t.Error("Different Payload.FxaUID")
+	}
+	if generatedToken.Payload.DeviceId != parsedToken.Payload.DeviceId {
+		t.Error("Different Payload.DeviceId")
 	}
 
 	if generatedToken.Token != parsedToken.Token {

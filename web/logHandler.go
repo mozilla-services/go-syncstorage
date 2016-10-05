@@ -2,22 +2,26 @@ package web
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
+	"github.com/mozilla-services/go-syncstorage/token"
 )
 
 // NewLogHandler return a http.Handler that wraps h and logs
 // request out to logrus INFO level with fields
-func NewLogHandler(h http.Handler) http.Handler {
-	return &LoggingHandler{h}
+func NewLogHandler(l logrus.FieldLogger, h http.Handler) http.Handler {
+	return &LoggingHandler{l, h}
 }
 
 type LoggingHandler struct {
+	logger  logrus.FieldLogger
 	handler http.Handler
 }
 
@@ -26,8 +30,16 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	url := *req.URL
 
 	start := time.Now()
+
+	// process it
 	h.handler.ServeHTTP(logger, req)
-	took := int(time.Duration(time.Now().Sub(start).Nanoseconds()) / time.Millisecond)
+
+	took := int(time.Duration(time.Since(start).Nanoseconds()) / time.Millisecond)
+
+	var tokenPayload token.TokenPayload
+	if session, ok := SessionFromContext(req.Context()); ok {
+		tokenPayload = session.Token
+	}
 
 	uri := req.RequestURI
 
@@ -41,11 +53,15 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		uri = url.RequestURI()
 	}
 
-	logMsg := fmt.Sprintf("%s %s %d %d %d",
-		req.Method, uri,
-		logger.Status(),
-		req.ContentLength,
-		logger.Size())
+	// don't write out a msg if
+	var logMsg string
+	if l, ok := h.logger.(*logrus.Logger); ok {
+		if _, ok := l.Formatter.(*MozlogFormatter); !ok {
+			logMsg = fmt.Sprintf("%s %s %d",
+				req.Method, uri,
+				logger.Status())
+		}
+	}
 
 	errno := logger.Status()
 	if errno == http.StatusOK {
@@ -53,24 +69,20 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// common fields to log with every request
-	fields := log.Fields{
-		"agent":  req.UserAgent(),
-		"errno":  errno,
-		"method": req.Method,
-		"path":   uri,
-		"req_sz": req.ContentLength,
-		"res_sz": logger.Size(),
-		"t":      took,
-		"uid":    extractUID(uri),
+	fields := logrus.Fields{
+		"agent":     req.UserAgent(),
+		"errno":     errno,
+		"method":    req.Method,
+		"path":      uri,
+		"req_sz":    req.ContentLength,
+		"res_sz":    logger.Size(),
+		"t":         took,
+		"uid":       extractUID(uri),
+		"fxa_uid":   tokenPayload.FxaUID,
+		"device_id": tokenPayload.DeviceId,
 	}
 
-	if log.GetLevel() == log.DebugLevel {
-		//fields["req_header"] = req.Header
-		//fields["res_header"] = logger.Header()
-		log.WithFields(fields).Debug(logMsg)
-	} else {
-		log.WithFields(fields).Info(logMsg)
-	}
+	h.logger.WithFields(fields).Info(logMsg)
 }
 
 // mozlog represents the MozLog standard format https://github.com/mozilla-services/Dockerflow/blob/master/docs/mozlog.md
@@ -82,7 +94,7 @@ type mozlog struct {
 	EnvVersion string
 	Pid        int
 	Severity   uint8
-	Fields     log.Fields
+	Fields     logrus.Fields
 }
 
 // MozlogFormatter is a custom logrus formatter
@@ -91,50 +103,65 @@ type MozlogFormatter struct {
 	Pid      int
 }
 
+var encoderPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
 // Format a logrus.Entry into a mozlog JSON object
-func (f *MozlogFormatter) Format(entry *log.Entry) ([]byte, error) {
-	var severity uint8
-	switch entry.Level {
-	case log.PanicLevel:
-		severity = 1
-	case log.FatalLevel:
-		severity = 2
-	case log.ErrorLevel:
-		severity = 3
-	case log.WarnLevel:
-		severity = 4
-	case log.InfoLevel:
-		severity = 6
-	case log.DebugLevel:
-		severity = 7
+func (f *MozlogFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 
-	}
-
-	logType := "system"
-	if _, ok := entry.Data["method"]; ok {
-		if _, ok2 := entry.Data["path"]; ok2 {
-			logType = "request.summary"
-		}
-	}
-
-	entry.Data["msg"] = entry.Message
 	m := &mozlog{
 		Timestamp:  entry.Time.UnixNano(),
-		Type:       logType,
+		Type:       "system",
 		Logger:     "go-syncstorage",
 		Hostname:   f.Hostname,
 		EnvVersion: "2.0",
 		Pid:        f.Pid,
-		Severity:   severity,
+		Severity:   0,
 		Fields:     entry.Data,
 	}
 
-	serialized, err := json.Marshal(m)
-	if err != nil {
-		return nil, err
+	if _, ok := entry.Data["method"]; ok {
+		if _, ok2 := entry.Data["path"]; ok2 {
+			m.Type = "request.summary"
+		}
 	}
 
-	return append(serialized, '\n'), nil
+	if entry.Message != "" {
+		entry.Data["msg"] = entry.Message
+	}
+
+	switch entry.Level {
+	case logrus.PanicLevel:
+		m.Severity = 1
+	case logrus.FatalLevel:
+		m.Severity = 2
+	case logrus.ErrorLevel:
+		m.Severity = 3
+	case logrus.WarnLevel:
+		m.Severity = 4
+	case logrus.InfoLevel:
+		m.Severity = 6
+	case logrus.DebugLevel:
+		m.Severity = 7
+	}
+
+	b := encoderPool.Get().(*bytes.Buffer)
+	defer func() {
+		b.Reset()
+		encoderPool.Put(b)
+	}()
+
+	// encode the fields in there
+	enc := json.NewEncoder(b)
+	if err := enc.Encode(m); err != nil {
+		return nil, err
+	}
+	b.WriteString("\n")
+
+	return b.Bytes(), nil
 }
 
 /*

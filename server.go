@@ -69,7 +69,7 @@ func main() {
 
 	// Log all the things
 	if config.Log.DisableHTTP != true {
-		router = web.NewLogHandler(router)
+		router = web.NewLogHandler(log.StandardLogger(), router)
 	}
 
 	if config.EnablePprof {
