@@ -53,7 +53,7 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		uri = url.RequestURI()
 	}
 
-	// don't write out a msg if
+	// human readable request info redundant when mozlogging
 	var logMsg string
 	if l, ok := h.logger.(*logrus.Logger); ok {
 		if _, ok := l.Formatter.(*MozlogFormatter); !ok {
