@@ -42,8 +42,8 @@ func TestLogHandler(t *testing.T) {
 		}
 
 		assert.True(record.Timestamp > 0)
-		assert.Equal("request.summary", record.Type)
-		assert.Equal("go-syncstorage", record.Logger)
+		assert.Equal("mozsvc.metrics", record.Type)
+		assert.Equal("Sync-1_5", record.Logger)
 		assert.Equal("test.localdomain", record.Hostname)
 		assert.Equal("2.0", record.EnvVersion)
 		assert.Equal(os.Getpid(), record.Pid)
@@ -161,8 +161,8 @@ func TestLogHandlerMozlogFormatter(t *testing.T) {
 	}
 
 	assert.True(record.Timestamp > 0)
-	assert.Equal("request.summary", record.Type)
-	assert.Equal("go-syncstorage", record.Logger)
+	assert.Equal("mozsvc.metrics", record.Type)
+	assert.Equal("Sync-1_5", record.Logger)
 	assert.Equal("test.localdomain", record.Hostname)
 	assert.Equal("2.0", record.EnvVersion)
 	assert.Equal(os.Getpid(), record.Pid)

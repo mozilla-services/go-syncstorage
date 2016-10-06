@@ -118,19 +118,13 @@ func (f *MozlogFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 
 	m := &mozlog{
 		Timestamp:  entry.Time.UnixNano(),
-		Type:       "system",
-		Logger:     "go-syncstorage",
+		Type:       "mozsvc.metrics",
+		Logger:     "Sync-1_5",
 		Hostname:   f.Hostname,
 		EnvVersion: "2.0",
 		Pid:        f.Pid,
 		Severity:   0,
 		Fields:     entry.Data,
-	}
-
-	if _, ok := entry.Data["method"]; ok {
-		if _, ok2 := entry.Data["path"]; ok2 {
-			m.Type = "request.summary"
-		}
 	}
 
 	if entry.Message != "" {
