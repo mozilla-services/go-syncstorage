@@ -163,7 +163,6 @@ func (f *MozlogFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	if err := enc.Encode(m); err != nil {
 		return nil, err
 	}
-	b.WriteString("\n")
 
 	return b.Bytes(), nil
 }

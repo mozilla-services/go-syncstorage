@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -26,38 +28,61 @@ func TestLogHandler(t *testing.T) {
 	}
 
 	handler := NewLogHandler(logger, EchoHandler)
-	request("GET", "/1.5/12346", nil, handler)
 
-	// should be able to decode the log message
-	if !assert.True(buf.Len() > 0) {
-		return
+	{
+		request("GET", "/1.5/12346", nil, handler)
+
+		// should be able to decode the log message
+		if !assert.True(buf.Len() > 0) {
+			return
+		}
+		var record mozlog
+		if err := json.Unmarshal(buf.Bytes(), &record); !assert.NoError(err) {
+			return
+		}
+
+		assert.True(record.Timestamp > 0)
+		assert.Equal("request.summary", record.Type)
+		assert.Equal("go-syncstorage", record.Logger)
+		assert.Equal("test.localdomain", record.Hostname)
+		assert.Equal("2.0", record.EnvVersion)
+		assert.Equal(os.Getpid(), record.Pid)
+		assert.Equal(uint8(6), record.Severity)
+
+		// field test
+		tests := map[string]interface{}{
+			"uid": "12346",
+			// fxa_uid and device_id are derived from the uid
+			"fxa_uid":   "fxa_12346",
+			"device_id": "34d128f5",
+			"errno":     float64(0), // use float64 since it is what json supports
+			"method":    "GET",
+			"agent":     "go-tester",
+		}
+
+		for key, test := range tests {
+			assert.Equal(test, record.Fields[key], fmt.Sprintf("Key: %s", key))
+		}
 	}
-	var record mozlog
-	if err := json.Unmarshal(buf.Bytes(), &record); !assert.NoError(err) {
-		return
-	}
 
-	assert.True(record.Timestamp > 0)
-	assert.Equal("request.summary", record.Type)
-	assert.Equal("go-syncstorage", record.Logger)
-	assert.Equal("test.localdomain", record.Hostname)
-	assert.Equal("2.0", record.EnvVersion)
-	assert.Equal(os.Getpid(), record.Pid)
-	assert.Equal(uint8(6), record.Severity)
+	// test that very large path strings do not get truncated
+	buf.Reset()
+	{
+		ids := make([]string, 200, 200)
+		for i := 0; i < len(ids); i++ {
+			data := []byte(time.Now().Format(time.RFC3339Nano))
+			sum := sha1.Sum(data)
+			ids[i] = hex.EncodeToString(sum[:])[0:16]
+		}
+		path := "/1.5/12346/forms?ids=" + strings.Join(ids, ",")
+		request("DELETE", path, nil, handler)
+		var record mozlog
+		if err := json.Unmarshal(buf.Bytes(), &record); !assert.NoError(err) {
+			return
+		}
 
-	// field test
-	tests := map[string]interface{}{
-		"uid": "12346",
-		// fxa_uid and device_id are derived from the uid
-		"fxa_uid":   "fxa_12346",
-		"device_id": "34d128f5",
-		"errno":     float64(0), // use float64 since it is what json supports
-		"method":    "GET",
-		"agent":     "go-tester",
-	}
-
-	for key, test := range tests {
-		assert.Equal(test, record.Fields[key], fmt.Sprintf("Key: %s", key))
+		//  it'll be about 3420 bytes
+		assert.Equal(path, record.Fields["path"])
 	}
 }
 
@@ -147,10 +172,6 @@ func TestLogHandlerMozlogFormatter(t *testing.T) {
 	for key, test := range fields {
 		assert.Equal(test, record.Fields[key], fmt.Sprintf("Key: %s", key))
 	}
-
-	// make sure there's a new line at the end
-	assert.Equal("\n", string(logData[len(logData)-1:]))
-
 }
 
 func BenchmarkMozlogFormatter(b *testing.B) {
