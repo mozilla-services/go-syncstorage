@@ -44,11 +44,13 @@ func main() {
 
 	// The base functionality is the sync 1.5 api
 	poolHandler := web.NewSyncPoolHandler(&web.SyncPoolConfig{
-		Basepath:    config.DataDir,
-		NumPools:    config.Pool.Num,
-		MaxPoolSize: config.Pool.MaxSize,
-		VacuumKB:    config.Pool.VacuumKB,
-		DBConfig:    &syncstorage.Config{config.Sqlite.CacheSize},
+		Basepath:      config.DataDir,
+		NumPools:      config.Pool.Num,
+		MaxPoolSize:   config.Pool.MaxSize,
+		VacuumKB:      config.Pool.VacuumKB,
+		DBConfig:      &syncstorage.Config{config.Sqlite.CacheSize},
+		PurgeMinHours: config.Pool.PurgeMinHours,
+		PurgeMaxHours: config.Pool.PurgeMaxHours,
 	}, syncLimitConfig)
 
 	var router http.Handler
@@ -106,6 +108,8 @@ func main() {
 		"POOL_NUM":                       config.Pool.Num,
 		"POOL_MAX_SIZE":                  config.Pool.MaxSize,
 		"POOL_VACUUM_KB":                 config.Pool.VacuumKB,
+		"POOL_PURGE_MIN_HOURS":           config.Pool.PurgeMinHours,
+		"POOL_PURGE_MAX_HOURS":           config.Pool.PurgeMaxHours,
 		"LIMIT_MAX_BSO_GET_LIMIT":        syncLimitConfig.MaxBSOGetLimit,
 		"LIMIT_MAX_POST_RECORDS":         syncLimitConfig.MaxPOSTRecords,
 		"LIMIT_MAX_POST_BYTES":           syncLimitConfig.MaxPOSTBytes,

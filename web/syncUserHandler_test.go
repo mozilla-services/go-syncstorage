@@ -409,21 +409,24 @@ func TestSyncUserHandlerTidyUp(t *testing.T) {
 		config.MaxBatchTTL = 1
 		handler := NewSyncUserHandler(uniqueUID(), db, config)
 
-		// no one in a clean db will always clean up
-		skipped, _, err := handler.TidyUp(time.Nanosecond, 1)
-		if !assert.NoError(err) || !assert.False(skipped) {
+		// no purge value in db will always cleanup
+		// this should set a new purge value
+		minPurge := 10 * time.Millisecond
+		skipped, _, err := handler.TidyUp(minPurge, minPurge, 1)
+		if !assert.NoError(err) || !assert.False(skipped, "Expected a purge to happen") {
 			return
 		}
 
-		// it hasn't been 10ms since the last cleanup.. so should skip
-		skipped, _, err = handler.TidyUp(5*time.Millisecond, 1)
+		time.Sleep(5 * time.Millisecond)
+		// not minPurge yet...
+		skipped, _, err = handler.TidyUp(minPurge, minPurge, 1)
 		if !assert.NoError(err) || !assert.True(skipped) {
 			return
 		}
 
 		// enough time has past, the purge should happen
 		time.Sleep(10 * time.Millisecond)
-		skipped, _, err = handler.TidyUp(5*time.Millisecond, 1)
+		skipped, _, err = handler.TidyUp(minPurge, minPurge, 1)
 		if !assert.NoError(err) || !assert.False(skipped) {
 			return
 		}
@@ -458,7 +461,7 @@ func TestSyncUserHandlerTidyUp(t *testing.T) {
 
 		// What's actually being tested... Test that TidyUp will clean up the
 		// BSO, Batch and Vacuum the database. Set to 1KB vacuum threshold
-		_, _, err = handler.TidyUp(time.Nanosecond, 1)
+		_, _, err = handler.TidyUp(time.Nanosecond, time.Nanosecond, 1)
 
 		if !assert.NoError(err) {
 			return
@@ -484,5 +487,4 @@ func TestSyncUserHandlerTidyUp(t *testing.T) {
 		assert.Equal(usageOrig.Total, usage.Total, "Expected size to be back to original")
 		assert.Equal(0, usage.Free)
 	}
-
 }

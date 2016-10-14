@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -115,38 +116,36 @@ func NewSyncUserHandler(uid string, db *syncstorage.DB, config *SyncUserHandlerC
 // vacuumKB (in kilobytes) it will be optimized. This could
 // potentially be a long operation as the database vacuumed needs to rewrite
 // the entire database file
-func (s *SyncUserHandler) TidyUp(purgeFrequency time.Duration, vacuumKB int) (skipped bool, took time.Duration, err error) {
+func (s *SyncUserHandler) TidyUp(minPurge, maxPurge time.Duration, vacuumKB int) (skipped bool, took time.Duration, err error) {
 	// Purge Expired BSOs
 	start := time.Now()
 
-	lastStr, err := s.db.GetKey("LAST_PURGE")
+	nextStr, err := s.db.GetKey("NEXT_PURGE")
 	if err != nil {
 		log.WithFields(log.Fields{
 			"uid": s.uid,
 			"err": err.Error(),
-		}).Error("SyncUserHandler - Error Fetching last purge time")
+		}).Error("SyncUserHandler - Error Fetching next purge time")
 		return true, time.Since(start), err
 	}
 
-	if lastStr != "" {
-		lastPurge, err := time.Parse(time.RFC3339Nano, lastStr)
+	if nextStr != "" {
+		nextPurge, err := time.Parse(time.RFC3339Nano, nextStr)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"uid": s.uid,
 				"err": err.Error(),
-			}).Error("SyncUserHandler - Error parsing LAST_PURGE value")
+			}).Error("SyncUserHandler - Error parsing NEXT_PURGE value")
 
 			// try to fix it for next time
-			s.db.SetKey("LAST_PURGE", time.Now().Format(time.RFC3339Nano))
+			s.db.SetKey("NEXT_PURGE", time.Now().Format(time.RFC3339Nano))
 			return true, time.Since(start), nil
 		}
 
-		sinceLastPurge := time.Since(lastPurge)
-
-		if sinceLastPurge < purgeFrequency {
+		if time.Now().Before(nextPurge) {
 			if log.GetLevel() == log.DebugLevel {
 				log.WithFields(log.Fields{
-					"purge_valid_in": purgeFrequency - sinceLastPurge,
+					"purge_valid_in": nextPurge.Sub(time.Now()).String(),
 				}).Debug("SyncUserHandler: Skipping TidyUp")
 			}
 			return true, took, nil
@@ -179,8 +178,8 @@ func (s *SyncUserHandler) TidyUp(purgeFrequency time.Duration, vacuumKB int) (sk
 		}).Error("SyncUserHandler - Error retrieving usage")
 		return
 	}
-
 	freeKB := (usage.Free * usage.Size / 1024)
+
 	log.WithFields(log.Fields{
 		"uid":            s.uid,
 		"bsos_purged":    numBSOPurged,
@@ -196,21 +195,45 @@ func (s *SyncUserHandler) TidyUp(purgeFrequency time.Duration, vacuumKB int) (sk
 				"err": err.Error(),
 			}).Error("SyncUserHandler - Error Vacuuming DB")
 			return
-		} else {
+		}
+
+		after, err := s.db.Usage()
+		if err != nil {
 			log.WithFields(log.Fields{
 				"uid": s.uid,
-				"t":   (time.Since(start).Nanoseconds() / 1000 / 1000),
-			}).Info("SyncUserHandler - Vacuum OK")
+				"err": err.Error(),
+			}).Error("SyncUserHandler - Error retrieving usage after vacuum")
+			return true, time.Since(start), err
 		}
+
+		beforeSz := usage.Total * usage.Size / 1024
+		afterSz := after.Total * after.Size / 1024
+		log.WithFields(log.Fields{
+			"uid":       s.uid,
+			"t":         (time.Since(start).Nanoseconds() / 1000 / 1000),
+			"before_kb": beforeSz,
+			"after_kb":  afterSz,
+			"freed_kb":  beforeSz - afterSz,
+		}).Info("SyncUserHandler - Vacuum OK")
 	}
 
-	err = s.db.SetKey("LAST_PURGE", time.Now().Format(time.RFC3339Nano))
+	deltaTime := minPurge
+	if maxPurge.Nanoseconds() > 0 {
+		deltaTime = time.Duration(rand.Int63n(maxPurge.Nanoseconds()))
+	}
+
+	if deltaTime < minPurge {
+		deltaTime = minPurge
+	}
+
+	nextPurge := time.Now().Add(deltaTime)
+	err = s.db.SetKey("NEXT_PURGE", nextPurge.Format(time.RFC3339Nano))
 
 	if err != nil {
 		log.WithFields(log.Fields{
 			"uid": s.uid,
 			"err": err.Error(),
-		}).Error("SyncUserHandler - Error Setting Last Purge Key")
+		}).Error("SyncUserHandler - Error Setting Next Purge Key")
 		return
 	}
 
