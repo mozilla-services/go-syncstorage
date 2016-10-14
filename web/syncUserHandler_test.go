@@ -409,11 +409,10 @@ func TestSyncUserHandlerTidyUp(t *testing.T) {
 		config.MaxBatchTTL = 1
 		handler := NewSyncUserHandler(uniqueUID(), db, config)
 
-		// no purge value in db will always cleanup
-		// this should set a new purge value
+		// no purge value in db will always skip, pointless doing a purge
 		minPurge := 10 * time.Millisecond
 		skipped, _, err := handler.TidyUp(minPurge, minPurge, 1)
-		if !assert.NoError(err) || !assert.False(skipped, "Expected a purge to happen") {
+		if !assert.NoError(err) || !assert.True(skipped, "Expected to skip") {
 			return
 		}
 
@@ -442,6 +441,9 @@ func TestSyncUserHandlerTidyUp(t *testing.T) {
 
 		payload := "hi"
 		ttl := 1
+
+		// write the NEXT_PURGE value
+		handler.TidyUp(time.Nanosecond, time.Nanosecond, 1)
 
 		// remember the size a new db
 		usageOrig, _ := db.Usage()

@@ -150,6 +150,11 @@ func (s *SyncUserHandler) TidyUp(minPurge, maxPurge time.Duration, vacuumKB int)
 			}
 			return true, took, nil
 		}
+	} else {
+		// never been purged, skip it and set it to the maxpurge time in the future
+		nextPurge := time.Now().Add(maxPurge)
+		err = s.db.SetKey("NEXT_PURGE", nextPurge.Format(time.RFC3339Nano))
+		return true, time.Since(start), err
 	}
 
 	numBSOPurged, err := s.db.PurgeExpired()
