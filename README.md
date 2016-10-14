@@ -51,17 +51,18 @@ The server has a few knobs that can be tweaked.
 | `INFO_CACHE_SIZE` | Cache size in MB for `<uid>/info/collections` and `<uid>/info/configuration`. Default 0 (disabled) | 
 
 ## Advanced Configuration
-Things that probably shouldn't be touched:
 
 | Env. Var | Info |
 |---|---|
 | `POOL_NUM` | Number of DB pools. Defaults to number of CPUs.  |
 | `POOL_SIZE` | Number of open DB files per pool. Defaults to `25`.  |
 | `POOL_VACUUM_KB` | Threshold of free space in kilobytes to trigger a database vacuum. Defaults to `0` (disabled). |
+| `POOL_PURGE_MIN_HOURS	` | Minimum hours before purging BSOs, Batches, etc for a user. Defaults to `168` (1 week) |
+| `POOL_PURGE_MAX_HOURS	` | Max hours before purging. Defaults to `336` (2 weeks). |
 
 go-syncstorage limits the number of open SQLite database files to keep memory usage constant. This allows a small server to handle thousands of users for a small performance hit.
 
-Multiplying `POOL_NUM x POOL_SIZE` gives the maximum number of open files.
+Multiplying `POOL_NUM x POOL_SIZE` gives the maximum number of open files. The product should to large enough so pools are not starved and have to clean up too often. A sign things are too small is when `sql: database is closed` errors appear in the logs.
 
 A low level lock is used in each pool when opening and closing files. Having a larger `POOL_NUM` decreases lock contention.
 
@@ -69,7 +70,9 @@ When a pool reaches `POOL_SIZE` number of open files it will close the least rec
 
 Tweaking these values from default won't provide significant performance gains in production. However, a `POOL_NUM=1` and `POOL_SIZE=1` is useful for testing the overhead of opening and closing databases files.
 
-The `POOL_VACUUM_KB` variable should be enabled with caution. It can cause very high IO if a threshold is too low and users have large databases. This may cause erratic performance. It may be more optimal to schedule a downtime and manually vacuum individual databases to recover space.
+The `POOL_PURGE_MIN_HOURS` and `POOL_PURGE_MAX_HOURS` define a time range to trigger a purge job for a user. The default range is between 168 and 336 hours. This means a user will have a purge job run only once every one to two weeks. A large range spreads evens out IO load.
+
+The `POOL_VACUUM_KB` sets the threshold before a vacuum is run. Purging of batches and BSOs free up database pages but not disk space. A vacuum will rewrite the database, defragment it and free up disk space. Depending on the number of records it can take seconds to vacuum a database.
 
 ### Sqlite3 Tweaks 
 

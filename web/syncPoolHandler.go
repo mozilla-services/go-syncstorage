@@ -3,7 +3,6 @@ package web
 import (
 	"crypto/sha1"
 	"encoding/binary"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -35,19 +34,24 @@ type SyncPoolConfig struct {
 	NumPools    int
 	TTL         time.Duration
 	MaxPoolSize int
-	VacuumKB    int
+
+	VacuumKB      int
+	PurgeMinHours int
+	PurgeMaxHours int
 
 	DBConfig *syncstorage.Config
 }
 
 func NewDefaultSyncPoolConfig(basepath string) *SyncPoolConfig {
 	return &SyncPoolConfig{
-		Basepath:    basepath,
-		NumPools:    1,
-		TTL:         5 * time.Minute,
-		MaxPoolSize: 100,
-		VacuumKB:    0, // disabled by default
-		DBConfig:    &syncstorage.Config{CacheSize: 0},
+		Basepath:      basepath,
+		NumPools:      1,
+		TTL:           5 * time.Minute,
+		MaxPoolSize:   100,
+		VacuumKB:      0, // disabled by default
+		PurgeMinHours: 24 * 7,
+		PurgeMaxHours: 24 * 7 * 2,
+		DBConfig:      &syncstorage.Config{CacheSize: 0},
 	}
 }
 
@@ -136,10 +140,10 @@ func (s *SyncPoolHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if newElement {
-		// between one and two weeks. The random interval spreads
-		// the load from cleanups more evenly around
-		tidyThreshold := time.Duration(168+rand.Intn(168)) * time.Hour
-		element.handler.TidyUp(tidyThreshold, s.config.VacuumKB)
+		element.handler.TidyUp(
+			time.Duration(s.config.PurgeMinHours)*time.Hour,
+			time.Duration(s.config.PurgeMaxHours)*time.Hour,
+			s.config.VacuumKB)
 	}
 
 	// pass it on

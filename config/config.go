@@ -35,9 +35,11 @@ type UserHandlerConfig struct {
 }
 
 type PoolConfig struct {
-	Num      int `envconfig:"default=0"`
-	MaxSize  int `envconfig:"default=25"`
-	VacuumKB int `envconfig:"default=0"`
+	Num           int `envconfig:"default=0"`
+	MaxSize       int `envconfig:"default=25"`
+	PurgeMinHours int `envconfig:"default=168"`
+	PurgeMaxHours int `envconfig:"default=336"`
+	VacuumKB      int `envconfig:"default=0"`
 }
 
 type SqliteConfig struct {
@@ -159,6 +161,15 @@ func init() {
 
 	if Config.Pool.VacuumKB < 0 {
 		log.Fatal("POOL_VACUUM_KB must be >= 0")
+	}
+	if Config.Pool.PurgeMinHours <= 0 {
+		log.Fatal("POOL_MIN_HOURS must be > 0")
+	}
+	if Config.Pool.PurgeMaxHours <= 0 {
+		log.Fatal("POOL_MAX_HOURS must be > 0")
+	}
+	if Config.Pool.PurgeMaxHours < Config.Pool.PurgeMinHours {
+		log.Fatal("POOL_MAX_HOURS must be > POOL_MIN_HOURS")
 	}
 
 	Hostname = Config.Hostname

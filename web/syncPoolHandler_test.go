@@ -8,11 +8,10 @@ import (
 )
 
 func testSyncPoolConfig() *SyncPoolConfig {
-	return &SyncPoolConfig{
-		Basepath:    ":memory:",
-		NumPools:    1,
-		MaxPoolSize: 10,
-	}
+	config := NewDefaultSyncPoolConfig(":memory:")
+	config.NumPools = 1
+	config.MaxPoolSize = 10
+	return config
 }
 
 func TestSyncPoolHandlerStatusConflict(t *testing.T) {
