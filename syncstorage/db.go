@@ -556,7 +556,9 @@ func (d *DB) GetBSO(cId int, bId string) (b *BSO, err error) {
 func (d *DB) GetBSOs(
 	cId int,
 	ids []string,
+	older int,
 	newer int,
+
 	sort SortType,
 	limit int,
 	offset int) (r *GetResults, err error) {
@@ -564,7 +566,7 @@ func (d *DB) GetBSOs(
 	d.Lock()
 	defer d.Unlock()
 
-	r, err = d.getBSOs(d.db, cId, ids, newer, sort, limit, offset)
+	r, err = d.getBSOs(d.db, cId, ids, older, newer, sort, limit, offset)
 
 	return
 }
@@ -831,6 +833,7 @@ func (d *DB) getBSOs(
 	tx dbTx,
 	cId int,
 	ids []string,
+	older int,
 	newer int,
 	sort SortType,
 	limit int,
@@ -850,8 +853,8 @@ func (d *DB) getBSOs(
 
 	cutOffTTL := Now()
 	query := "SELECT Id, SortIndex, Payload, Modified, TTL FROM BSO "
-	where := "WHERE CollectionId=? AND Modified > ? AND TTL > ?"
-	values := []interface{}{cId, newer, cutOffTTL}
+	where := "WHERE CollectionId=? AND Modified < ? AND Modified > ? AND TTL > ?"
+	values := []interface{}{cId, older, newer, cutOffTTL}
 
 	if len(ids) > 0 {
 		// spec says only 100 ids at a time

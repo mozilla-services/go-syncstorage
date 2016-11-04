@@ -483,6 +483,7 @@ func (s *SyncUserHandler) hCollectionGET(w http.ResponseWriter, r *http.Request)
 		err    error
 		ids    []string
 		newer  int
+		older  int
 		full   bool
 		limit  int
 		offset int
@@ -533,6 +534,22 @@ func (s *SyncUserHandler) hCollectionGET(w http.ResponseWriter, r *http.Request)
 
 	// we expect to get sync's two decimal timestamps, these need
 	// to be converted to milliseconds
+	if v := r.Form.Get("older"); v != "" {
+		floatNew, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			sendRequestProblem(w, r, http.StatusBadRequest, errors.Wrap(err, "Invalid older param format"))
+			return
+		}
+
+		older = int(floatNew * 1000)
+		if !syncstorage.NewerOk(newer) {
+			sendRequestProblem(w, r, http.StatusBadRequest, errors.New("Invalid older value"))
+			return
+		}
+	} else {
+		older = syncstorage.MaxTimestamp
+	}
+
 	if v := r.Form.Get("newer"); v != "" {
 		floatNew, err := strconv.ParseFloat(v, 64)
 		if err != nil {
@@ -608,7 +625,7 @@ func (s *SyncUserHandler) hCollectionGET(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	results, err := s.db.GetBSOs(cId, ids, newer, sort, limit, offset)
+	results, err := s.db.GetBSOs(cId, ids, older, newer, sort, limit, offset)
 	if err != nil {
 		InternalError(w, r, err)
 		return
