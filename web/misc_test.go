@@ -131,7 +131,7 @@ func BenchmarkNewLine(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		NewLine(writer, nil, data)
+		NewLine(writer, nil, http.StatusOK, data)
 		writer.Body.Reset() // clean it out
 	}
 }

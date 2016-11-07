@@ -271,7 +271,7 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 		handler := NewSyncUserHandler(uid, db, nil)
 
 		respCreate := requestheaders("POST", url+"?batch=true", bodyCreate, header, handler)
-		if !assert.Equal(http.StatusOK, respCreate.Code, respCreate.Body.String()) {
+		if !assert.Equal(http.StatusAccepted, respCreate.Code, respCreate.Body.String()) {
 			return
 		}
 		var createResults PostResults
@@ -283,7 +283,7 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 		batchIdString := createResults.Batch
 
 		respAppend := requestheaders("POST", url+"?batch="+batchIdString, bodyAppend, header, handler)
-		assert.Equal(http.StatusOK, respAppend.Code, respAppend.Body.String())
+		assert.Equal(http.StatusAccepted, respAppend.Code, respAppend.Body.String())
 
 		respCommit := requestheaders("POST", url+"?commit=1&batch="+batchIdString, bodyCommit, header, handler)
 		assert.Equal(http.StatusOK, respCommit.Code, respCommit.Body.String())
@@ -328,7 +328,7 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 		]`)
 
 		respCreate := requestheaders("POST", url+"?batch=true", bodyCreate, header, handler)
-		if !assert.Equal(http.StatusOK, respCreate.Code, respCreate.Body.String()) {
+		if !assert.Equal(http.StatusAccepted, respCreate.Code, respCreate.Body.String()) {
 			return
 		}
 

@@ -222,7 +222,7 @@ func InternalError(w http.ResponseWriter, r *http.Request, err error) {
 
 // NewLine prints out new line \n separated JSON objects instead of a
 // single JSON array of objects
-func NewLine(w http.ResponseWriter, r *http.Request, val interface{}) {
+func NewLine(w http.ResponseWriter, r *http.Request, statusCode int, val interface{}) {
 	if valR := reflect.ValueOf(val); valR.Kind() == reflect.Slice || valR.Kind() == reflect.Array {
 		w.Header().Set("Content-Type", "application/newlines")
 		for i := 0; i < valR.Len(); i++ {
@@ -261,17 +261,19 @@ func NewLine(w http.ResponseWriter, r *http.Request, val interface{}) {
 		}
 
 		w.Header().Set("Content-Type", "application/newlines")
+		w.WriteHeader(statusCode)
 		w.Write(js)
 		w.Write([]byte("\n"))
 	}
 }
 
-func JSON(w http.ResponseWriter, r *http.Request, val interface{}) {
+func JSON(w http.ResponseWriter, r *http.Request, statusCode int, val interface{}) {
 	js, err := json.Marshal(val)
 	if err != nil {
 		InternalError(w, r, err)
 	} else {
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
 		w.Write(js)
 		w.Write([]byte("\n"))
 	}
@@ -280,10 +282,14 @@ func JSON(w http.ResponseWriter, r *http.Request, val interface{}) {
 // JsonNewline returns data as newline separated or as a single
 // json array
 func JsonNewline(w http.ResponseWriter, r *http.Request, val interface{}) {
+	JsonNewlineStatus(w, r, http.StatusOK, val)
+}
+
+func JsonNewlineStatus(w http.ResponseWriter, r *http.Request, statusCode int, val interface{}) {
 	if strings.Contains(r.Header.Get("Accept"), "application/newlines") {
-		NewLine(w, r, val)
+		NewLine(w, r, statusCode, val)
 	} else {
-		JSON(w, r, val)
+		JSON(w, r, statusCode, val)
 	}
 }
 

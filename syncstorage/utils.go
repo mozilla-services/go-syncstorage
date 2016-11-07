@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+// 2099 ... somebody else's problem by then (I hope)
+const MaxTimestamp = 4070822400000
+
 var (
 	bsoIdCheck *regexp.Regexp
 	cNameCheck *regexp.Regexp

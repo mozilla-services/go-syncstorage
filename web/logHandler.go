@@ -65,7 +65,16 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	errno := logger.Status()
-	if errno == http.StatusOK {
+	switch errno {
+	case http.StatusOK, http.StatusCreated,
+		http.StatusAccepted,
+		http.StatusNonAuthoritativeInfo,
+		http.StatusNoContent,
+		http.StatusResetContent,
+		http.StatusPartialContent,
+		http.StatusMultiStatus,
+		http.StatusAlreadyReported,
+		http.StatusIMUsed:
 		errno = 0
 	}
 

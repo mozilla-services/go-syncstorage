@@ -24,12 +24,12 @@ var cacheMockHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Re
 
 	if infoCollectionsRoute.MatchString(req.URL.Path) {
 		resp.Type = "info/collections"
-		JSON(w, req, resp)
+		JSON(w, req, http.StatusOK, resp)
 	} else if infoConfigurationRoute.MatchString(req.URL.Path) {
 		resp.Type = "info/configuration"
-		JSON(w, req, resp)
+		JSON(w, req, http.StatusOK, resp)
 	} else {
-		JSON(w, req, resp)
+		JSON(w, req, http.StatusOK, resp)
 	}
 })
 
