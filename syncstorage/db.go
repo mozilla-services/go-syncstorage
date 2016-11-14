@@ -138,6 +138,13 @@ func (d *DB) OpenWithConfig(conf *Config) (err error) {
 		return
 	}
 
+	// settings to apply to the database
+
+	pragmas := []string{
+		"PRAGMA page_size=4096;",
+		"PRAGMA journal_mode=WAL;",
+	}
+
 	if conf != nil {
 		if log.GetLevel() == log.DebugLevel {
 			log.WithFields(log.Fields{
@@ -145,10 +152,12 @@ func (d *DB) OpenWithConfig(conf *Config) (err error) {
 			}).Debug("db config")
 		}
 
-		// not sure why substitution doesn't work here
-		// with PRAGMA values
-		if _, err := d.db.Exec("PRAGMA cache_size=" + strconv.Itoa(conf.CacheSize)); err != nil {
-			return errors.Wrap(err, "DB error: Could not set cache_size")
+		pragmas = append(pragmas, fmt.Sprintf("PRAGMA cache_size=%d;", conf.CacheSize))
+	}
+
+	for _, p := range pragmas {
+		if _, err = d.db.Exec(p); err != nil {
+			return errors.Wrapf(err, "Could not set PRAGMA: %s", p)
 		}
 	}
 
