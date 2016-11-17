@@ -63,9 +63,6 @@ func TestLogHandler(t *testing.T) {
 		for key, test := range tests {
 			assert.Equal(test, record.Fields[key], fmt.Sprintf("Key: %s", key))
 		}
-
-		// make sure there is no error field
-		assert.Nil(record.Fields["error"])
 	}
 
 	// test that very large path strings do not get truncated
@@ -155,7 +152,7 @@ func TestLogHandlerCauseFromContext(t *testing.T) {
 
 		// make sure the error was logged correctly with the cause mashed together
 		assert.Equal(float64(http.StatusBadRequest), record.Fields["errno"])
-		assert.Equal("The Error: The Cause", record.Fields["error"])
+		assert.Equal("The Error: The Cause", record.Fields["msg"])
 	}
 
 	{ // make sure regular requests log..

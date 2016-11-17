@@ -102,7 +102,7 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 
 		if errno != 0 && session.ErrorResult != nil {
-			fields["error"] = fmt.Sprintf("%v", session.ErrorResult)
+			logMsg = fmt.Sprintf("%v", session.ErrorResult)
 		}
 	}
 
