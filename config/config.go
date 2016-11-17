@@ -20,6 +20,9 @@ type LogConfig struct {
 
 	// Disable HTTP Logging
 	DisableHTTP bool `envconfig:"default=false"`
+
+	// Filter out all messages where errno=0
+	OnlyHTTPErrors bool `envconfig:"default=false"`
 }
 
 // configures limits for web/SyncUserHandler
@@ -80,8 +83,6 @@ var (
 	EnablePprof bool
 
 	Limit *UserHandlerConfig
-
-	DisableHTTPLogs bool
 
 	InfoCacheSize int
 )

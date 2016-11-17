@@ -12,6 +12,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/mozilla-services/go-syncstorage/token"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -39,6 +40,15 @@ var (
 			io.Copy(w, r.Body)
 		}
 		w.WriteHeader(http.StatusOK)
+	})
+
+	OKFailHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/fail" {
+			cause := errors.New("The Cause")
+			sendRequestProblem(w, r, http.StatusBadRequest, errors.Wrap(cause, "The Error"))
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
 	})
 )
 
@@ -95,6 +105,10 @@ func requestheaders(method, urlStr string, body io.Reader, header http.Header, h
 	// add the session data in
 	// I should have used int64 from the beginning... ¯\_(ツ)_/¯
 	uid := extractUID(urlStr)
+	if uid == "" {
+		uid = "24601"
+	}
+
 	uid64, err := strconv.ParseUint(uid, 10, 64)
 	if err != nil {
 		panic(err)

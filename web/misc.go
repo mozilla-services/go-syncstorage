@@ -371,26 +371,11 @@ func sendRequestProblem(w http.ResponseWriter, req *http.Request, responseCode i
 		req.Body.Close()
 	}
 
-	logRequestProblem(req, responseCode, reason)
-	JSONError(w, reason.Error(), responseCode)
-}
-
-func logRequestProblem(req *http.Request, responseCode int, reason error) {
-	var causeMessage string
-	if cause := errors.Cause(reason); cause != nil && cause != reason {
-		causeMessage = fmt.Sprintf("%v", cause)
-	} else {
-		causeMessage = "n/a"
+	if session, ok := SessionFromContext(req.Context()); ok {
+		session.ErrorResult = reason
 	}
 
-	log.WithFields(log.Fields{
-		"method":    req.Method,
-		"path":      req.URL.Path,
-		"ua":        req.UserAgent(),
-		"http_code": responseCode,
-		"error":     reason.Error(),
-		"cause":     causeMessage,
-	}).Warning("HTTP Request Problem")
+	JSONError(w, reason.Error(), responseCode)
 }
 
 // getMediaType extracts the mediatype portion from the http request header Content-Type

@@ -24,14 +24,18 @@ const (
 )
 
 func WeaveInvalidWBOError(w http.ResponseWriter, r *http.Request, reason error) {
-	logRequestProblem(r, http.StatusBadRequest, reason)
+	if session, ok := SessionFromContext(r.Context()); ok {
+		session.ErrorResult = reason
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 	w.Write([]byte(WEAVE_INVALID_WBO))
 }
 
 func WeaveSizeLimitExceeded(w http.ResponseWriter, r *http.Request, reason error) {
-	logRequestProblem(r, http.StatusBadRequest, reason)
+	if session, ok := SessionFromContext(r.Context()); ok {
+		session.ErrorResult = reason
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 	w.Write([]byte(WEAVE_SIZE_LIMIT_EXCEEDED))

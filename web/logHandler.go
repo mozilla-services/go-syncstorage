@@ -16,12 +16,13 @@ import (
 // NewLogHandler return a http.Handler that wraps h and logs
 // request out to logrus INFO level with fields
 func NewLogHandler(l logrus.FieldLogger, h http.Handler) http.Handler {
-	return &LoggingHandler{l, h}
+	return &LoggingHandler{logger: l, handler: h}
 }
 
 type LoggingHandler struct {
-	logger  logrus.FieldLogger
-	handler http.Handler
+	logger         logrus.FieldLogger
+	handler        http.Handler
+	OnlyHTTPErrors bool
 }
 
 func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -78,6 +79,10 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		errno = 0
 	}
 
+	if errno == 0 && h.OnlyHTTPErrors {
+		return
+	}
+
 	// common fields to log with every request
 	fields := logrus.Fields{
 		"agent":  req.UserAgent(),
@@ -93,6 +98,10 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if session, ok := SessionFromContext(req.Context()); ok && session.Token.Uid != 0 {
 		fields["fxa_uid"] = session.Token.FxaUID
 		fields["device_id"] = session.Token.DeviceId
+
+		if errno != 0 && session.ErrorResult != nil {
+			fields["error"] = fmt.Sprintf("%v", session.ErrorResult)
+		}
 	}
 
 	h.logger.WithFields(fields).Info(logMsg)

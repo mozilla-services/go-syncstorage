@@ -63,6 +63,9 @@ func TestLogHandler(t *testing.T) {
 		for key, test := range tests {
 			assert.Equal(test, record.Fields[key], fmt.Sprintf("Key: %s", key))
 		}
+
+		// make sure there is no error field
+		assert.Nil(record.Fields["error"])
 	}
 
 	// test that very large path strings do not get truncated
@@ -124,6 +127,58 @@ func TestLogHandlerContext(t *testing.T) {
 
 	// make sure res_sz is correct
 	assert.Equal(float64(resp.Body.Len()), record.Fields["res_sz"]) // use float64 cause json converted
+}
+
+func TestLogHandlerCauseFromContext(t *testing.T) {
+	assert := assert.New(t)
+	buf := new(bytes.Buffer)
+
+	logger := logrus.New()
+	logger.Out = buf
+	logger.Formatter = &MozlogFormatter{
+		Hostname: "test.localdomain",
+		Pid:      os.Getpid(),
+	}
+
+	handler := NewLogHandler(logger, OKFailHandler)
+
+	{
+		request("GET", "/fail", nil, handler)
+		// should be able to decode the log message
+		if !assert.True(buf.Len() > 0) {
+			return
+		}
+		var record mozlog
+		if err := json.Unmarshal(buf.Bytes(), &record); !assert.NoError(err) {
+			return
+		}
+
+		// make sure the error was logged correctly with the cause mashed together
+		assert.Equal(float64(http.StatusBadRequest), record.Fields["errno"])
+		assert.Equal("The Error: The Cause", record.Fields["error"])
+	}
+
+	{ // make sure regular requests log..
+		buf.Reset()
+		request("GET", "/ok", nil, handler)
+		if !assert.True(buf.Len() > 0) {
+			return
+		}
+	}
+
+	{ // disable all logging except for error logging
+		buf.Reset()
+		if h, ok := handler.(*LoggingHandler); assert.True(ok) {
+			h.OnlyHTTPErrors = true
+		}
+		// make sure
+		request("GET", "/ok", nil, handler)
+		assert.Equal(0, buf.Len())
+
+		buf.Reset()
+		request("GET", "/fail", nil, handler)
+		assert.True(buf.Len() > 0)
+	}
 }
 
 func TestLogHandlerMozlogFormatter(t *testing.T) {

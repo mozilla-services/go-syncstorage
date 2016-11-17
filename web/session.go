@@ -11,7 +11,8 @@ type sessionKey int
 var sKey sessionKey = 0
 
 type Session struct {
-	Token token.TokenPayload
+	Token       token.TokenPayload
+	ErrorResult error
 }
 
 func NewSessionContext(ctx context.Context, ses *Session) context.Context {

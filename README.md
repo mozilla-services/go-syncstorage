@@ -38,8 +38,9 @@ The server has a few knobs that can be tweaked.
 | `DATA_DIR` | Where to save DB files. Use an absolute path. `:memory:` is also valid and saves sqlite databases in RAM only. Recommended only during testing and development. |
 | `SECRETS` | Comma separated list of shared secrets. Secrets are tried in order and allows for secret rotation without downtime. |
 | `LOG_LEVEL`| Log verbosity, allowed: `fatal`,`error`,`warn`,`debug`,`info`|
-| `LOG_MOZLOG` | Can be `true` or `false`. Outputs logs in [mozlog](https://github.com/mozilla-services/Dockerflow/blob/master/docs/mozlog.md) format. |
-| `LOG_DISABLE_HTTP` | Can be `true` or `false`. Disables logging of HTTP requests. |
+| `LOG_MOZLOG` | Can be `true` or `false`. Outputs logs in [mozlog](https://github.com/mozilla-services/Dockerflow/blob/master/docs/mozlog.md) format. Default `false`.|
+| `LOG_DISABLE_HTTP` | Can be `true` or `false`. Disables logging of HTTP requests. Default `false`. |
+| `LOG_ONLY_HTTP_ERRORS` | Can be `true` or `false`. Logs only when `errno != 0` to reduce noise. Default `false`. |
 | `HOSTNAME` | Set a hostname value for mozlog output |
 | `LIMIT_MAX_REQUESTS_BYTES` | The maximum size in bytes of the overall HTTP request body that will be accepted by the server. |
 | `LIMIT_MAX_BSO_GET_LIMIT` |  Max BSOs that can be returned per GET request. Default: 2500. |
