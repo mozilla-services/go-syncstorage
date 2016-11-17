@@ -54,6 +54,19 @@ func NewHawkHandler(handler http.Handler, secrets []string) *HawkHandler {
 }
 
 func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	// Step 0: Create a session context. Added since sendRequestProblem
+	// stores errors to pass around in session.ErrorResult and if we 4xx
+	// in HawkHandler the error won't be reported by the LoggingHandler
+	var session *Session
+	if ctxSession, ok := SessionFromContext(r.Context()); !ok {
+		session = &Session{}
+		// replace the context
+		r = r.WithContext(NewSessionContext(r.Context(), session))
+	} else {
+		session = ctxSession
+	}
+
 	// Step 1: Ensure the Hawk header is OK. Use ParseRequestHeader
 	// so the token does not have to be parsed twice to extract
 	// the UID from it.
@@ -155,18 +168,10 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Step 6: *woot*, pass it on
-	if session, ok := SessionFromContext(r.Context()); ok {
-		// replace the token inside
-		session.Token = parsedToken.Payload
-		h.handler.ServeHTTP(w, r)
-	} else {
-		session := &Session{
-			Token: parsedToken.Payload,
-		}
-		reqCtx := r.WithContext(NewSessionContext(r.Context(), session))
-		h.handler.ServeHTTP(w, reqCtx)
-	}
+	// Step 6: Update the session token and pass it on
+	session.Token = parsedToken.Payload
+	h.handler.ServeHTTP(w, r)
+
 }
 
 func (h *HawkHandler) hawkNonceNotFound(nonce string, t time.Time, creds *hawk.Credentials) bool {

@@ -95,9 +95,11 @@ func (h *LoggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		"uid":    extractUID(uri),
 	}
 
-	if session, ok := SessionFromContext(req.Context()); ok && session.Token.Uid != 0 {
-		fields["fxa_uid"] = session.Token.FxaUID
-		fields["device_id"] = session.Token.DeviceId
+	if session, ok := SessionFromContext(req.Context()); ok {
+		if session.Token.Uid != 0 {
+			fields["fxa_uid"] = session.Token.FxaUID
+			fields["device_id"] = session.Token.DeviceId
+		}
 
 		if errno != 0 && session.ErrorResult != nil {
 			fields["error"] = fmt.Sprintf("%v", session.ErrorResult)
