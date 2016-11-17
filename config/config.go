@@ -68,6 +68,9 @@ var Config struct {
 
 	// cache size in MB for /info/collections cache
 	InfoCacheSize int `envconfig:"default=0"`
+
+	// max skew for hawk timestamps in seconds
+	HawkTimestampMaxSkew int `envconfig:"default=60"`
 }
 
 // so we can use config.Port and not config.Config.Port
@@ -84,7 +87,8 @@ var (
 
 	Limit *UserHandlerConfig
 
-	InfoCacheSize int
+	InfoCacheSize        int
+	HawkTimestampMaxSkew int
 )
 
 func init() {
@@ -173,6 +177,10 @@ func init() {
 		log.Fatal("POOL_MAX_HOURS must be > POOL_MIN_HOURS")
 	}
 
+	if Config.HawkTimestampMaxSkew < 60 {
+		log.Fatal("HAWK_TIMESTAMP_MAX_SKEW must be >= 60")
+	}
+
 	Hostname = Config.Hostname
 	Log = Config.Log
 	Host = Config.Host
@@ -184,4 +192,5 @@ func init() {
 	Limit = Config.Limit
 	Sqlite = Config.Sqlite
 	InfoCacheSize = Config.InfoCacheSize
+	HawkTimestampMaxSkew = Config.HawkTimestampMaxSkew
 }
