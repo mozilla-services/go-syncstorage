@@ -126,7 +126,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// special case, want to see how far client clocks are off
 		if err == hawk.ErrTimestampSkew {
 			skew := auth.ActualTimestamp.Sub(auth.Timestamp)
-			sendRequestProblem(w, r, http.StatusForbidden, errors.Errorf("Hawk: tiemstamp skew too large %0.3f", skew.Seconds()))
+			sendRequestProblem(w, r, http.StatusForbidden, errors.Errorf("Hawk: timestamp skew too large %0.3f", skew.Seconds()))
 		} else {
 			sendRequestProblem(w, r, http.StatusForbidden, errors.Wrap(err, "Hawk: auth invalid"))
 		}

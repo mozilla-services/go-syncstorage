@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"go.mozilla.org/hawk"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/facebookgo/httpdown"
 
@@ -31,6 +33,8 @@ func init() {
 }
 
 func main() {
+
+	hawk.MaxTimestampSkew = time.Second * time.Duration(config.HawkTimestampMaxSkew)
 
 	syncLimitConfig := web.NewDefaultSyncUserHandlerConfig()
 	syncLimitConfig.MaxRequestBytes = config.Limit.MaxRequestBytes
@@ -127,6 +131,7 @@ func main() {
 		"LIMIT_MAX_RECORD_PAYLOAD_BYTES": syncLimitConfig.MaxRecordPayloadBytes,
 		"SQLITE3_CACHE_SIZE":             config.Sqlite.CacheSize,
 		"INFO_CACHE_SIZE":                config.InfoCacheSize,
+		"HAWK_TIMESTAMP_MAX_SKEW":        hawk.MaxTimestampSkew.Seconds(),
 	}).Info("HTTP Listening at " + listenOn)
 
 	err := httpdown.ListenAndServe(server, hd)

@@ -35,9 +35,9 @@ The server has a few knobs that can be tweaked.
 |---|---|
 | `HOST` | Address to listen on. Defaults to `0.0.0.0`. |
 | `PORT` | Port to listen on |
-| `DATA_DIR` | Where to save DB files. Use an absolute path. `:memory:` is also valid and saves sqlite databases in RAM only. Recommended only during testing and development. |
+| `DATA_DIR` | Where to save DB files. Use an absolute path. `:memory:` is valid and saves databases in RAM but recommended only for testing. |
 | `SECRETS` | Comma separated list of shared secrets. Secrets are tried in order and allows for secret rotation without downtime. |
-| `LOG_LEVEL`| Log verbosity, allowed: `fatal`,`error`,`warn`,`debug`,`info`|
+| `LOG_LEVEL`| Log verbosity, allowed: `fatal`,`error`,`warn`,`debug`,`info`. Default `info`. |
 | `LOG_MOZLOG` | Can be `true` or `false`. Outputs logs in [mozlog](https://github.com/mozilla-services/Dockerflow/blob/master/docs/mozlog.md) format. Default `false`.|
 | `LOG_DISABLE_HTTP` | Can be `true` or `false`. Disables logging of HTTP requests. Default `false`. |
 | `LOG_ONLY_HTTP_ERRORS` | Can be `true` or `false`. Logs only when `errno != 0` to reduce noise. Default `false`. |
@@ -50,6 +50,7 @@ The server has a few knobs that can be tweaked.
 | `LIMIT_MAX_TOTAL_RECORDS` | Maximum total BSOs in a POST batch job. Default 1000. |
 | `LIMIT_MAX_BATCH_TTL` | Maximum TTL for a batch to remain uncommitted in seconds. Default 7200 (2 hours). |
 | `INFO_CACHE_SIZE` | Cache size in MB for `<uid>/info/collections` and `<uid>/info/configuration`. Default 0 (disabled) | 
+| `HAWK_TIMESTAMP_MAX_SKEW` | Sets number of seconds hawk timestamps can differ from the server. Default 60. |
 
 ## Advanced Configuration
 
