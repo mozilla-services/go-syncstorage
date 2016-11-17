@@ -122,7 +122,14 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Step 3: Make sure it's valid...
 	if err := auth.Valid(); err != nil {
 		w.Header().Set("WWW-Authenticate", "Hawk")
-		sendRequestProblem(w, r, http.StatusForbidden, errors.Wrap(err, "Hawk: auth invalid"))
+
+		// special case, want to see how far client clocks are off
+		if err == hawk.ErrTimestampSkew {
+			skew := auth.ActualTimestamp.Sub(auth.Timestamp)
+			sendRequestProblem(w, r, http.StatusForbidden, errors.Errorf("Hawk: tiemstamp skew too large %0.3f", skew.Seconds()))
+		} else {
+			sendRequestProblem(w, r, http.StatusForbidden, errors.Wrap(err, "Hawk: auth invalid"))
+		}
 		return
 	}
 
