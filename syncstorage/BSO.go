@@ -30,12 +30,13 @@ type BSO struct {
 func (b BSO) MarshalJSON() ([]byte, error) {
 
 	buf := bsoBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bsoBufferPool.Put(buf)
+
 	buf.WriteString(`{"id":`)
 	if encoded, err := json.Marshal(b.Id); err == nil {
 		buf.Write(encoded)
 	} else {
-		buf.Reset()
-		bsoBufferPool.Put(buf)
 		return nil, err
 	}
 
@@ -46,8 +47,6 @@ func (b BSO) MarshalJSON() ([]byte, error) {
 	if encoded, err := json.Marshal(b.Payload); err == nil {
 		buf.Write(encoded)
 	} else {
-		buf.Reset()
-		bsoBufferPool.Put(buf)
 		return nil, err
 	}
 
@@ -57,8 +56,7 @@ func (b BSO) MarshalJSON() ([]byte, error) {
 	}
 
 	buf.WriteString("}")
-	data := buf.Bytes()
-	buf.Reset()
-	bsoBufferPool.Put(buf)
-	return data, nil
+	c := make([]byte, buf.Len())
+	copy(c, buf.Bytes())
+	return c, nil
 }

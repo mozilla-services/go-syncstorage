@@ -156,10 +156,8 @@ func (f *MozlogFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	}
 
 	b := encoderPool.Get().(*bytes.Buffer)
-	defer func() {
-		b.Reset()
-		encoderPool.Put(b)
-	}()
+	b.Reset()
+	defer encoderPool.Put(b)
 
 	// encode the fields in there
 	enc := json.NewEncoder(b)
@@ -167,7 +165,9 @@ func (f *MozlogFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		return nil, err
 	}
 
-	return b.Bytes(), nil
+	c := make([]byte, b.Len())
+	copy(c, b.Bytes())
+	return c, nil
 }
 
 /*
