@@ -87,6 +87,11 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				authInfo, _ := hawk.ParseRequestHeader(r.Header.Get("Authorization"))
 				sendRequestProblem(w, r, http.StatusForbidden,
 					errors.Errorf("Hawk: Replay nonce=%s", authInfo.Nonce))
+			case hawk.ErrNoAuth:
+				// send a 401 for no Authorization header issues to force clients to
+				// fetch a new token. See https://bugzilla.mozilla.org/show_bug.cgi?id=1318799
+				// reasons.
+				sendRequestProblem(w, r, http.StatusUnauthorized, errors.Wrap(err, "Hawk: AuthError"))
 			default:
 				sendRequestProblem(w, r, http.StatusForbidden, errors.Wrap(err, "Hawk: AuthError"))
 			}

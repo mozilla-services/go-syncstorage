@@ -104,6 +104,19 @@ func TestHawkUidMismatchFails(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, resp.Code)
 }
 
+// TestHawkNoAuthorizationError401 tests that the server sends a 401 status when
+// there is no Authorization header. This is legacy behaviour see bug
+// https://bugzilla.mozilla.org/show_bug.cgi?id=1318799
+func TestHawkNoAuthorizationError401(t *testing.T) {
+	var uid uint64 = 12345
+
+	hawkH := NewHawkHandler(EchoHandler, []string{"sekret"})
+
+	// send an authenticated request
+	resp := request("GET", syncurl(uid, "info/collections"), nil, hawkH)
+	assert.Equal(t, http.StatusUnauthorized, resp.Code)
+}
+
 func TestHawkMultiSecrets(t *testing.T) {
 	t.Parallel()
 
