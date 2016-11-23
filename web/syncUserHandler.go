@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,92 +158,106 @@ func (s *SyncUserHandler) TidyUp(minPurge, maxPurge time.Duration, vacuumKB int)
 		return true, time.Since(start), err
 	}
 
-	numBSOPurged, err := s.db.PurgeExpired()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"uid": s.uid,
-			"err": err.Error(),
-		}).Error("SyncUserHandler - Error purging expired BSOs")
-		return
+	logFields := log.Fields{
+		"uid": s.uid,
+		"db":  path.Base(s.db.Path),
 	}
 
-	numBatchesPurged, err := s.db.BatchPurge(s.config.MaxBatchTTL)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"uid": s.uid,
-			"err": err.Error(),
-		}).Error("SyncUserHandler - Error purging expired Batches")
-		return
-	}
+	var freeKB int
+	var usage *syncstorage.DBPageStats
 
-	usage, err := s.db.Usage()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"uid": s.uid,
-			"err": err.Error(),
-		}).Error("SyncUserHandler - Error retrieving usage")
-		return
-	}
-	freeKB := (usage.Free * usage.Size / 1024)
-
-	log.WithFields(log.Fields{
-		"uid":            s.uid,
-		"bsos_purged":    numBSOPurged,
-		"batches_purged": numBatchesPurged,
-		"t":              (time.Since(start).Nanoseconds() / 1000 / 1000),
-		"free_kb":        freeKB,
-	}).Info("SyncUserHandler - Purge OK")
-
-	if vacuumKB > 0 && freeKB >= vacuumKB {
-		if err = s.db.Vacuum(); err != nil {
-			log.WithFields(log.Fields{
-				"uid": s.uid,
-				"err": err.Error(),
-			}).Error("SyncUserHandler - Error Vacuuming DB")
-			return
-		}
-
-		after, err := s.db.Usage()
+	{ // purge bsos and batches
+		purgeStart := time.Now()
+		numBSOPurged, err := s.db.PurgeExpired()
 		if err != nil {
 			log.WithFields(log.Fields{
 				"uid": s.uid,
 				"err": err.Error(),
-			}).Error("SyncUserHandler - Error retrieving usage after vacuum")
+			}).Error("SyncUserHandler - Error purging expired BSOs")
 			return true, time.Since(start), err
 		}
 
-		beforeSz := usage.Total * usage.Size / 1024
-		afterSz := after.Total * after.Size / 1024
-		log.WithFields(log.Fields{
-			"uid":       s.uid,
-			"t":         (time.Since(start).Nanoseconds() / 1000 / 1000),
-			"before_kb": beforeSz,
-			"after_kb":  afterSz,
-			"freed_kb":  beforeSz - afterSz,
-		}).Info("SyncUserHandler - Vacuum OK")
+		numBatchesPurged, err := s.db.BatchPurge(s.config.MaxBatchTTL)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"uid": s.uid,
+				"err": err.Error(),
+			}).Error("SyncUserHandler - Error purging expired Batches")
+			return true, time.Since(start), err
+		}
+
+		usage, err = s.db.Usage()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"uid": s.uid,
+				"err": err.Error(),
+			}).Error("SyncUserHandler - Error retrieving usage")
+			return true, time.Since(start), err
+		}
+
+		logFields["purge_bso"] = numBSOPurged
+		logFields["purge_batch"] = numBatchesPurged
+		logFields["purge_t"] = time.Since(purgeStart).Nanoseconds() / 1000 / 1000
+		freeKB = (usage.Free * usage.Size / 1024)
+		logFields["free_pages_kb"] = freeKB
 	}
 
-	deltaTime := minPurge
-	if maxPurge.Nanoseconds() > 0 {
-		deltaTime = time.Duration(rand.Int63n(maxPurge.Nanoseconds()))
+	{ // vacuum the db if there are too many free blocks
+		vacStart := time.Now()
+		if vacuumKB > 0 && freeKB >= vacuumKB {
+			if err = s.db.Vacuum(); err != nil {
+				log.WithFields(log.Fields{
+					"uid": s.uid,
+					"err": err.Error(),
+				}).Error("SyncUserHandler - Error Vacuuming DB")
+				return true, time.Since(start), err
+			}
+
+			after, err := s.db.Usage()
+			if err != nil {
+				log.WithFields(log.Fields{
+					"uid": s.uid,
+					"err": err.Error(),
+				}).Error("SyncUserHandler - Error retrieving usage after vacuum")
+				return true, time.Since(start), err
+			}
+
+			vacBeforeKB := usage.Total * usage.Size / 1024
+			vacAfterKB := after.Total * after.Size / 1024
+
+			logFields["vac"] = "yes"
+			logFields["vac_before_kb"] = vacBeforeKB
+			logFields["vac_after_kb"] = vacAfterKB
+			logFields["vac_delta_kb"] = vacBeforeKB - vacAfterKB
+			logFields["vac_t"] = time.Since(vacStart).Nanoseconds() / 1000 / 1000
+		}
 	}
 
-	if deltaTime < minPurge {
-		deltaTime = minPurge
-	}
+	{ // Schedule the next purge
+		deltaTime := minPurge
+		if maxPurge.Nanoseconds() > 0 {
+			deltaTime = time.Duration(rand.Int63n(maxPurge.Nanoseconds()))
+		}
 
-	nextPurge := time.Now().Add(deltaTime)
-	err = s.db.SetKey("NEXT_PURGE", nextPurge.Format(time.RFC3339Nano))
+		if deltaTime < minPurge {
+			deltaTime = minPurge
+		}
 
-	if err != nil {
-		log.WithFields(log.Fields{
-			"uid": s.uid,
-			"err": err.Error(),
-		}).Error("SyncUserHandler - Error Setting Next Purge Key")
-		return
+		nextPurge := time.Now().Add(deltaTime)
+		err = s.db.SetKey("NEXT_PURGE", nextPurge.Format(time.RFC3339Nano))
+
+		if err != nil {
+			log.WithFields(log.Fields{
+				"uid": s.uid,
+				"err": err.Error(),
+			}).Error("SyncUserHandler - Error Setting Next Purge Key")
+			return true, time.Since(start), err
+		}
 	}
 
 	took = time.Since(start)
+	logFields["t"] = took.Nanoseconds() / 1000 / 1000
+	log.WithFields(logFields).Info("SyncUserHandler - TidyUp")
 	return
 }
 
