@@ -8,8 +8,8 @@ machine:
     B: "$A/$CIRCLE_PROJECT_REPONAME"
 
     # Use to install Custom golang
-    GODIST: "go1.7.linux-amd64.tar.gz"
-    GODIST_HASH: "702ad90f705365227e902b42d91dd1a40e48ca7f67a2f4b2fd052aaa4295cd95"
+    GODIST: "go1.8beta1.linux-amd64.tar.gz"
+    GODIST_HASH: "768d8d73ccea69c9a0941f9ef2333b1ff8c82120abfcdedd4e91af039c674a8d"
 
   services:
     - docker
