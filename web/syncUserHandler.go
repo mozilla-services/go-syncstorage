@@ -989,7 +989,16 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 			Failed:   failures,
 		})
 	} else {
-		modified := syncstorage.Now()
+		// https://bugzilla.mozilla.org/show_bug.cgi?id=1324600#c11
+		// batch create/append are not considered real writes until they are
+		// committed. In this case, send the collection's last modified timestamp
+		// for X-Last-Modified
+		modified, err := s.db.GetCollectionModified(collectionId)
+		if err != nil {
+			InternalError(w, r, errors.Wrap(err, "Failed getting modified ts for batch create/append"))
+			return
+		}
+
 		w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(modified))
 		JsonNewlineStatus(w, r, http.StatusAccepted, &PostResults{
 			Batch:    batchIdString(dbBatchId),

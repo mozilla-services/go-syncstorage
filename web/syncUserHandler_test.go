@@ -270,23 +270,55 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 		db, _ := syncstorage.NewDB(":memory:", nil)
 		handler := NewSyncUserHandler(uid, db, nil)
 
+		// initialize the collection so we have a proper last modified timestamp
+		collectionInit := bytes.NewBufferString(`[
+			{"id":"bsoA", "payload": "bsoA"},
+			{"id":"bsoB", "payload": "bsoB"}
+		]`)
+		respInit := requestheaders("POST", url, collectionInit, header, handler)
+		if !assert.Equal(http.StatusOK, respInit.Code, respInit.Body.String()) {
+			return
+		}
+
 		respCreate := requestheaders("POST", url+"?batch=true", bodyCreate, header, handler)
 		if !assert.Equal(http.StatusAccepted, respCreate.Code, respCreate.Body.String()) {
 			return
 		}
+
+		// https://bugzilla.mozilla.org/show_bug.cgi?id=1324600
+		// X-Last-Modified should not change until the batch is committed
+		colLastModified := respInit.Header().Get("X-Last-Modified")
+		createLM := respCreate.Header().Get("X-Last-Modified")
+		if !assert.Equal(colLastModified, createLM, "ts should be equal got: %s, expected: %s", colLastModified, createLM) {
+			return
+		}
+
 		var createResults PostResults
 		if err := json.Unmarshal(respCreate.Body.Bytes(), &createResults); !assert.NoError(err) {
 			return
 		}
 
-		assert.Equal(batchIdString(1), createResults.Batch) // clean db, always gets 1
+		assert.Equal(batchIdString(1), createResults.Batch) // clean db, always gets a batch id of 1
 		batchIdString := createResults.Batch
 
 		respAppend := requestheaders("POST", url+"?batch="+batchIdString, bodyAppend, header, handler)
-		assert.Equal(http.StatusAccepted, respAppend.Code, respAppend.Body.String())
+		if !assert.Equal(http.StatusAccepted, respAppend.Code, respAppend.Body.String()) {
+			return
+		}
+
+		appendLM := respAppend.Header().Get("X-Last-Modified")
+		if !assert.Equal(colLastModified, appendLM, "ts should be equal got: %s, expected: %s", colLastModified, appendLM) {
+			return
+		}
 
 		respCommit := requestheaders("POST", url+"?commit=1&batch="+batchIdString, bodyCommit, header, handler)
 		assert.Equal(http.StatusOK, respCommit.Code, respCommit.Body.String())
+
+		commitLM, _ := ConvertTimestamp(respCommit.Header().Get("X-Last-Modified"))
+		createLMint, _ := ConvertTimestamp(createLM)
+		if !assert.True(commitLM > createLMint, "commit ts invalid") {
+			return
+		}
 
 		cId, _ := db.GetCollectionId(collection)
 		for bIdNum := 0; bIdNum <= 5; bIdNum++ {
