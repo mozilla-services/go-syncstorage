@@ -149,7 +149,7 @@ func parseIntoBSO(jsonData json.RawMessage, bso *syncstorage.PutBSOInput) *parse
 	// check to make sure values are appropriate
 	if r, ok := bkeys["id"]; ok {
 		err := json.Unmarshal(r, &bId)
-		if err != nil {
+		if err != nil || (len(r) == 4 && string(r[:]) == "null") {
 			return &parseError{field: "id", msg: "Invalid format"}
 		} else {
 			bso.Id = bId
@@ -168,12 +168,19 @@ func parseIntoBSO(jsonData json.RawMessage, bso *syncstorage.PutBSOInput) *parse
 
 	if r, ok := bkeys["ttl"]; ok {
 		var ttl int
-		err := json.Unmarshal(r, &ttl)
-		if err != nil {
-			return &parseError{bId: bId, field: "ttl", msg: "Invalid format"}
+
+		// bug 1332552, treat `ttl:null` as never expiring
+		// by using 100 years for it (in seconds)
+		if len(r) == 4 && string(r[:]) == "null" {
+			ttl = 100 * 365 * 24 * 60 * 60
 		} else {
-			bso.TTL = &ttl
+			err := json.Unmarshal(r, &ttl)
+			if err != nil {
+				return &parseError{bId: bId, field: "ttl", msg: "Invalid format"}
+			}
 		}
+
+		bso.TTL = &ttl
 	}
 
 	if r, ok := bkeys["sortindex"]; ok {

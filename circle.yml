@@ -73,11 +73,8 @@ test:
         app:build
     - sleep 3
     - >
-        echo "${PYTHON_TEST_CONTAINER:-mozilla/server-syncstorage:1.6.1}"
-    - >
         docker run
-        --net=host
-        "${PYTHON_TEST_CONTAINER:-mozilla/server-syncstorage:1.6.1}"
+        --net=host mozilla/server-syncstorage:1.6.2
         test_endpoint "http://127.0.0.1:8888#secret"
 
 deployment:

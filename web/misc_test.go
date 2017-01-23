@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -133,5 +134,89 @@ func BenchmarkNewLine(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		NewLine(writer, nil, http.StatusOK, data)
 		writer.Body.Reset() // clean it out
+	}
+}
+
+func TestParseIntoBSO(t *testing.T) {
+	assert := assert.New(t)
+
+	{ // make sure it works
+		var bso syncstorage.PutBSOInput
+		jdata := json.RawMessage(`{"id":"test", "payload":"hello","ttl":1000,"sortindex":1}`)
+		if !assert.Nil(parseIntoBSO(jdata, &bso)) {
+			return
+		}
+
+		assert.Equal("test", bso.Id)
+		assert.Equal("hello", *bso.Payload)
+		assert.Equal(1000, *bso.TTL)
+		assert.Equal(1, *bso.SortIndex)
+	}
+
+	{ // test missing values are Nil
+		var bso syncstorage.PutBSOInput
+		jdata := json.RawMessage(`{"id":"test"}`)
+		if !assert.Nil(parseIntoBSO(jdata, &bso)) {
+			return
+		}
+
+		assert.Equal("test", bso.Id)
+		assert.Nil(bso.Payload)
+		assert.Nil(bso.SortIndex)
+		assert.Nil(bso.TTL)
+	}
+
+	{ // test missing id is an error
+		var bso syncstorage.PutBSOInput
+		jdata := json.RawMessage(`{payload":"hello"}`)
+		err := parseIntoBSO(jdata, &bso)
+
+		if !assert.NotNil(err) {
+			return
+		}
+	}
+
+	{ // treat TTL=null as 100 years (never expires), bug 1332552
+		var bso syncstorage.PutBSOInput
+		jdata := json.RawMessage(`{"id":"test", "ttl":null}`)
+		if !assert.Nil(parseIntoBSO(jdata, &bso)) {
+			return
+		}
+
+		if assert.NotNil(bso.TTL) {
+			assert.Equal(100*365*24*60*60, *bso.TTL)
+		}
+	}
+
+	{ // test malformed json explodes
+		tests := []string{
+			`{"id":[]}`,
+			`{"id":123}`,
+			`{"id":{"x":"boom"}}`,
+			`{"id":null}`,
+
+			`{"id":"x", "payload":[]}`,
+			`{"id":"x", "payload":123}`,
+			`{"id":"x", "payload":{"x":"boom"}}`,
+
+			`{"id":"x", "ttl":[]}`,
+			`{"id":"x", "ttl":nu}`,
+			`{"id":"x", "ttl":"null"}`,
+			`{"id":"x", "ttl":{"x":1}}`,
+
+			`{"id":"x", "sortindex":[]}`,
+			`{"id":"x", "sortindex":nu}`,
+			`{"id":"x", "sortindex":"null"}`,
+			`{"id":"x", "sortindex":{"x":1}}`,
+		}
+
+		for _, test := range tests {
+			var bso syncstorage.PutBSOInput
+			err := parseIntoBSO(json.RawMessage(test), &bso)
+			if !assert.NotNil(err, test) {
+
+				break
+			}
+		}
 	}
 }

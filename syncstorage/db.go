@@ -49,8 +49,9 @@ const (
 	SORT_OLDEST
 	SORT_INDEX
 
-	// Keep BSO for 1 year
-	DEFAULT_BSO_TTL = 365 * 24 * 60 * 60 * 1000
+	// The default TTL is to never expire. Use 100 years
+	// which should be enough (in milliseconds)
+	DEFAULT_BSO_TTL = 100 * 365 * 24 * 60 * 60 * 1000
 )
 
 type CollectionInfo struct {
