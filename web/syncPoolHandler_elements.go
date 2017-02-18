@@ -46,11 +46,12 @@ type handlerPool struct {
 	// the max size of the pool
 	maxPoolSize int
 
-	// the DB Configuration
-	dbConfig *syncstorage.Config
+	// Configurations
+	dbConfig          *syncstorage.Config
+	userHandlerConfig *SyncUserHandlerConfig
 }
 
-func newHandlerPool(basepath string, maxPoolSize int, dbConfig *syncstorage.Config) *handlerPool {
+func newHandlerPool(basepath string, maxPoolSize int, dbConfig *syncstorage.Config, userHandlerConfig *SyncUserHandlerConfig) *handlerPool {
 
 	var path []string
 
@@ -73,12 +74,13 @@ func newHandlerPool(basepath string, maxPoolSize int, dbConfig *syncstorage.Conf
 	}
 
 	pool := &handlerPool{
-		base:        path,
-		elements:    make(map[string]*poolElement),
-		lru:         list.New(),
-		lrumap:      make(map[string]*list.Element),
-		maxPoolSize: maxPoolSize,
-		dbConfig:    dbConfig,
+		base:              path,
+		elements:          make(map[string]*poolElement),
+		lru:               list.New(),
+		lrumap:            make(map[string]*list.Element),
+		maxPoolSize:       maxPoolSize,
+		dbConfig:          dbConfig,
+		userHandlerConfig: userHandlerConfig,
 	}
 
 	return pool
@@ -155,7 +157,7 @@ func (p *handlerPool) getElement(uid string) (*poolElement, bool, error) {
 
 		element = &poolElement{
 			uid:     uid,
-			handler: NewSyncUserHandler(uid, db, nil),
+			handler: NewSyncUserHandler(uid, db, p.userHandlerConfig),
 		}
 
 		elementCreated = true
