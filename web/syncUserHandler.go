@@ -41,8 +41,8 @@ func NewDefaultSyncUserHandlerConfig() *SyncUserHandlerConfig {
 		MaxRequestBytes:       2 * 1024 * 1024,
 		MaxPOSTRecords:        100,
 		MaxPOSTBytes:          2 * 1024 * 1024,
-		MaxTotalRecords:       1000,
-		MaxTotalBytes:         20 * 1024 * 1024,
+		MaxTotalRecords:       10000,
+		MaxTotalBytes:         100 * 1024 * 1024,
 		MaxRecordPayloadBytes: 1024 * 256,
 
 		// batches older than this are likely to be purged

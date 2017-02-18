@@ -56,16 +56,18 @@ func NewDefaultSyncPoolConfig(basepath string) *SyncPoolConfig {
 }
 
 func NewSyncPoolHandler(config *SyncPoolConfig, userHandlerConfig *SyncUserHandlerConfig) *SyncPoolHandler {
+
+	if userHandlerConfig == nil {
+		userHandlerConfig = NewDefaultSyncUserHandlerConfig()
+	}
+
 	pools := make([]*handlerPool, config.NumPools, config.NumPools)
 	for i := 0; i < config.NumPools; i++ {
 		pools[i] = newHandlerPool(
 			config.Basepath,
 			config.MaxPoolSize,
-			config.DBConfig)
-	}
-
-	if userHandlerConfig == nil {
-		userHandlerConfig = NewDefaultSyncUserHandlerConfig()
+			config.DBConfig,
+			userHandlerConfig)
 	}
 
 	server := &SyncPoolHandler{
