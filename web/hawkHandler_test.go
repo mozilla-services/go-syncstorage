@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"io"
 	"io/ioutil"
+	"mime"
 	"net/http"
 	"strconv"
 	"testing"
@@ -62,7 +63,8 @@ func hawkrequestbody(
 
 	// add in the payload hash
 	if len(content) > 0 {
-		h := auth.PayloadHash(contentType)
+		mediaType, _, _ := mime.ParseMediaType(contentType)
+		h := auth.PayloadHash(mediaType)
 		h.Sum(content)
 		auth.SetHash(h)
 		req.Header.Set("Content-Type", contentType)
@@ -158,7 +160,7 @@ func TestHawkAuthPOST(t *testing.T) {
 	payload := "JUST A BUNCH OF DATA"
 	body := bytes.NewBufferString(payload)
 
-	req, _ := hawkrequestbody("POST", syncurl(uid, "storage/collections/boom"), tok, "text/plain", body)
+	req, _ := hawkrequestbody("POST", syncurl(uid, "storage/collections/boom"), tok, "text/plain;charset=utf-8", body)
 	resp := sendrequest(req, hawkH)
 	assert.Equal(http.StatusOK, resp.Code)
 
