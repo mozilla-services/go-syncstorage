@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"io/ioutil"
+	"mime"
 	"net/http"
 	"strings"
 	"sync"
@@ -155,9 +156,17 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Step 5: Validate the payload hash if it exists
 	if auth.Hash != nil {
-		if r.Header.Get("Content-Type") == "" {
+		contentType := r.Header.Get("Content-Type")
+		if contentType == "" {
 			sendRequestProblem(w, r, http.StatusBadRequest,
 				errors.New("Hawk: Content-Type required"))
+			return
+		}
+
+		mediaType, _, err := mime.ParseMediaType(contentType)
+		if err != nil {
+			sendRequestProblem(w, r, http.StatusBadRequest,
+				errors.Wrap(err, "Hawk: Could not parse Content-Type"))
 			return
 		}
 
@@ -170,7 +179,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		r.Body = ioutil.NopCloser(bytes.NewReader(content))
-		pHash := auth.PayloadHash(r.Header.Get("Content-Type"))
+		pHash := auth.PayloadHash(mediaType)
 		pHash.Sum(content)
 		if !auth.ValidHash(pHash) {
 			w.Header().Set("WWW-Authenticate", "Hawk")
