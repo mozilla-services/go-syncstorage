@@ -180,7 +180,7 @@ func (h *HawkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		r.Body = ioutil.NopCloser(bytes.NewReader(content))
 		pHash := auth.PayloadHash(mediaType)
-		pHash.Sum(content)
+		pHash.Write(content)
 		if !auth.ValidHash(pHash) {
 			w.Header().Set("WWW-Authenticate", "Hawk")
 			sendRequestProblem(w, r, http.StatusForbidden,
