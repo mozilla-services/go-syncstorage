@@ -65,7 +65,7 @@ func hawkrequestbody(
 	if len(content) > 0 {
 		mediaType, _, _ := mime.ParseMediaType(contentType)
 		h := auth.PayloadHash(mediaType)
-		h.Sum(content)
+		h.Write(content)
 		auth.SetHash(h)
 		req.Header.Set("Content-Type", contentType)
 	}
@@ -157,10 +157,16 @@ func TestHawkAuthPOST(t *testing.T) {
 
 	tok := testtoken(hawkH.secrets[0], uid)
 
-	payload := "JUST A BUNCH OF DATA"
+	payload := "Thank you for flying Hawk"
 	body := bytes.NewBufferString(payload)
 
 	req, _ := hawkrequestbody("POST", syncurl(uid, "storage/collections/boom"), tok, "text/plain;charset=utf-8", body)
+
+	assert.Contains(req.Header.Get("Authorization"),
+		`hash="Yi9LfIIFRtBEPt74PVmbTF/xVAwPn7ub15ePICfgnuY="`,
+		"payload hash value invalid",
+	)
+
 	resp := sendrequest(req, hawkH)
 	assert.Equal(http.StatusOK, resp.Code)
 
