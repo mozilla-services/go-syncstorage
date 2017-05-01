@@ -86,14 +86,13 @@ func (p *PostResults) AddFailure(bId string, reasons ...string) {
 // GetResults holds search results for BSOs, this is what getBSOs() returns
 type GetResults struct {
 	BSOs   []*BSO
-	Total  int
 	More   bool
 	Offset int
 }
 
 func (g *GetResults) String() string {
 	s := fmt.Sprintf("Total: %d, More: %v, Offset: %d\nBSOs:\n",
-		g.Total, g.More, g.Offset)
+		len(g.BSOs), g.More, g.Offset)
 
 	for _, b := range g.BSOs {
 		s += fmt.Sprintf("  Id:%s, Modified:%d, SortIndex:%d, TTL:%d, %s\n",
@@ -895,13 +894,6 @@ func (d *DB) getBSOs(
 		values = append(values, offset)
 	}
 
-	countQuery := "SELECT COUNT(1) NumRows FROM BSO " + where + " " + orderBy
-	var totalRows int
-
-	if err := tx.QueryRow(countQuery, values...).Scan(&totalRows); err != nil {
-		return nil, err
-	}
-
 	resultQuery := fmt.Sprintf("%s %s %s %s", query, where, orderBy, limitStmt)
 	rows, err := tx.Query(resultQuery, values...)
 
@@ -928,15 +920,28 @@ func (d *DB) getBSOs(
 		}
 	}
 
-	nextOffset := 0
-	more := (totalRows > limit+offset)
-	if more {
-		nextOffset = offset + limit
+	var more bool
+	var nextOffset int
+
+	// if a limit was applied, determine if there are records beyond
+	// the upper bound and return the pertinent information
+	if limit > 0 {
+		var totalRows int
+		countQuery := "SELECT COUNT(1) NumRows FROM BSO " + where + " " + orderBy
+		if err := tx.QueryRow(countQuery, values...).Scan(&totalRows); err != nil {
+			return nil, err
+		}
+
+		if totalRows > limit+offset {
+			more = true
+			nextOffset = offset + limit
+		}
+	} else {
+		more = false
 	}
 
 	results := &GetResults{
 		BSOs:   bsos,
-		Total:  totalRows,
 		More:   more,
 		Offset: nextOffset,
 	}

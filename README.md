@@ -43,13 +43,12 @@ The server has a few knobs that can be tweaked.
 | `LOG_ONLY_HTTP_ERRORS` | Can be `true` or `false`. Logs only when `errno != 0` to reduce noise. Default `false`. |
 | `HOSTNAME` | Set a hostname value for mozlog output |
 | `LIMIT_MAX_REQUESTS_BYTES` | The maximum size in bytes of the overall HTTP request body that will be accepted by the server. |
-| `LIMIT_MAX_BSO_GET_LIMIT` |  Max BSOs that can be returned per GET request. Default: 2500. |
 | `LIMIT_MAX_POST_BYTES` |  Maximum size of a POST request. Default: 2097152 (2MB). |
 | `LIMIT_MAX_POST_RECORDS` |  Maximum number of BSOs per POST request. Default 100. |
 | `LIMIT_MAX_TOTAL_BYTES` |  Maximum total size of a POST batch job. Default: 26,214,400 (20MB). |
 | `LIMIT_MAX_TOTAL_RECORDS` | Maximum total BSOs in a POST batch job. Default 1000. |
 | `LIMIT_MAX_BATCH_TTL` | Maximum TTL for a batch to remain uncommitted in seconds. Default 7200 (2 hours). |
-| `INFO_CACHE_SIZE` | Cache size in MB for `<uid>/info/collections` and `<uid>/info/configuration`. Default 0 (disabled) | 
+| `INFO_CACHE_SIZE` | Cache size in MB for `<uid>/info/collections` and `<uid>/info/configuration`. Default 0 (disabled) |
 | `HAWK_TIMESTAMP_MAX_SKEW` | Sets number of seconds hawk timestamps can differ from the server. Default 60. |
 
 ## Advanced Configuration
@@ -76,7 +75,7 @@ The `POOL_PURGE_MIN_HOURS` and `POOL_PURGE_MAX_HOURS` define a time range to tri
 
 The `POOL_VACUUM_KB` sets the threshold before a vacuum is run. Purging of batches and BSOs free up database pages but not disk space. A vacuum will rewrite the database, defragment it and free up disk space. Depending on the number of records it can take seconds to vacuum a database.
 
-### Sqlite3 Tweaks 
+### Sqlite3 Tweaks
 
 | Env. Var | Info |
 |---|---|

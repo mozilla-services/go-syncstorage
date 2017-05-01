@@ -21,9 +21,6 @@ import (
 )
 
 type SyncUserHandlerConfig struct {
-	// Over rides
-	MaxBSOGetLimit int
-
 	// API Limits
 	MaxRequestBytes       int
 	MaxPOSTRecords        int
@@ -37,7 +34,6 @@ type SyncUserHandlerConfig struct {
 func NewDefaultSyncUserHandlerConfig() *SyncUserHandlerConfig {
 	return &SyncUserHandlerConfig{
 		// API Limits
-		MaxBSOGetLimit:        1000,
 		MaxRequestBytes:       2 * 1024 * 1024,
 		MaxPOSTRecords:        100,
 		MaxPOSTBytes:          2 * 1024 * 1024,
@@ -585,7 +581,7 @@ func (s *SyncUserHandler) hCollectionGET(w http.ResponseWriter, r *http.Request)
 
 	if v := r.Form.Get("limit"); v != "" {
 		limit, err = strconv.Atoi(v)
-		if err != nil || !syncstorage.LimitOk(limit) {
+		if err != nil || limit < 0 {
 			errMessage := "Invalid limit value"
 			if err != nil {
 				err = errors.Wrap(err, errMessage)
@@ -595,11 +591,10 @@ func (s *SyncUserHandler) hCollectionGET(w http.ResponseWriter, r *http.Request)
 			sendRequestProblem(w, r, http.StatusBadRequest, err)
 			return
 		}
-	}
-
-	// assign a default value for limit if nothing is supplied
-	if limit <= 0 || limit > s.config.MaxBSOGetLimit {
-		limit = s.config.MaxBSOGetLimit
+	} else {
+		// in sqlite a negative value for LIMIT results in
+		// no upper bound, ref: http://sqlite.org/lang_select.html#limitoffset
+		limit = -1
 	}
 
 	if v := r.Form.Get("offset"); v != "" {
@@ -648,7 +643,7 @@ func (s *SyncUserHandler) hCollectionGET(w http.ResponseWriter, r *http.Request)
 	m := syncstorage.ModifiedToString(cmodified)
 	w.Header().Set("X-Last-Modified", m)
 
-	w.Header().Set("X-Weave-Records", strconv.Itoa(results.Total))
+	w.Header().Set("X-Weave-Records", strconv.Itoa(len(results.BSOs)))
 	if results.More {
 		w.Header().Set("X-Weave-Next-Offset", strconv.Itoa(results.Offset))
 	}

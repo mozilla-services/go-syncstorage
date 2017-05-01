@@ -28,7 +28,6 @@ type LogConfig struct {
 // configures limits for web/SyncUserHandler
 type UserHandlerConfig struct {
 	MaxRequestBytes       int `envconfig:"default=2097152"`
-	MaxBSOGetLimit        int `envconfig:"default=1000"`
 	MaxPOSTRecords        int `envconfig:"default=100"`
 	MaxPOSTBytes          int `envconfig:"default=2097152"`
 	MaxTotalRecords       int `envconfig:"default=1000"`
@@ -138,9 +137,6 @@ func init() {
 		Config.Pool.Num = runtime.NumCPU()
 	}
 
-	if Config.Limit.MaxBSOGetLimit < 1 {
-		log.Fatal("LIMIT_MAX_BSO_GET_LIMIT must be >= 1")
-	}
 	if Config.Limit.MaxPOSTRecords < 1 {
 		log.Fatal("LIMIT_MAX_POST_RECORDS must be >= 1")
 	}

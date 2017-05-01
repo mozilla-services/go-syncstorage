@@ -74,8 +74,11 @@ func TTLOk(ttl int) bool {
 	return (ttl >= 0)
 }
 
+// LimitOk checks limit is within the correct range.
+// Acceptable values are -1 to max int. A limit of 0 would
+// return 0 records
 func LimitOk(limit int) bool {
-	return (limit > 0)
+	return (limit >= -1)
 }
 
 func OffsetOk(offset int) bool {

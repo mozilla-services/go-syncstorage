@@ -38,7 +38,6 @@ func main() {
 
 	syncLimitConfig := web.NewDefaultSyncUserHandlerConfig()
 	syncLimitConfig.MaxRequestBytes = config.Limit.MaxRequestBytes
-	syncLimitConfig.MaxBSOGetLimit = config.Limit.MaxBSOGetLimit
 	syncLimitConfig.MaxPOSTRecords = config.Limit.MaxPOSTRecords
 	syncLimitConfig.MaxPOSTBytes = config.Limit.MaxPOSTBytes
 	syncLimitConfig.MaxTotalBytes = config.Limit.MaxTotalBytes
@@ -121,7 +120,6 @@ func main() {
 		"POOL_VACUUM_KB":                 config.Pool.VacuumKB,
 		"POOL_PURGE_MIN_HOURS":           config.Pool.PurgeMinHours,
 		"POOL_PURGE_MAX_HOURS":           config.Pool.PurgeMaxHours,
-		"LIMIT_MAX_BSO_GET_LIMIT":        syncLimitConfig.MaxBSOGetLimit,
 		"LIMIT_MAX_POST_RECORDS":         syncLimitConfig.MaxPOSTRecords,
 		"LIMIT_MAX_POST_BYTES":           syncLimitConfig.MaxPOSTBytes,
 		"LIMIT_MAX_TOTAL_RECORDS":        syncLimitConfig.MaxTotalRecords,

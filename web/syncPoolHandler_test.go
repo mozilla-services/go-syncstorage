@@ -122,14 +122,13 @@ func TestSyncPoolCleanupHandlers(t *testing.T) {
 func TestSyncPoolPassesConfigToUserHandler(t *testing.T) {
 	assert := assert.New(t)
 	config := &SyncUserHandlerConfig{
-		MaxBSOGetLimit:        1,
-		MaxRequestBytes:       2,
-		MaxPOSTRecords:        3,
-		MaxPOSTBytes:          4,
-		MaxTotalRecords:       5,
-		MaxTotalBytes:         6,
-		MaxBatchTTL:           7,
-		MaxRecordPayloadBytes: 8,
+		MaxRequestBytes:       1,
+		MaxPOSTRecords:        2,
+		MaxPOSTBytes:          3,
+		MaxTotalRecords:       4,
+		MaxTotalBytes:         5,
+		MaxBatchTTL:           6,
+		MaxRecordPayloadBytes: 7,
 	}
 
 	handler := NewSyncPoolHandler(testSyncPoolConfig(), config)
@@ -138,12 +137,11 @@ func TestSyncPoolPassesConfigToUserHandler(t *testing.T) {
 		return
 	}
 
-	assert.Equal(el.handler.config.MaxBSOGetLimit, 1)
-	assert.Equal(el.handler.config.MaxRequestBytes, 2)
-	assert.Equal(el.handler.config.MaxPOSTRecords, 3)
-	assert.Equal(el.handler.config.MaxPOSTBytes, 4)
-	assert.Equal(el.handler.config.MaxTotalRecords, 5)
-	assert.Equal(el.handler.config.MaxTotalBytes, 6)
-	assert.Equal(el.handler.config.MaxBatchTTL, 7)
-	assert.Equal(el.handler.config.MaxRecordPayloadBytes, 8)
+	assert.Equal(el.handler.config.MaxRequestBytes, 1)
+	assert.Equal(el.handler.config.MaxPOSTRecords, 2)
+	assert.Equal(el.handler.config.MaxPOSTBytes, 3)
+	assert.Equal(el.handler.config.MaxTotalRecords, 4)
+	assert.Equal(el.handler.config.MaxTotalBytes, 5)
+	assert.Equal(el.handler.config.MaxBatchTTL, 6)
+	assert.Equal(el.handler.config.MaxRecordPayloadBytes, 7)
 }
