@@ -324,20 +324,34 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	// make sure a limit of 0 returns all the records
-	allBSOs, err := db.getBSOs(tx, cId, nil, MaxTimestamp, 0, SORT_INDEX, -1, 0)
-	if !assert.NoError(err) {
-		return
+	{ // make sure a limit of 0 returns no records but with the `more` bit set
+		results, err := db.getBSOs(tx, cId, nil, MaxTimestamp, 0, SORT_INDEX, 0, 0)
+		if !assert.NoError(err) {
+			return
+		}
+
+		assert.Len(results.BSOs, 0)
+		assert.True(results.More)
+		assert.Equal(0, results.Offset)
 	}
 
-	assert.Len(allBSOs.BSOs, totalRecords)
+	{ // make sure a limit of -1 returns all the records (unbounded)
+		results, err := db.getBSOs(tx, cId, nil, MaxTimestamp, 0, SORT_INDEX, -1, 0)
+		if !assert.NoError(err) {
+			return
+		}
+
+		assert.Len(results.BSOs, totalRecords)
+		assert.False(results.More)
+		assert.Equal(0, results.Offset)
+	}
 
 	newer := 0
 	limit := 5
 	offset := 0
 
 	// make sure invalid values don't work for limit and offset
-	_, err = db.getBSOs(tx, cId, nil, MaxTimestamp, newer, SORT_INDEX, -2, offset)
+	_, err := db.getBSOs(tx, cId, nil, MaxTimestamp, newer, SORT_INDEX, -2, offset)
 	assert.Equal(ErrInvalidLimit, err)
 	_, err = db.getBSOs(tx, cId, nil, MaxTimestamp, newer, SORT_INDEX, limit, -2)
 	assert.Equal(ErrInvalidOffset, err)

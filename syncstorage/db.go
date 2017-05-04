@@ -887,7 +887,14 @@ func (d *DB) getBSOs(
 	}
 
 	limitStmt := "LIMIT ?"
-	values = append(values, limit)
+
+	// fetch an extra row to detect if there are more
+	// rows that match the query conditions
+	if limit >= 0 {
+		values = append(values, limit+1)
+	} else {
+		values = append(values, limit)
+	}
 
 	if offset != 0 {
 		limitStmt += " OFFSET ?"
@@ -896,6 +903,7 @@ func (d *DB) getBSOs(
 
 	resultQuery := fmt.Sprintf("%s %s %s %s", query, where, orderBy, limitStmt)
 	rows, err := tx.Query(resultQuery, values...)
+	defer rows.Close()
 
 	if log.GetLevel() == log.DebugLevel {
 		log.WithFields(log.Fields{
@@ -907,8 +915,6 @@ func (d *DB) getBSOs(
 	if err != nil {
 		return nil, err
 	}
-
-	defer rows.Close()
 
 	bsos := make([]*BSO, 0)
 	for rows.Next() {
@@ -922,22 +928,11 @@ func (d *DB) getBSOs(
 
 	var more bool
 	var nextOffset int
-
-	// if a limit was applied, determine if there are records beyond
-	// the upper bound and return the pertinent information
-	if limit > 0 {
-		var totalRows int
-		countQuery := "SELECT COUNT(1) NumRows FROM BSO " + where + " " + orderBy
-		if err := tx.QueryRow(countQuery, values...).Scan(&totalRows); err != nil {
-			return nil, err
-		}
-
-		if totalRows > limit+offset {
-			more = true
-			nextOffset = offset + limit
-		}
-	} else {
-		more = false
+	num := len(bsos)
+	if limit >= 0 && num > limit {
+		bsos = bsos[:num-1]
+		more = true
+		nextOffset = limit + offset
 	}
 
 	results := &GetResults{
