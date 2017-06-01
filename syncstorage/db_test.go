@@ -614,7 +614,6 @@ func TestDeleteCollection(t *testing.T) {
 	cName := "NewConnection"
 	cId, err := db.CreateCollection(cName)
 	if assert.Nil(err) {
-
 		bIds := []string{"1", "2", "3"}
 		for _, bId := range bIds {
 			if _, err := db.PutBSO(cId, bId, String("test"), nil, nil); !assert.NoError(err) {
@@ -622,17 +621,26 @@ func TestDeleteCollection(t *testing.T) {
 			}
 		}
 
-		err = db.DeleteCollection(cId)
+		modified, err := db.DeleteCollection(cId)
 
 		// make sure it was deleted
-		if assert.Nil(err) {
-			// make sure BSOs are deleted
-			for _, bId := range bIds {
-				b, err := db.GetBSO(cId, bId)
-				assert.Exactly(ErrNotFound, err)
-				assert.Nil(b)
-			}
+		if !assert.Nil(err) {
+			return
 		}
+
+		lastModified, _ := db.LastModified()
+		assert.Equal(lastModified, modified)
+
+		// make sure BSOs are deleted
+		for _, bId := range bIds {
+			b, err := db.GetBSO(cId, bId)
+			assert.Exactly(ErrNotFound, err)
+			assert.Nil(b)
+		}
+
+		// make sure the collection's last modified is 0
+		cModified, _ := db.GetCollectionModified(cId)
+		assert.Equal(0, cModified)
 	}
 }
 

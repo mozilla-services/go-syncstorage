@@ -375,35 +375,35 @@ func (s *SyncUserHandler) hInfoCollections(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if info, err := s.db.InfoCollections(); err != nil {
+	info, err := s.db.InfoCollections()
+	if err != nil {
 		InternalError(w, r, err)
 		return
-	} else {
-		modified := 0
-		for _, modtime := range info {
-			if modtime > modified {
-				modified = modtime
-			}
-		}
-
-		if sentNotModified(w, r, modified) {
-			return
-		}
-
-		m := syncstorage.ModifiedToString(modified)
-		w.Header().Set("X-Last-Modified", m)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, "{")
-		num := len(info)
-		for name, modified := range info {
-			fmt.Fprintf(w, `"%s":%s`, name, syncstorage.ModifiedToString(modified))
-			num--
-			if num != 0 {
-				fmt.Fprint(w, ",")
-			}
-		}
-		fmt.Fprint(w, "}")
 	}
+
+	modified, err := s.db.LastModified()
+	if err != nil {
+		InternalError(w, r, err)
+		return
+	}
+
+	if sentNotModified(w, r, modified) {
+		return
+	}
+
+	m := syncstorage.ModifiedToString(modified)
+	w.Header().Set("X-Last-Modified", m)
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(w, "{")
+	num := len(info)
+	for name, modified := range info {
+		fmt.Fprintf(w, `"%s":%s`, name, syncstorage.ModifiedToString(modified))
+		num--
+		if num != 0 {
+			fmt.Fprint(w, ",")
+		}
+	}
+	fmt.Fprint(w, "}")
 }
 
 func (s *SyncUserHandler) hInfoCollectionUsage(w http.ResponseWriter, r *http.Request) {
@@ -1008,8 +1008,8 @@ func (s *SyncUserHandler) hCollectionDELETE(w http.ResponseWriter, r *http.Reque
 			return
 		} else {
 			InternalError(w, r, err)
+			return
 		}
-		return
 	}
 
 	cmodified, err := s.db.GetCollectionModified(cId)
@@ -1020,8 +1020,8 @@ func (s *SyncUserHandler) hCollectionDELETE(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	modified := syncstorage.Now()
 	bids, idExists := r.URL.Query()["ids"]
+	var modified int
 	if idExists {
 		bidlist := strings.Split(bids[0], ",")
 		if len(bidlist) > s.config.MaxPOSTRecords {
@@ -1036,7 +1036,7 @@ func (s *SyncUserHandler) hCollectionDELETE(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	} else {
-		err = s.db.DeleteCollection(cId)
+		modified, err = s.db.DeleteCollection(cId)
 		if err != nil {
 			InternalError(w, r, err)
 			return
@@ -1048,7 +1048,6 @@ func (s *SyncUserHandler) hCollectionDELETE(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("X-Last-Modified", m)
 	fmt.Fprintf(w, `{"modified":%s}`, m)
 }
-
 func (s *SyncUserHandler) hBsoGET(w http.ResponseWriter, r *http.Request) {
 
 	if !AcceptHeaderOk(w, r) {
