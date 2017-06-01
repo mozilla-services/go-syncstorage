@@ -20,11 +20,12 @@ import (
 )
 
 var (
-	uidregex *regexp.Regexp
+	uidregex, badCryptoRegex *regexp.Regexp
 )
 
 func init() {
 	uidregex = regexp.MustCompile(`/1\.5/([0-9]+)`)
+	badCryptoRegex = regexp.MustCompile(`\\"IV\\":\s*\\"AAAAAAAAAAAAAAAAAAAAAA==\\"`)
 }
 
 // extractUID extracts the UID from the path in http.Request
@@ -34,6 +35,32 @@ func extractUID(path string) string {
 		return matches[1]
 	} else {
 		return ""
+	}
+}
+
+// catchBadCrypto addresses Bug 1349170 and this commit to pysync:
+// https://github.com/mozilla-services/server-syncstorage/commit/c2a5f70
+func catchBadCrypto(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		collection := mux.Vars(r)["collection"]
+		if collection != "crypto" || r.Body == nil {
+			next(w, r)
+			return
+		}
+
+		data, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			InternalError(w, r, errors.Wrap(err, "Could not download crypto body"))
+			return
+		}
+
+		if badCryptoRegex.Match(data) {
+			sendRequestProblem(w, r, http.StatusBadRequest, errors.New("Known-bad BSO payload"))
+			return
+		}
+
+		r.Body = ioutil.NopCloser(bytes.NewReader(data))
+		next(w, r)
 	}
 }
 
@@ -380,7 +407,6 @@ func sendRequestProblem(w http.ResponseWriter, req *http.Request, responseCode i
 	if session, ok := SessionFromContext(req.Context()); ok {
 		session.ErrorResult = reason
 	}
-
 	JSONError(w, reason.Error(), responseCode)
 }
 

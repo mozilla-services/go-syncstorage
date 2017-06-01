@@ -100,10 +100,10 @@ func NewSyncUserHandler(uid string, db *syncstorage.DB, config *SyncUserHandlerC
 	storage := v.PathPrefix("/storage/").Subrouter()
 
 	storage.HandleFunc("/{collection}", server.hCollectionGET).Methods("GET")
-	storage.HandleFunc("/{collection}", server.hCollectionPOST).Methods("POST")
+	storage.HandleFunc("/{collection}", catchBadCrypto(server.hCollectionPOST)).Methods("POST")
 	storage.HandleFunc("/{collection}", server.hCollectionDELETE).Methods("DELETE")
 	storage.HandleFunc("/{collection}/{bsoId}", server.hBsoGET).Methods("GET")
-	storage.HandleFunc("/{collection}/{bsoId}", server.hBsoPUT).Methods("PUT")
+	storage.HandleFunc("/{collection}/{bsoId}", catchBadCrypto(server.hBsoPUT)).Methods("PUT")
 	storage.HandleFunc("/{collection}/{bsoId}", server.hBsoDELETE).Methods("DELETE")
 
 	return server
