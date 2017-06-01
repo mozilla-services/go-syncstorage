@@ -282,7 +282,6 @@ func JSON(w http.ResponseWriter, r *http.Request, statusCode int, val interface{
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
 		w.Write(js)
-		w.Write([]byte("\n"))
 	}
 }
 

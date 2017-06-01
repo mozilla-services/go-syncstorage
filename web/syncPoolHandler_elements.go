@@ -177,6 +177,16 @@ func (p *handlerPool) getElement(uid string) (*poolElement, bool, error) {
 	return element, elementCreated, nil
 }
 
+func (p *handlerPool) PathAndFile(uid string) (path string, file string) {
+	path = string(os.PathSeparator) +
+		filepath.Join(
+			append(p.base, TwoLevelPath(uid)...)...,
+		)
+
+	file = uid + ".db"
+	return
+}
+
 // TwoLevelPath creates a reverse sub-directory path structure
 // e.g. uid:123456 => DATA_ROOT/65/43/123456.db
 func TwoLevelPath(uid string) []string {
@@ -194,14 +204,4 @@ func TwoLevelPath(uid string) []string {
 	default:
 		return []string{}
 	}
-}
-
-func (p *handlerPool) PathAndFile(uid string) (path string, file string) {
-	path = string(os.PathSeparator) +
-		filepath.Join(
-			append(p.base, TwoLevelPath(uid)...)...,
-		)
-
-	file = uid + ".db"
-	return
 }

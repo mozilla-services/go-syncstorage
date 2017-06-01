@@ -140,11 +140,6 @@ func (s *SyncUserHandler) TidyUp(minPurge, maxPurge time.Duration, vacuumKB int)
 		}
 
 		if time.Now().Before(nextPurge) {
-			if log.GetLevel() == log.DebugLevel {
-				log.WithFields(log.Fields{
-					"purge_valid_in": nextPurge.Sub(time.Now()).String(),
-				}).Debug("SyncUserHandler: Skipping TidyUp")
-			}
 			return true, took, nil
 		}
 	} else {
@@ -368,9 +363,10 @@ func (s *SyncUserHandler) hInfoQuota(w http.ResponseWriter, r *http.Request) {
 
 	m := syncstorage.ModifiedToString(modified)
 	w.Header().Set("X-Last-Modified", m)
+	w.Header().Set("Content-Type", "application/json")
 
-	tmp := float64(used) / 1024
-	JsonNewline(w, r, []*float64{&tmp, nil}) // crazy pointer cause need the nil
+	// 8 decimals of precision cause python's test_quota functional test
+	w.Write([]byte(fmt.Sprintf("[%0.8f,null]", float64(used)/1024)))
 }
 
 func (s *SyncUserHandler) hInfoCollections(w http.ResponseWriter, r *http.Request) {
@@ -522,8 +518,8 @@ func (s *SyncUserHandler) hCollectionGET(w http.ResponseWriter, r *http.Request)
 	if v := r.Form.Get("ids"); v != "" {
 		ids = strings.Split(v, ",")
 
-		if len(ids) > s.config.MaxPOSTRecords {
-			sendRequestProblem(w, r, http.StatusBadRequest, errors.New("Exceeded max batch size"))
+		if len(ids) > 100 {
+			sendRequestProblem(w, r, http.StatusBadRequest, errors.New("Too many ids provided"))
 			return
 		}
 
@@ -537,10 +533,6 @@ func (s *SyncUserHandler) hCollectionGET(w http.ResponseWriter, r *http.Request)
 			}
 		}
 
-		if len(ids) > 100 {
-			sendRequestProblem(w, r, http.StatusBadRequest, errors.New("Too many ids provided"))
-			return
-		}
 	}
 
 	// we expect to get sync's two decimal timestamps, these need
@@ -793,7 +785,11 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 
 	// CHECK BSO decoding validation errors. Don't even start a Batch if there are.
 	if len(results.Failed) > 0 {
-		modified := syncstorage.Now()
+		modified, err := s.db.LastModified()
+		if err != nil {
+			InternalError(w, r, err)
+			return
+		}
 		w.Header().Set("X-Last-Modified", syncstorage.ModifiedToString(modified))
 		JsonNewline(w, r, &PostResults{
 			Modified: modified,
@@ -833,16 +829,16 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 		if !syncstorage.BSOIdOk(putInput.Id) {
 			failId = "na"
 			failReason = fmt.Sprintf("Invalid BSO id %s", putInput.Id)
-		}
+		} else {
+			if putInput.SortIndex != nil && !syncstorage.SortIndexOk(*putInput.SortIndex) {
+				failId = putInput.Id
+				failReason = fmt.Sprintf("Invalid sort index for: %s", putInput.Id)
+			}
 
-		if putInput.SortIndex != nil && !syncstorage.SortIndexOk(*putInput.SortIndex) {
-			failId = putInput.Id
-			failReason = fmt.Sprintf("Invalid sort index for: %s", putInput.Id)
-		}
-
-		if putInput.TTL != nil && !syncstorage.TTLOk(*putInput.TTL) {
-			failId = putInput.Id
-			failReason = fmt.Sprintf("Invalid TTL for: %s", putInput.Id)
+			if putInput.TTL != nil && !syncstorage.TTLOk(*putInput.TTL) {
+				failId = putInput.Id
+				failReason = fmt.Sprintf("Invalid TTL for: %s", putInput.Id)
+			}
 		}
 
 		if failReason != "" {
@@ -1005,13 +1001,10 @@ func (s *SyncUserHandler) hCollectionPOSTBatch(collectionId int, w http.Response
 }
 
 func (s *SyncUserHandler) hCollectionDELETE(w http.ResponseWriter, r *http.Request) {
-
 	cId, err := s.getcid(r, false)
-
 	if err != nil {
 		if err == syncstorage.ErrNotFound {
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"modified":%s}`, syncstorage.ModifiedToString(syncstorage.Now()))
+			sendRequestProblem(w, r, http.StatusNotFound, errors.New("Collection not found"))
 			return
 		} else {
 			InternalError(w, r, err)
@@ -1030,11 +1023,10 @@ func (s *SyncUserHandler) hCollectionDELETE(w http.ResponseWriter, r *http.Reque
 	modified := syncstorage.Now()
 	bids, idExists := r.URL.Query()["ids"]
 	if idExists {
-
 		bidlist := strings.Split(bids[0], ",")
-
 		if len(bidlist) > s.config.MaxPOSTRecords {
-			sendRequestProblem(w, r, http.StatusBadRequest, errors.New("Exceeded max batch size"))
+			sendRequestProblem(w, r, http.StatusBadRequest,
+				errors.New("Exceeded max allowed records"))
 			return
 		}
 
@@ -1051,8 +1043,10 @@ func (s *SyncUserHandler) hCollectionDELETE(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	m := syncstorage.ModifiedToString(modified)
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"modified":%s}`, syncstorage.ModifiedToString(modified))
+	w.Header().Set("X-Last-Modified", m)
+	fmt.Fprintf(w, `{"modified":%s}`, m)
 }
 
 func (s *SyncUserHandler) hBsoGET(w http.ResponseWriter, r *http.Request) {
@@ -1085,17 +1079,9 @@ func (s *SyncUserHandler) hBsoGET(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if bso, err = s.db.GetBSO(cId, bId); err == nil {
-
 		if sentNotModified(w, r, bso.Modified) {
 			return
 		}
-
-		log.WithFields(log.Fields{
-			"bso_t": bso.TTL,
-			"now":   syncstorage.Now(),
-			"diff":  syncstorage.Now() - bso.TTL,
-		}).Debug("bso-expired")
-
 		m := syncstorage.ModifiedToString(bso.Modified)
 		w.Header().Set("X-Last-Modified", m)
 		JsonNewline(w, r, bso)

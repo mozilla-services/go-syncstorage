@@ -14,6 +14,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// used for testing that the returned json data is good
+type jsResult []jsonBSO
+type jsonBSO struct {
+	Id        string  `json:"id"`
+	Modified  float64 `json:"modified"`
+	Payload   string  `json:"payload"`
+	SortIndex int     `json:"sortindex"`
+}
+
 func TestSyncUserHandlerStopPurgeClose(t *testing.T) {
 	assert := assert.New(t)
 	uid := uniqueUID()
@@ -33,7 +42,6 @@ func TestSyncUserHandlerInfoCollections(t *testing.T) {
 	assert := assert.New(t)
 
 	uid := "123456"
-
 	db, _ := syncstorage.NewDB(":memory:", nil)
 	handler := NewSyncUserHandler(uid, db, nil)
 	collections := []string{
@@ -70,7 +78,102 @@ func TestSyncUserHandlerInfoCollections(t *testing.T) {
 		// after conversion to the sync modified format, should be equal
 		assert.Equal(float32(cId), modified)
 	}
+}
 
+func TestSyncUserHandlerInfoCollectionCounts(t *testing.T) {
+	assert := assert.New(t)
+
+	uid := uniqueUID()
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	handler := NewSyncUserHandler(uid, db, nil)
+
+	header := make(http.Header)
+	header.Add("Content-Type", "application/json")
+	for _, col := range []string{"bookmarks", "history", "passwords"} {
+		body := bytes.NewBufferString(`{"id":"bso1", "payload": "ppp", "sortindex": 1, "ttl": 2100000}`)
+		resp := requestheaders("PUT", syncurl(uid, "storage/"+col+"/bso1"), body, header, handler)
+		if !assert.Equal(http.StatusOK, resp.Code, col) {
+			return
+		}
+	}
+
+	resp := request("GET", syncurl(uid, "info/collection_counts"), nil, handler)
+	assert.Equal(http.StatusOK, resp.Code)
+	assert.Equal(`{"bookmarks":1,"history":1,"passwords":1}`, resp.Body.String())
+}
+
+func TestSyncUserHandlerInfoCollectionUsage(t *testing.T) {
+	assert := assert.New(t)
+
+	uid := uniqueUID()
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	handler := NewSyncUserHandler(uid, db, nil)
+
+	testData := map[string]int{ // use exact KB measurements
+		"1": 10 * 1024,
+		"2": 2 * 1024,
+		"3": 512,
+		"4": 1024,
+	}
+
+	{ // Seed some Data
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		for colName, payloadSize := range testData {
+			body := bytes.NewBufferString(fmt.Sprintf(`{"payload":"%s"}`, strings.Repeat("-", payloadSize)))
+			resp := requestheaders("PUT", syncurl(uid, fmt.Sprintf("storage/%s/testBso", colName)), body, header, handler)
+			assert.Equal(http.StatusOK, resp.Code, resp.Body.String())
+		}
+	}
+
+	{
+		resp := request("GET", syncurl(uid, "info/collection_usage"), nil, handler)
+		if !assert.Equal(http.StatusOK, resp.Code, resp.Body.String()) {
+			return
+		}
+
+		assert.NotEqual("", resp.Header().Get("X-Last-Modified"))
+
+		data := make(map[string]float64)
+		assert.NoError(json.Unmarshal(resp.Body.Bytes(), &data))
+		assert.Equal(data["1"], float64(10))
+		assert.Equal(data["2"], float64(2))
+		assert.Equal(data["3"], float64(0.5))
+		assert.Equal(data["4"], float64(1))
+	}
+}
+
+func TestSyncUserHandlerInfoQuota(t *testing.T) {
+
+	assert := assert.New(t)
+	uid := uniqueUID()
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	handler := NewSyncUserHandler(uid, db, nil)
+
+	{
+		resp := request("GET", syncurl(uid, "info/quota"), nil, handler)
+		if !assert.Equal(http.StatusOK, resp.Code, resp.Body.String()) {
+			return
+		}
+		assert.Equal("[0.00000000,null]", resp.Body.String())
+		assert.NotEqual("", resp.Header().Get("X-Last-Modified"))
+	}
+
+	{
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		body := bytes.NewBufferString(fmt.Sprintf(`{"payload":"%s"}`, strings.Repeat("-", 13*1024+511))) // use 511 for MOAR decimals
+		putResp := requestheaders("PUT", syncurl(uid, "storage/test/t"), body, header, handler)
+		if !assert.Equal(http.StatusOK, putResp.Code, putResp.Body.String()) {
+			return
+		}
+
+		resp := request("GET", syncurl(uid, "info/quota"), nil, handler)
+		if !assert.Equal(http.StatusOK, resp.Code, resp.Body.String()) {
+			return
+		}
+		assert.Equal("[13.49902344,null]", resp.Body.String())
+	}
 }
 
 func TestSyncUserHandlerInfoConfiguration(t *testing.T) {
@@ -380,6 +483,158 @@ func TestSyncUserHandlerPOSTBatch(t *testing.T) {
 	}
 }
 
+func TestSyncUserHandlerBatchLimits(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	uid := "123456"
+
+	url := syncurl(uid, "storage/bookmarks?batch=true")
+
+	{ // test limits based on client supplied headers
+		handler := NewSyncUserHandler(uid, db, nil)
+		// set the config to super low values
+		handler.config.MaxTotalRecords = 1
+		handler.config.MaxTotalBytes = 1
+		handler.config.MaxPOSTBytes = 1
+		handler.config.MaxPOSTRecords = 1
+
+		// test the batch info headers from client
+		headerList := []string{
+			"X-Weave-Total-Records",
+			"X-Weave-Total-Bytes",
+			"X-Weave-Records",
+			"X-Weave-Bytes",
+		}
+
+		body := bytes.NewBufferString(`[{"id":"bso0", "payload": "bso0"}]`)
+
+		for _, headerName := range headerList {
+			{
+				header := make(http.Header)
+				header.Add("Content-Type", "application/json")
+				header.Add(headerName, "2")
+				resp := requestheaders("POST", url, body, header, handler)
+				if assert.Equal(resp.Code, http.StatusBadRequest, resp.Body.String()) {
+					assert.Equal(WEAVE_SIZE_LIMIT_EXCEEDED, resp.Body.String())
+				}
+			}
+
+			{ // test with non int value for header ...
+				header := make(http.Header)
+				header.Add("Content-Type", "application/json")
+				header.Add(headerName, "bad value")
+				resp := requestheaders("POST", url, body, header, handler)
+				assert.Equal(resp.Code, http.StatusBadRequest, resp.Body.String())
+			}
+		}
+	}
+
+	{ // test actual max bytes verify works
+		handler := NewSyncUserHandler(uid, db, nil)
+		// set the config to super low values
+		body := bytes.NewBufferString(`[{"id":"bso0", "payload": "bso0"}]`)
+		handler.config.MaxPOSTBytes = 10
+
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		resp := requestheaders("POST", url, body, header, handler)
+		if assert.Equal(resp.Code, http.StatusBadRequest) {
+			assert.Equal(WEAVE_SIZE_LIMIT_EXCEEDED, resp.Body.String())
+		}
+	}
+
+	{ // test bad post data verify
+		handler := NewSyncUserHandler(uid, db, nil)
+		// set the config to super low values
+		body := bytes.NewBufferString(`[{"id":"bso0","payload": "bso0",oops}]`)
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		resp := requestheaders("POST", url, body, header, handler)
+		if assert.Equal(resp.Code, http.StatusBadRequest) {
+			assert.Equal(WEAVE_INVALID_WBO, resp.Body.String())
+		}
+	}
+
+	{ // test actual max BSO verify works
+		handler := NewSyncUserHandler(uid, db, nil)
+		// set the config to super low values
+		body := bytes.NewBufferString(`[{"id":"bso0", "payload": "bso0"},{"id":"bso1", "payload": "bso1"}]`)
+		handler.config.MaxPOSTRecords = 1
+
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		resp := requestheaders("POST", url, body, header, handler)
+		assert.Equal(resp.Code, http.StatusRequestEntityTooLarge)
+	}
+
+	{ // test bad post data verify
+		handler := NewSyncUserHandler(uid, db, nil)
+		// set the config to super low values
+		body := bytes.NewBufferString(`[{"id":"bso0","payload": "bso0"},{"x":"broken"}]`)
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+
+		// set/get the last modified time
+		someData := bytes.NewBufferString(`[{"id":"bsoD","payload": "bsoD"}]`)
+		respInfo := requestheaders("POST", syncurl(uid, "storage/bookmarks"), someData, header, handler)
+		if assert.Equal(http.StatusOK, respInfo.Code) {
+			lastModified := respInfo.Header().Get("X-Last-Modified")
+			assert.NotEqual("", lastModified)
+
+			resp := requestheaders("POST", url, body, header, handler)
+			if assert.Equal(resp.Code, http.StatusOK) {
+				p := new(PostResults)
+				if assert.NoError(json.Unmarshal(resp.Body.Bytes(), &p)) {
+					assert.Len(p.Success, 0)
+					assert.Len(p.Failed, 1)
+					assert.Equal(resp.Header().Get("X-Last-Modified"), lastModified)
+				}
+			}
+		}
+	}
+
+	{ // test invalid bso id..
+		handler := NewSyncUserHandler(uid, db, nil)
+		body := bytes.NewBufferString(`[{"id":"(╯°□°）╯︵ ┻━┻)","payload":"should be valid IMO"}]`)
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		resp := requestheaders("POST", url, body, header, handler)
+		p := new(PostResults)
+		if assert.NoError(json.Unmarshal(resp.Body.Bytes(), &p)) {
+			if assert.NotEmpty(p.Failed["na"]) {
+				assert.Equal("Invalid BSO id (╯°□°）╯︵ ┻━┻)", p.Failed["na"][0])
+			}
+		}
+	}
+
+	{ // test invalid sortindex / ttl bso data
+		handler := NewSyncUserHandler(uid, db, nil)
+		// sortindex should be 9 digits, ttl >= 1
+		body := bytes.NewBufferString(`[
+			{"id":"bso0", "payload":"bso0"},
+			{"id":"bso1", "payload":"bso1", "sortindex":1234567890},
+			{"id":"bso2", "payload":"bso2", "ttl":-1}
+		]`)
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		resp := requestheaders("POST", url, body, header, handler)
+		if assert.Equal(http.StatusAccepted, resp.Code) {
+			p := new(PostResults)
+			if assert.NoError(json.Unmarshal(resp.Body.Bytes(), &p)) {
+				if assert.NotEmpty(p.Success) {
+					assert.Equal("bso0", p.Success[0])
+				}
+				if assert.NotEmpty(p.Failed["bso1"]) {
+					assert.Equal("Invalid sort index for: bso1", p.Failed["bso1"][0])
+				}
+				if assert.NotEmpty(p.Failed["bso2"]) {
+					assert.Equal("Invalid TTL for: bso2", p.Failed["bso2"][0])
+				}
+			}
+		}
+	}
+}
+
 func TestSyncUserHandlerPUT(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
@@ -426,6 +681,16 @@ func TestSyncUserHandlerPUT(t *testing.T) {
 		body := bytes.NewBufferString(`{"payload": "1234"}`)
 		resp := requestheaders("PUT", url, body, header, handler)
 		if !assert.Equal(http.StatusRequestEntityTooLarge, resp.Code) {
+			return
+		}
+	}
+
+	{ // test fail on invalid content type
+		header := make(http.Header)
+		header.Add("Content-Type", "not-application/json")
+		body := bytes.NewBufferString(`{"payload": "1234"}`)
+		resp := requestheaders("PUT", url, body, header, handler)
+		if !assert.Equal(http.StatusUnsupportedMediaType, resp.Code) {
 			return
 		}
 	}
@@ -520,5 +785,275 @@ func TestSyncUserHandlerTidyUp(t *testing.T) {
 
 		assert.Equal(usageOrig.Total, usage.Total, "Expected size to be back to original")
 		assert.Equal(0, usage.Free)
+	}
+}
+
+func TestSyncUserHandlerCollectionGET(t *testing.T) {
+
+	assert := assert.New(t)
+	uid := uniqueUID()
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	handler := NewSyncUserHandler(uid, db, nil)
+
+	header := make(http.Header)
+	header.Add("Content-Type", "application/json")
+
+	{ // empty collections return an empty array
+		resp := request("GET", syncurl(uid, "storage/empty"), nil, handler)
+		assert.Equal(http.StatusOK, resp.Code, resp.Body.String())
+		assert.Equal("[]", resp.Body.String())
+	}
+
+	{ // 5 testing BSOs
+		numToCreate := 5
+		for i := 1; i <= numToCreate; i++ {
+			bId := fmt.Sprintf("b%d", i)
+			body := fmt.Sprintf(`{"payload":"-","sortindex":%d}`, i)
+			resp := requestheaders("PUT", syncurl(uid, "storage/test/"+bId), bytes.NewBufferString(body), header, handler)
+			assert.Equal(http.StatusOK, resp.Code)
+		}
+	}
+
+	{ // test sort=newest
+		resp := request("GET", syncurl(uid, "storage/test?sort=newest"), nil, handler)
+		assert.Equal(http.StatusOK, resp.Code, resp.Body.String())
+		assert.Equal(`["b5","b4","b3","b2","b1"]`, resp.Body.String())
+
+		assert.NotEqual("", resp.Header().Get("X-Last-Modified"))
+	}
+
+	{ // sort=oldest
+		resp := request("GET", syncurl(uid, "storage/test?sort=oldest"), nil, handler)
+		assert.Equal(http.StatusOK, resp.Code, resp.Body.String())
+		assert.Equal(`["b1","b2","b3","b4","b5"]`, resp.Body.String())
+	}
+
+	{ //full=true and return data is correct
+		resp := request("GET", syncurl(uid, "storage/test?sort=oldest&full=y&ids=b5,b1"), nil, handler)
+		assert.Equal(http.StatusOK, resp.Code, resp.Body.String())
+
+		var results jsResult
+		if !assert.NoError(json.Unmarshal(resp.Body.Bytes(), &results), resp.Body.String()) {
+			return
+		}
+
+		if !assert.Len(results, 2) {
+			return
+		}
+
+		assert.Equal("b1", results[0].Id)
+		assert.Equal("b5", results[1].Id)
+		assert.Equal("-", results[0].Payload)
+		assert.Equal("-", results[1].Payload)
+		assert.Equal(1, results[0].SortIndex)
+		assert.Equal(5, results[1].SortIndex)
+		assert.True(results[1].Modified > results[0].Modified)
+	}
+
+	{ // test newer parameter
+		resp := request("GET", syncurl(uid, "storage/test?full=y&ids=b3"), nil, handler)
+		assert.Equal(http.StatusOK, resp.Code, resp.Body.String())
+		var results jsResult
+		if !assert.NoError(json.Unmarshal(resp.Body.Bytes(), &results), resp.Body.String()) {
+			return
+		}
+
+		if !assert.Len(results, 1) {
+			return
+		}
+
+		// make sure we get the the two BSOs that are newer than b3
+		modified := fmt.Sprintf("%.02f", results[0].Modified)
+		resp2 := request("GET", syncurl(uid, "storage/test?sort=oldest&newer="+modified), nil, handler)
+		assert.Equal(http.StatusOK, resp2.Code, resp2.Body.String())
+		assert.Equal(`["b4","b5"]`, resp2.Body.String())
+
+	}
+
+	{ // test limit+offset works
+		resp := request("GET", syncurl(uid, "storage/test?sort=oldest&limit=2"), nil, handler)
+		assert.Equal(http.StatusOK, resp.Code, resp.Body.String())
+		assert.Equal(`["b1","b2"]`, resp.Body.String())
+		assert.Equal("2", resp.Header().Get("X-Weave-Next-Offset"))
+
+		resp2 := request("GET", syncurl(uid, "storage/test?sort=oldest&limit=2&offset=2"), nil, handler)
+		assert.Equal(`["b3","b4"]`, resp2.Body.String())
+		assert.Equal("4", resp2.Header().Get("X-Weave-Next-Offset"))
+
+		resp3 := request("GET", syncurl(uid, "storage/test?sort=oldest&limit=2&offset=4"), nil, handler)
+		assert.Equal(`["b5"]`, resp3.Body.String())
+		assert.Equal("", resp3.Header().Get("X-Weave-Next-Offset"))
+	}
+}
+
+func TestSyncUserHandlerBsoGET(t *testing.T) {
+
+	assert := assert.New(t)
+	uid := uniqueUID()
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	handler := NewSyncUserHandler(uid, db, nil)
+
+	{ // invalid collections = 404
+		resp := request("GET", syncurl(uid, "storage/fakecol/b0"), nil, handler)
+		assert.Equal(http.StatusNotFound, resp.Code, resp.Body.String())
+	}
+
+	{
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		body := `{"payload":"-","sortindex":9}`
+		resp := requestheaders("PUT", syncurl(uid, "storage/test/b0"),
+			bytes.NewBufferString(body), header, handler)
+		assert.Equal(http.StatusOK, resp.Code)
+	}
+
+	{
+		resp := request("GET", syncurl(uid, "storage/test/b0"), nil, handler)
+		assert.Equal(http.StatusOK, resp.Code, resp.Body.String())
+
+		var result jsonBSO
+		if !assert.NoError(json.Unmarshal(resp.Body.Bytes(), &result), resp.Body.String()) {
+			return
+		}
+
+		assert.Equal("b0", result.Id)
+		assert.Equal("-", result.Payload)
+		assert.Equal(9, result.SortIndex)
+	}
+}
+
+func TestSyncUserHandlerBsoDELETE(t *testing.T) {
+
+	assert := assert.New(t)
+	uid := uniqueUID()
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	handler := NewSyncUserHandler(uid, db, nil)
+
+	{
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		body := `{"payload":"-","sortindex":9}`
+		respPut := requestheaders("PUT", syncurl(uid, "storage/test/b0"),
+			bytes.NewBufferString(body), header, handler)
+		assert.Equal(http.StatusOK, respPut.Code)
+
+		respGet := request("GET", syncurl(uid, "storage/test/b0"), nil, handler)
+		assert.Equal(http.StatusOK, respGet.Code, respGet.Body.String())
+
+		respDelete := request("DELETE", syncurl(uid, "storage/test/b0"), nil, handler)
+		assert.Equal(http.StatusOK, respDelete.Code, respDelete.Body.String())
+		assert.NotEqual("", respDelete.Header().Get("X-Last-Modified"))
+		assert.NotEqual(respGet.Header().Get("X-Last-Modified"),
+			respDelete.Header().Get("X-Last-Modified"))
+
+		respGet2 := request("GET", syncurl(uid, "storage/test/b0"), nil, handler)
+		assert.Equal(http.StatusNotFound, respGet2.Code, respGet2.Body.String())
+
+		// should 404 now that it is gone
+		respDelete404 := request("DELETE", syncurl(uid, "storage/test/b0"), nil, handler)
+		assert.Equal(http.StatusNotFound, respDelete404.Code, respDelete404.Body.String())
+	}
+
+	{ // test errors on nonexistant collection
+		resp := request("DELETE", syncurl(uid, "storage/fakecollection/b0"), nil, handler)
+		assert.Equal(http.StatusNotAcceptable, resp.Code, resp.Body.String())
+	}
+}
+
+func TestSyncUserHandlerCollectionDelete(t *testing.T) {
+
+	assert := assert.New(t)
+	uid := uniqueUID()
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	handler := NewSyncUserHandler(uid, db, nil)
+
+	{ // delete a collection that doesn't exist
+		resp := request("DELETE", syncurl(uid, "storage/test"), nil, handler)
+		assert.Equal(http.StatusNotFound, resp.Code, resp.Body.String())
+	}
+
+	{ // test deleting specific IDs
+		body := bytes.NewBufferString(`[
+			{"id":"b1", "payload": "-","sortindex":1},
+			{"id":"b2", "payload": "-","sortindex":2},
+			{"id":"b3", "payload": "-","sortindex":3},
+			{"id":"b4", "payload": "-","sortindex":4}
+		]`)
+
+		// POST new data
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		respPOST := requestheaders("POST", syncurl(uid, "storage/col"), body, header, handler)
+		assert.Equal(http.StatusOK, respPOST.Code, respPOST.Body.String())
+
+		respDEL := request("DELETE", syncurl(uid, "storage/col?ids=b1,b4,b5"), nil, handler)
+		assert.Equal(http.StatusOK, respDEL.Code, respDEL.Body.String())
+		assert.NotEqual("", respDEL.Header().Get("X-Last-Modified"))
+
+		respGET := request("GET", syncurl(uid, "storage/col?sort=index"), nil, handler)
+		assert.Equal(http.StatusOK, respGET.Code, respGET.Body.String())
+		assert.Equal(`["b3","b2"]`, respGET.Body.String()) // highest weight sortindex first
+	}
+
+	{ // test deleting specific IDs
+		body := bytes.NewBufferString(`[
+			{"id":"b1", "payload": "-"},
+			{"id":"b2", "payload": "-"},
+			{"id":"b3", "payload": "-"}
+		]`)
+
+		// POST new data
+		header := make(http.Header)
+		header.Add("Content-Type", "application/json")
+		respPOST := requestheaders("POST", syncurl(uid, "storage/col"), body, header, handler)
+		assert.Equal(http.StatusOK, respPOST.Code, respPOST.Body.String())
+
+		respDEL := request("DELETE", syncurl(uid, "storage/col"), nil, handler)
+		assert.Equal(http.StatusOK, respDEL.Code, respDEL.Body.String())
+
+		respGET := request("GET", syncurl(uid, "storage/col"), nil, handler)
+		assert.Equal(http.StatusOK, respGET.Code, respGET.Body.String())
+		assert.Equal(`[]`, respGET.Body.String())
+	}
+
+	{ // test limit of deleting ids
+		// modifies the handler's config so do this last to avoid sidefeccts
+		handler.config.MaxPOSTRecords = 1
+		respDEL := request("DELETE", syncurl(uid, "storage/col?ids=a,b,c"), nil, handler)
+		assert.Equal(http.StatusBadRequest, respDEL.Code, respDEL.Body.String())
+	}
+}
+
+func TestSyncUserHandlerDeleteEverything(t *testing.T) {
+	assert := assert.New(t)
+
+	uid := uniqueUID()
+	db, _ := syncstorage.NewDB(":memory:", nil)
+	handler := NewSyncUserHandler(uid, db, nil)
+
+	header := make(http.Header)
+	header.Add("Content-Type", "application/json")
+	for _, col := range []string{"bookmarks", "history", "passwords"} {
+		body := bytes.NewBufferString(`{"id":"bso1", "payload": "ppp", "sortindex": 1, "ttl": 2100000}`)
+		resp := requestheaders("PUT", syncurl(uid, "storage/"+col+"/bso1"), body, header, handler)
+		if !assert.Equal(http.StatusOK, resp.Code, col) {
+			return
+		}
+	}
+
+	resp := request("GET", syncurl(uid, "info/collection_counts"), nil, handler)
+	assert.Equal(http.StatusOK, resp.Code)
+	assert.Equal(`{"bookmarks":1,"history":1,"passwords":1}`, resp.Body.String())
+
+	respDelete := request("DELETE", syncurl(uid, "storage"), nil, handler)
+	assert.Equal(http.StatusOK, respDelete.Code)
+
+	respCheck := request("GET", syncurl(uid, "info/collection_counts"), nil, handler)
+	assert.Equal(http.StatusOK, respCheck.Code)
+	assert.Equal(`{}`, respCheck.Body.String())
+
+	for _, col := range []string{"bookmarks", "history", "passwords"} {
+		resp := request("GET", syncurl(uid, "storage/"+col+"/bso1"), nil, handler)
+		assert.Equal(http.StatusNotFound, resp.Code)
 	}
 }
