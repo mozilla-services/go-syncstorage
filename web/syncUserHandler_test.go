@@ -341,7 +341,22 @@ func TestSyncUserHandlerPOST(t *testing.T) {
 		if assert.Len(results.Failed, 1) {
 			assert.Equal("Payload too large", results.Failed["bsoA"][0])
 		}
+	}
 
+	var badCrypto = `[{"id":"keys", "payload":"{\"ciphertext\":\"IDontKnowWhatImDoing\",\"IV\":\"AAAAAAAAAAAAAAAAAAAAAA==\"}"}]`
+	{ // POST to storage/crypto w/ bad data fails
+		resp := requestheaders("POST",
+			syncurl(uid, "storage/crypto"),
+			bytes.NewBufferString(badCrypto), header, handler)
+		assert.Equal(http.StatusBadRequest, resp.Code)
+		assert.Equal(`{"err":"Known-bad BSO payload"}`, resp.Body.String())
+	}
+
+	{ // POST to other collections w/ bad data is ok
+		resp := requestheaders("POST",
+			syncurl(uid, "storage/col2"),
+			bytes.NewBufferString(badCrypto), header, handler)
+		assert.Equal(http.StatusOK, resp.Code)
 	}
 }
 
@@ -656,7 +671,10 @@ func TestSyncUserHandlerPUT(t *testing.T) {
 
 		colId, _ := db.GetCollectionId("bookmarks")
 
-		bsoNew, _ := db.GetBSO(colId, "bso0")
+		bsoNew, err := db.GetBSO(colId, "bso0")
+		if !assert.NoError(err) {
+			return
+		}
 		assert.Equal("1234", bsoNew.Payload)
 
 		body2 := bytes.NewBufferString(`{"sortindex": 9, "ttl":1000}`)
@@ -693,6 +711,22 @@ func TestSyncUserHandlerPUT(t *testing.T) {
 		if !assert.Equal(http.StatusUnsupportedMediaType, resp.Code) {
 			return
 		}
+	}
+
+	var badCrypto = `{"id":"keys", "payload":"{\"ciphertext\":\"IDontKnowWhatImDoing\",\"IV\":\"AAAAAAAAAAAAAAAAAAAAAA==\"}"}`
+	{ // POST to storage/crypto w/ bad data fails
+		resp := requestheaders("PUT",
+			syncurl(uid, "storage/crypto/keys"),
+			bytes.NewBufferString(badCrypto), header, handler)
+		assert.Equal(http.StatusBadRequest, resp.Code)
+		assert.Equal(`{"err":"Known-bad BSO payload"}`, resp.Body.String())
+	}
+
+	{ // POST to other collections w/ bad data is ok
+		resp := requestheaders("PUT",
+			syncurl(uid, "storage/col2/keys"),
+			bytes.NewBufferString(badCrypto), header, handler)
+		assert.Equal(http.StatusOK, resp.Code)
 	}
 
 }

@@ -11,6 +11,9 @@ machine:
     GODIST: "go1.7.linux-amd64.tar.gz"
     GODIST_HASH: "702ad90f705365227e902b42d91dd1a40e48ca7f67a2f4b2fd052aaa4295cd95"
 
+    # Python container to test against
+    PYSYNC_VERSION: "1.6.7"
+
   services:
     - docker
 
@@ -74,7 +77,7 @@ test:
     - sleep 3
     - >
         docker run
-        --net=host mozilla/server-syncstorage:1.6.2
+        --net=host mozilla/server-syncstorage:$PYSYNC_VERSION
         test_endpoint "http://127.0.0.1:8888#secret"
 
 deployment:
