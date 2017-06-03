@@ -1029,25 +1029,55 @@ func TestSyncUserHandlerCollectionDelete(t *testing.T) {
 		assert.Equal(`["b3","b2"]`, respGET.Body.String()) // highest weight sortindex first
 	}
 
-	{ // test deleting specific IDs
-		body := bytes.NewBufferString(`[
+	{ // test deleting entire collection
+		data := `[
 			{"id":"b1", "payload": "-"},
 			{"id":"b2", "payload": "-"},
 			{"id":"b3", "payload": "-"}
-		]`)
+		]`
 
 		// POST new data
 		header := make(http.Header)
 		header.Add("Content-Type", "application/json")
+		body := bytes.NewBufferString(data)
 		respPOST := requestheaders("POST", syncurl(uid, "storage/col"), body, header, handler)
 		assert.Equal(http.StatusOK, respPOST.Code, respPOST.Body.String())
 
+		{ // posting to the collection again with an X-If-Unmodified-Since fails w/ 412
+			headerP := make(http.Header)
+			headerP.Add("Content-Type", "application/json")
+			headerP.Add("X-If-Unmodified-Since", "0")
+			resp := requestheaders("POST", syncurl(uid, "storage/col"),
+				bytes.NewBufferString(data), headerP, handler)
+			assert.Equal(http.StatusPreconditionFailed, resp.Code, resp.Body.String())
+		}
+
+		// make sure the collection shows up info/collections
+		respInfo1 := request("GET", syncurl(uid, "info/collections"), nil, handler)
+		assert.True(strings.HasPrefix(respInfo1.Body.String(), `{"col":`))
+
 		respDEL := request("DELETE", syncurl(uid, "storage/col"), nil, handler)
 		assert.Equal(http.StatusOK, respDEL.Code, respDEL.Body.String())
+		assert.NotEqual("", respDEL.Header().Get("X-Last-Modified"))
 
+		// getting the collection again will return [] but with a last modified of 0.00
 		respGET := request("GET", syncurl(uid, "storage/col"), nil, handler)
 		assert.Equal(http.StatusOK, respGET.Code, respGET.Body.String())
+		assert.Equal(respGET.Header().Get("X-Last-Modified"), "0.00")
 		assert.Equal(`[]`, respGET.Body.String())
+
+		// make sure the collection doesn't show up in info/collections
+		respInfo2 := request("GET", syncurl(uid, "info/collections"), nil, handler)
+		assert.Equal("{}", respInfo2.Body.String())
+
+		{ // posting to the collection after delete an X-If-Unmodified-Since=0 is ok
+			headerP := make(http.Header)
+			headerP.Add("Content-Type", "application/json")
+			headerP.Add("X-If-Unmodified-Since", "0")
+			resp := requestheaders("POST", syncurl(uid, "storage/col"),
+				bytes.NewBufferString(data), headerP, handler)
+			assert.Equal(http.StatusOK, resp.Code, resp.Body.String())
+		}
 	}
 
 	{ // test limit of deleting ids

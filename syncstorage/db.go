@@ -52,6 +52,8 @@ const (
 	// The default TTL is to never expire. Use 100 years
 	// which should be enough (in milliseconds)
 	DEFAULT_BSO_TTL = 100 * 365 * 24 * 60 * 60 * 1000
+
+	STORAGE_LAST_MODIFIED = "Storage Last Modified"
 )
 
 type CollectionInfo struct {
@@ -217,23 +219,22 @@ func NewDB(path string, conf *Config) (*DB, error) {
   work is handled by private functions.
 */
 
-// LastModified gets the database modified time
-func (d *DB) LastModified() (modified int, err error) {
+// LastModified returns the top level last modified timestamp
+func (d *DB) LastModified() (int, error) {
 	d.Lock()
 	defer d.Unlock()
 
-	var m sql.NullInt64
-
-	err = d.db.QueryRow("SELECT max(modified) FROM Collections").Scan(&m)
-	if err == nil {
-		if !m.Valid {
-			return 0, nil
-		} else {
-			return int(m.Int64), nil
-		}
+	lastMod, err := getKey(d.db, STORAGE_LAST_MODIFIED)
+	if lastMod == "" || err != nil {
+		return 0, err
 	}
 
-	return
+	lastModInt64, err := strconv.ParseInt(lastMod, 10, 64)
+	if err != nil {
+		return 0, errors.Wrap(err, "Failed converting storage timestamp to int. UhOh?!")
+	}
+
+	return int(lastModInt64), nil
 }
 
 func (d *DB) GetCollectionId(name string) (id int, err error) {
@@ -325,24 +326,34 @@ func (d *DB) CreateCollection(name string) (cId int, err error) {
 	return int(cId64), nil
 }
 
-func (d *DB) DeleteCollection(cId int) (err error) {
+func (d *DB) DeleteCollection(cId int) (int, error) {
 	d.Lock()
 	defer d.Unlock()
 
 	tx, err := d.db.Begin()
 	if err != nil {
-		return
+		return 0, errors.Wrap(err, "Failed creating transaction")
 	}
 
 	dmlB := "DELETE FROM BSO WHERE CollectionId=?"
-
 	if _, err := tx.Exec(dmlB, cId); err != nil {
 		tx.Rollback()
-		return err
+		return 0, errors.Wrapf(err, "Failed deleting collection: %d", cId)
+	}
+
+	if err := d.touchCollection(tx, cId, 0); err != nil {
+		tx.Rollback()
+		return 0, errors.Wrapf(err, "Failed resetting last modified for collection: %d", cId)
+	}
+
+	modified := Now()
+	if err := d.touchStorage(tx, modified); err != nil {
+		tx.Rollback()
+		return 0, errors.Wrapf(err, "Failed setting storage timestamp")
 	}
 
 	tx.Commit()
-	return
+	return modified, nil
 }
 
 // DeleteEverything will delete all BSOs, record when everything was deleted
@@ -365,7 +376,7 @@ func (d *DB) TouchCollection(cId, modified int) (err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	return d.touchCollection(d.db, cId, modified)
+	return d.touchCollectionAndStorage(d.db, cId, modified)
 }
 
 // InfoCollections create a map of collection names to last modified times
@@ -514,7 +525,7 @@ func (d *DB) PostBSOs(cId int, input PostBSOInput) (*PostResults, error) {
 	}
 
 	// update the collection
-	err = d.touchCollection(tx, cId, modified)
+	err = d.touchCollectionAndStorage(tx, cId, modified)
 	if err != nil {
 		tx.Rollback()
 		return nil, err
@@ -543,7 +554,7 @@ func (d *DB) PutBSO(cId int, bId string, payload *string, sortIndex *int, ttl *i
 	}
 
 	// update the collection
-	err = d.touchCollection(tx, cId, modified)
+	err = d.touchCollectionAndStorage(tx, cId, modified)
 	if err != nil {
 		tx.Rollback()
 		return
@@ -641,7 +652,7 @@ func (d *DB) DeleteBSOs(cId int, bIds ...string) (modified int, err error) {
 	modified = Now()
 
 	// update the collection
-	err = d.touchCollection(tx, cId, modified)
+	err = d.touchCollectionAndStorage(tx, cId, modified)
 	if err != nil {
 		tx.Rollback()
 		return
@@ -747,9 +758,31 @@ func (d *DB) Vacuum() (err error) {
 	return
 }
 
+// touchCollection updates a collection's last-modified timestamp
 func (d *DB) touchCollection(tx dbTx, cId, modified int) (err error) {
-	_, err = tx.Exec(`UPDATE Collections SET modified=? WHERE Id=?`, modified, cId)
-	return
+	_, err = tx.Exec("UPDATE Collections SET modified=? WHERE Id=?", modified, cId)
+	return err
+}
+
+// touchStorage updates the storage level last modified timestamp.
+// Added in issue #169 where the server didn't properly update
+// timestamps on collection delete
+func (d *DB) touchStorage(tx dbTx, modified int) error {
+	return setKey(tx, STORAGE_LAST_MODIFIED, strconv.Itoa(modified))
+}
+
+// touchCollectionAndStorage updates both the storage and a
+// collection's last modified timestamp
+func (d *DB) touchCollectionAndStorage(tx dbTx, cId, modified int) error {
+	if err := d.touchCollection(tx, cId, modified); err != nil {
+		return errors.Wrapf(err, "Failed updating timestamp on cId=%d", cId)
+	}
+
+	if err := d.touchStorage(tx, modified); err != nil {
+		return errors.Wrap(err, "Failed updating storage timestamp")
+	}
+
+	return nil
 }
 
 // putBSO will INSERT or UPDATE a BSO
