@@ -163,30 +163,64 @@ func (d *DB) OpenWithConfig(conf *Config) (err error) {
 		}
 	}
 
-	// Initialize Schema 0 if it doesn't exist
-	sqlCheck := "SELECT name from sqlite_master WHERE type='table' AND name=?"
-	var name string
-	if err := d.db.QueryRow(sqlCheck, "KeyValues").Scan(&name); err == sql.ErrNoRows {
+	var schemaVersion int
+	if err := d.db.QueryRow("PRAGMA schema_version;").Scan(&schemaVersion); err != nil {
+		return err
+	}
 
+	// Initialize a new database with all the current schemas concatenated together
+	if schemaVersion == 0 {
 		tx, err := d.db.Begin()
 		if err != nil {
 			return err
 		}
 
-		if _, err := tx.Exec(SCHEMA_0); err != nil {
+		if _, err := tx.Exec(SCHEMA_0 + SCHEMA_1); err != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
 				return rollbackErr
 			} else {
 				return err
 			}
 		} else {
-			log.WithFields(log.Fields{
-				"path": d.Path,
-			}).Debug("DB initialized")
 			if err := tx.Commit(); err != nil {
 				return err
 			}
 		}
+	} else {
+		// Migrate schema to the latest version. At the time of this
+		// comment there is only SCHEMA_1. Considering the rate of
+		// schema change, we can probably just keep it simple yet
+		// slightly more verbose using, `if userVersion == ...` statements
+		var userVersion int
+		if err := d.db.QueryRow("PRAGMA user_version;").Scan(&userVersion); err != nil {
+			return err
+		}
+
+		// SCHEMA_0 did not alter PRAGMA user_version so it defaults to 0
+		if userVersion == 0 {
+			tx, err := d.db.Begin()
+			if err != nil {
+				return err
+			}
+
+			if _, err := tx.Exec(SCHEMA_1); err != nil {
+				if rollbackErr := tx.Rollback(); rollbackErr != nil {
+					return rollbackErr
+				} else {
+					return err
+				}
+			} else {
+				if err := tx.Commit(); err != nil {
+					return err
+				}
+			}
+		}
+
+		// SCHEMA_1 sets PRAGMA user_version to 2 so the count
+		// of schemas applied is caught up and correct.
+		// putting this here for posterity and next schema upgrade
+
+		// if userVersion == 2 { ... }
 	}
 
 	return nil
@@ -266,6 +300,10 @@ func (d *DB) GetCollectionId(name string) (id int, err error) {
 		return 10, nil
 	case "addons":
 		return 11, nil
+	case "addresses":
+		return 12, nil
+	case "creditcards":
+		return 13, nil
 	}
 
 	if !CollectionNameOk(name) {

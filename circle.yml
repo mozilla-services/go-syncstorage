@@ -7,12 +7,12 @@ machine:
     A: "$GWS/src/github.com/$CIRCLE_PROJECT_USERNAME"
     B: "$A/$CIRCLE_PROJECT_REPONAME"
 
-    # Use to install Custom golang
-    GODIST: "go1.7.linux-amd64.tar.gz"
-    GODIST_HASH: "702ad90f705365227e902b42d91dd1a40e48ca7f67a2f4b2fd052aaa4295cd95"
+    # Use to install Custom golang from https://golang.org/dl/
+    GODIST: "go1.9.linux-amd64.tar.gz"
+    GODIST_HASH: "d70eadefce8e160638a9a6db97f7192d8463069ab33138893ad3bf31b0650a79"
 
-    # Python container to test against
-    PYSYNC_VERSION: "1.6.7"
+    # server-syncstorage container to test against
+    PYSYNC_VERSION: "1.6.9"
 
   services:
     - docker
