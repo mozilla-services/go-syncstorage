@@ -62,3 +62,14 @@ const SCHEMA_0 = `
 
 	INSERT INTO KeyValues (Key, Value) VALUES ("SCHEMA_VERSION", 0);
 	`
+
+// Issue #72
+const SCHEMA_1 = `
+	INSERT INTO Collections (Id, Name) VALUES
+		( 12, "addresses"),
+		( 13, "creditcards");
+
+    -- begin using user_version to track schema changes
+	-- skip user_version=1 as that *should have been* set by 'SCHEMA_0'
+	PRAGMA user_version=2;
+`

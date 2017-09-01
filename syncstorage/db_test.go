@@ -29,9 +29,8 @@ func removeTestDB(d *DB) error {
 func TestNewDB(t *testing.T) {
 	assert := assert.New(t)
 	{
-		db, err := NewDB(":memory:", nil)
+		_, err := NewDB(":memory:", nil)
 		assert.NoError(err)
-		removeTestDB(db)
 	}
 
 	{
@@ -66,7 +65,8 @@ func TestStaticCollectionId(t *testing.T) {
 	commonCols := map[int]string{
 		1: "clients", 2: "crypto", 3: "forms", 4: "history",
 		5: "keys", 6: "meta", 7: "bookmarks", 8: "prefs",
-		9: "tabs", 10: "passwords", 11: "addons",
+		9: "tabs", 10: "passwords", 11: "addons", 12: "addresses",
+		13: "creditcards",
 	}
 
 	// ensure DB actually has predefined common collections
@@ -90,7 +90,7 @@ func TestStaticCollectionId(t *testing.T) {
 
 		for id, name := range commonCols {
 			n, ok := results[id]
-			assert.True(ok, id) // make sure it exists
+			assert.True(ok, n) // make sure it exists
 			assert.Equal(name, n)
 		}
 	}
@@ -126,7 +126,6 @@ func TestBsoExists(t *testing.T) {
 	assert := assert.New(t)
 
 	db, _ := getTestDB()
-	defer removeTestDB(db)
 
 	tx, err := db.db.Begin()
 	assert.NoError(err)
@@ -156,7 +155,6 @@ func TestBsoExists(t *testing.T) {
 
 func TestUpdateBSOReturnsExpectedError(t *testing.T) {
 	db, _ := getTestDB()
-	defer removeTestDB(db)
 
 	tx, _ := db.db.Begin()
 	defer tx.Rollback()
@@ -172,7 +170,6 @@ func TestPrivateUpdateBSOSuccessfullyUpdatesSingleValues(t *testing.T) {
 
 	assert := assert.New(t)
 	db, _ := getTestDB()
-	defer removeTestDB(db)
 
 	tx, _ := db.db.Begin()
 
@@ -230,7 +227,6 @@ func TestPrivateUpdateBSOModifiedNotChangedOnTTLTouch(t *testing.T) {
 	assert := assert.New(t)
 
 	db, _ := getTestDB()
-	defer removeTestDB(db)
 
 	tx, _ := db.db.Begin()
 
@@ -272,7 +268,6 @@ func TestPrivatePutBSOUpdates(t *testing.T) {
 	assert := assert.New(t)
 
 	db, _ := getTestDB()
-	defer removeTestDB(db)
 
 	tx, _ := db.db.Begin()
 	defer tx.Rollback()
@@ -304,7 +299,6 @@ func TestPrivateGetBSOsLimitOffset(t *testing.T) {
 	assert := assert.New(t)
 
 	db, _ := getTestDB()
-	defer removeTestDB(db)
 
 	tx, _ := db.db.Begin()
 	defer tx.Rollback()
@@ -399,7 +393,6 @@ func TestPrivateGetBSOsNewer(t *testing.T) {
 	assert := assert.New(t)
 
 	db, _ := getTestDB()
-	defer removeTestDB(db)
 
 	tx, _ := db.db.Begin()
 	defer tx.Rollback()
@@ -450,7 +443,6 @@ func TestPrivateGetBSOsSort(t *testing.T) {
 	assert := assert.New(t)
 
 	db, _ := getTestDB()
-	defer removeTestDB(db)
 
 	tx, _ := db.db.Begin()
 	defer tx.Rollback()
@@ -1156,5 +1148,97 @@ func TestGetSetKeyValue(t *testing.T) {
 
 	if val, err := db.GetKey("testing"); assert.NoError(err) {
 		assert.Equal("12345", val)
+	}
+}
+
+func TestSchemaUpgrades(t *testing.T) {
+	assert := assert.New(t)
+	var err error
+
+	// create a new user db initalized manually with SCHEMA_0
+	// to test SCHEMA_0 => SCHEMA_1
+	now := strconv.FormatInt(time.Now().UnixNano(), 10)
+	path := "TestSchemaUpgrade." + now + ".db"
+	d := &DB{Path: path}
+	d.db, err = sql.Open("sqlite3", d.Path)
+
+	if !assert.NoError(err) {
+		return
+	} else {
+		defer removeTestDB(d)
+	}
+
+	{ // Apply SCHEMA_0
+		var val int
+		err := d.db.QueryRow("PRAGMA schema_version;").Scan(&val)
+		if !assert.NoError(err) {
+			return
+		}
+
+		if !assert.Equal(0, val) {
+			return
+		}
+
+		// put in SCHEMA_0
+		if _, err := d.db.Exec(SCHEMA_0); !assert.NoError(err) {
+			return
+		}
+
+		// schema_version == 5 since we create 4 tables and make 1 index in SCHEMA_0
+		if err := d.db.QueryRow("PRAGMA schema_version;").Scan(&val); assert.NoError(err) {
+			if !assert.Equal(5, val) {
+				return
+			}
+		} else {
+			return
+		}
+
+		// make sure user_version hasn't changed
+		if err := d.db.QueryRow("PRAGMA user_version;").Scan(&val); assert.NoError(err) {
+			if !assert.Equal(0, val) {
+				return
+			}
+		} else {
+			return
+		}
+	}
+	d.db.Close()
+
+	{ // Reopening the database should auto upgrade db to SCHEMA_1
+		d, err := NewDB(path, nil)
+		defer d.Close()
+		if !assert.NoError(err) {
+			return
+		}
+
+		{ // make sure user_version=1
+			var val int
+			if err := d.db.QueryRow("PRAGMA user_version;").Scan(&val); assert.NoError(err) {
+				if !assert.Equal(2, val) {
+					return
+				}
+			} else {
+				return
+			}
+		}
+	}
+
+	{ // Reopening should result in no database changes
+		d, err := NewDB(path, nil)
+		defer d.Close()
+		if !assert.NoError(err) {
+			return
+		}
+
+		{ // make sure user_version=1
+			var val int
+			if err := d.db.QueryRow("PRAGMA user_version;").Scan(&val); assert.NoError(err) {
+				if !assert.Equal(2, val) {
+					return
+				}
+			} else {
+				return
+			}
+		}
 	}
 }
