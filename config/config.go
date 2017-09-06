@@ -32,8 +32,8 @@ type UserHandlerConfig struct {
 	MaxPOSTBytes          int `envconfig:"default=2097152"`
 	MaxTotalRecords       int `envconfig:"default=1000"`
 	MaxTotalBytes         int `envconfig:"default=20971520"`
-	MaxBatchTTL           int `envconfig:"default=7200"`   // 2 hours
-	MaxRecordPayloadBytes int `envconfig:"default=262144"` // 256KB
+	MaxBatchTTL           int `envconfig:"default=7200"`    // 2 hours
+	MaxRecordPayloadBytes int `envconfig:"default=2097152"` // 2MB
 }
 
 type PoolConfig struct {
